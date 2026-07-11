@@ -1,0 +1,363 @@
+{
+  "schemaVersion": "1.0.0",
+  "metadata": {
+    "repoName": "express",
+    "repoUrl": "https://github.com/expressjs/express",
+    "analyzedAt": "2026-07-11T19:40:00Z",
+    "analyzerVersion": "onboard/0.1.0",
+    "commitSha": "ba006766fb964571723138708eacaba0f55759cd",
+    "primaryLanguage": "JavaScript",
+    "stats": {
+      "totalFiles": 213,
+      "totalLoc": 21886,
+      "languages": [
+        { "language": "JavaScript", "files": 141, "loc": 17509, "percentage": 80 },
+        { "language": "Markdown", "files": 4, "loc": 3522, "percentage": 16.1 },
+        { "language": "YAML", "files": 6, "loc": 339, "percentage": 1.5 },
+        { "language": "HTML", "files": 28, "loc": 260, "percentage": 1.2 },
+        { "language": "JSON", "files": 1, "loc": 99, "percentage": 0.5 },
+        { "language": "Handlebars", "files": 3, "loc": 71, "percentage": 0.3 },
+        { "language": "CSS", "files": 4, "loc": 44, "percentage": 0.2 },
+        { "language": "Config", "files": 3, "loc": 29, "percentage": 0.1 },
+        { "language": "Text", "files": 11, "loc": 13, "percentage": 0.1 }
+      ]
+    }
+  },
+  "pitch": {
+    "summary": "Express is the \"fast, unopinionated, minimalist web framework for Node.js\" — this is the 5.x line (package version 5.2.1). The entire framework is roughly 2,300 lines of JavaScript across six files in lib/: a factory (express.js) that builds an app function, a settings-and-dispatch layer (application.js), request and response prototypes that decorate Node's native http objects (request.js, response.js), a template-lookup abstraction (view.js), and helpers (utils.js). Its defining move is composition over inheritance: rather than subclass anything, Express creates prototype objects with Object.create and swaps them onto each incoming req/res via Object.setPrototypeOf, then delegates the hard parts — routing, body parsing, static files, file streaming — to small single-purpose npm packages it depends on.",
+    "audience": "JavaScript/Node.js developers who use Express and want to understand how the framework actually works under the hood, plus contributors to the framework itself. Reading it rewards anyone curious how a minimalist library decorates Node's raw http server.",
+    "techStack": [
+      { "name": "JavaScript", "category": "language", "role": "The whole framework is ES5-flavored CommonJS JavaScript ('use strict', var, prototype objects) — deliberately plain so it runs on Node 18+ with no build step." },
+      { "name": "Node.js", "category": "platform", "role": "Target runtime (engines: node >= 18). Express decorates node:http's IncomingMessage/ServerResponse prototypes and creates the server via http.createServer(app)." },
+      { "name": "router", "category": "library", "role": "In v5 the routing engine was extracted into this standalone package; express.js and application.js require('router') for the Router and Route constructors instead of shipping their own." },
+      { "name": "body-parser", "category": "library", "role": "Provides express.json / express.raw / express.text / express.urlencoded — express.js re-exports its parsers directly as the framework's built-in body middleware." },
+      { "name": "serve-static", "category": "library", "role": "Backs express.static for serving files from a directory; re-exported unchanged from lib/express.js." },
+      { "name": "send", "category": "library", "role": "Streams files with HTTP caching/range support; res.sendFile and res.download in response.js delegate to it." },
+      { "name": "finalhandler", "category": "library", "role": "The default terminal handler app.handle installs when no callback is given — writes 404s and surfaces errors that fall through the middleware stack." },
+      { "name": "Mocha", "category": "tooling", "role": "Test runner for the whole suite; `npm test` runs mocha over test/ and test/acceptance/ with --check-leaks." },
+      { "name": "SuperTest", "category": "tooling", "role": "Drives the app as a real HTTP server in tests, asserting on responses (used throughout test/res.*.js and acceptance tests)." },
+      { "name": "ESLint", "category": "tooling", "role": "Lints the codebase; `npm run lint` runs `eslint .` and is a separate required CI job from the test matrix." }
+    ]
+  },
+  "architecture": [
+    {
+      "title": "A factory that decorates plain functions, not classes",
+      "body": "Express has no classes. `express()` (lib/express.js:36) returns a function `app(req, res, next)` whose only job is to call `app.handle`. That bare function is then turned into the application by `merge-descriptors` copying two prototypes onto it: `EventEmitter.prototype` (so an app can `emit`/`on`, e.g. the `mount` event) and the `application` object from lib/application.js (all the `app.set`, `app.use`, `app.get`, `app.listen` methods). The request and response prototypes are attached to the app too, as `app.request`/`app.response`, each created with `Object.create` over the base `req`/`res` objects so per-app customization never mutates the shared prototype. Understanding this one file explains the whole object model: everything else is a prototype that gets mixed or swapped in.",
+      "diagram": {
+        "type": "flowchart",
+        "title": "Module wiring at require time",
+        "source": "flowchart TD\n  index[\"index.js\"] --> express[\"lib/express.js<br/>createApplication()\"]\n  express -->|mixin proto| application[\"lib/application.js<br/>app prototype\"]\n  express -->|app.request| request[\"lib/request.js<br/>req prototype\"]\n  express -->|app.response| response[\"lib/response.js<br/>res prototype\"]\n  express -->|Router, Route| router[\"router (npm)\"]\n  express -->|json/raw/text/urlencoded| bodyparser[\"body-parser (npm)\"]\n  express -->|static| servestatic[\"serve-static (npm)\"]\n  application --> view[\"lib/view.js\"]\n  application --> utils[\"lib/utils.js\"]\n  application -->|new Router| router\n  application -->|default handler| finalhandler[\"finalhandler (npm)\"]\n  response -->|sendFile/download| send[\"send (npm)\"]\n  request -.extends.-> http[\"node:http prototypes\"]\n  response -.extends.-> http"
+      }
+    },
+    {
+      "title": "Per-request prototype swapping is the whole request lifecycle",
+      "body": "When a request arrives, `app.handle` (lib/application.js:152) does something unusual: it takes Node's raw `req`/`res` and calls `Object.setPrototypeOf(req, this.request)` and `Object.setPrototypeOf(res, this.response)`. That single line is why `req.query`, `res.send`, and friends exist — they were never subclassed onto the objects; the app's prototype is grafted on at dispatch time. `handle` also sets the `X-Powered-By` header, wires the circular `req.res`/`res.req` references, ensures `res.locals`, and installs `finalhandler` as the terminal callback, then hands off to `this.router.handle(req, res, done)`. The base router is created lazily the first time `this.router` is read (application.js:69), configured from the `case sensitive routing` and `strict routing` settings.",
+      "diagram": {
+        "type": "sequence",
+        "title": "One request through app.handle",
+        "source": "sequenceDiagram\n  actor Client\n  participant Node as node:http server\n  participant App as app (fn)\n  participant H as app.handle\n  participant R as router (npm)\n  participant MW as middleware / route\n  Client->>Node: HTTP request\n  Node->>App: app(req, res)\n  App->>H: app.handle(req, res)\n  H->>H: setHeader X-Powered-By\n  H->>H: setPrototypeOf(req, app.request)\n  H->>H: setPrototypeOf(res, app.response)\n  H->>R: this.router.handle(req, res, done)\n  R->>MW: run matching stack\n  MW->>MW: res.send / res.json / res.render\n  MW-->>Client: response\n  Note over H,R: if nothing responds, finalhandler(done) writes 404/error"
+      }
+    },
+    {
+      "title": "req and res decorate node:http, not replace it",
+      "body": "lib/request.js starts with `var req = Object.create(http.IncomingMessage.prototype)` (line 30) and lib/response.js with `var res = Object.create(http.ServerResponse.prototype)` (line 43). So Express's request/response objects inherit every native Node method and add sugar on top. Request adds mostly lazy getters via a local `defineGetter` helper — `req.query` (parses the URL with the configured query-parser fn), `req.protocol`/`req.ip`/`req.hostname`/`req.subdomains` (all consult the compiled `trust proxy fn`), and content-negotiation helpers (`req.accepts`, `req.is`) that delegate to the `accepts` and `type-is` packages. Response adds the high-level senders — `res.send` (response.js:126) is the spine: it infers Content-Type, computes Content-Length, generates an ETag, honors conditional-GET freshness (304), and special-cases HEAD/204/205 before calling `res.end`. `res.json`, `res.jsonp`, `res.sendStatus`, and `res.redirect` all funnel back through `res.send`.",
+      "diagram": {
+        "type": "flowchart",
+        "title": "res.send: the funnel every body-sender goes through",
+        "source": "flowchart TD\n  json[\"res.json\"] --> send[\"res.send (response.js:126)\"]\n  jsonp[\"res.jsonp\"] --> send\n  sendStatus[\"res.sendStatus\"] --> send\n  redirect[\"res.redirect\"] --> send\n  send --> ctype{\"Content-Type set?\"}\n  ctype -->|no| infer[\"infer type (html/json/bin)\"]\n  ctype -->|yes| len[\"compute Content-Length\"]\n  infer --> len\n  len --> etag[\"generate ETag (etag fn)\"]\n  etag --> fresh{\"req.fresh?\"}\n  fresh -->|yes| s304[\"status 304, strip body\"]\n  fresh -->|no| end[\"res.end(chunk)\"]\n  s304 --> end"
+      }
+    },
+    {
+      "title": "Settings, compiled options, and delegated concerns",
+      "body": "Configuration is a plain key/value bag: `app.set(key, val)` writes `this.settings[key]` and, for three special keys, compiles a companion function via lib/utils.js — `etag` -> `etag fn` (compileETag), `query parser` -> `query parser fn` (compileQueryParser), and `trust proxy` -> `trust proxy fn` (compileTrust, which understands booleans, hop counts, IP/CIDR strings, and delegates to proxy-addr). `app.defaultConfiguration` (application.js:90) seeds sane defaults (`x-powered-by` on, weak etags, `views` = ./views, view cache on in production). The verb methods (`app.get`, `app.post`, ...) are generated in a loop over `utils.methods` and simply proxy to `this.router.route(path)[method]`, with `app.get` special-cased so a one-argument call reads a setting instead. Rendering is delegated too: `res.render` -> `app.render` -> a `View` (lib/view.js) that resolves the template file and lazily `require()`s the engine by extension via its `__express` export.",
+      "diagram": {
+        "type": "flowchart",
+        "title": "app.set compiles companion functions",
+        "source": "flowchart LR\n  set[\"app.set(key, val)\"] --> store[\"settings[key] = val\"]\n  store --> sw{\"which key?\"}\n  sw -->|etag| ce[\"compileETag -> 'etag fn'\"]\n  sw -->|query parser| cq[\"compileQueryParser -> 'query parser fn'\"]\n  sw -->|trust proxy| ct[\"compileTrust -> 'trust proxy fn'\"]\n  ct --> pa[\"proxy-addr (npm)\"]\n  cq --> qs[\"qs (npm, extended mode)\"]"
+      }
+    }
+  ],
+  "dependencyGraph": {
+    "nodes": [
+      { "id": "entry", "label": "index.js", "kind": "entrypoint", "path": "index.js", "description": "One-line entrypoint: re-exports lib/express.js as the package's public API." },
+      { "id": "express", "label": "lib/express.js", "kind": "internal-module", "path": "lib/express.js", "description": "createApplication() factory; mixes the app prototype onto a function and re-exports Router, Route, and the body/static middleware." },
+      { "id": "application", "label": "lib/application.js", "kind": "internal-module", "path": "lib/application.js", "description": "The app prototype: settings (set/get/enable), use/route/param, per-request dispatch in app.handle, listen, render." },
+      { "id": "request", "label": "lib/request.js", "kind": "internal-module", "path": "lib/request.js", "description": "req prototype over http.IncomingMessage; lazy getters for query, protocol, ip, host, and accepts/is negotiation helpers." },
+      { "id": "response", "label": "lib/response.js", "kind": "internal-module", "path": "lib/response.js", "description": "res prototype over http.ServerResponse; the send/json/jsonp/sendFile/render/redirect/cookie helpers." },
+      { "id": "view", "label": "lib/view.js", "kind": "internal-module", "path": "lib/view.js", "description": "View class: resolves a template file on disk and lazily loads its engine via the engine's __express export." },
+      { "id": "utils", "label": "lib/utils.js", "kind": "internal-module", "path": "lib/utils.js", "description": "Private helpers: HTTP method list, ETag generators, and compileETag/compileQueryParser/compileTrust option compilers." },
+      { "id": "node-http", "label": "node:http", "kind": "external-package", "description": "Node core HTTP module; provides IncomingMessage/ServerResponse prototypes Express extends and createServer for app.listen." },
+      { "id": "pkg-router", "label": "router", "kind": "external-package", "description": "Standalone routing engine (extracted from Express in v5); supplies Router and Route." },
+      { "id": "pkg-body-parser", "label": "body-parser", "kind": "external-package", "description": "Request body parsers re-exported as express.json/raw/text/urlencoded." },
+      { "id": "pkg-serve-static", "label": "serve-static", "kind": "external-package", "description": "Static-file middleware re-exported as express.static." },
+      { "id": "pkg-finalhandler", "label": "finalhandler", "kind": "external-package", "description": "Default terminal handler that writes 404s and surfaces unhandled errors." },
+      { "id": "pkg-send", "label": "send", "kind": "external-package", "description": "File streaming with caching/range support behind res.sendFile and res.download." },
+      { "id": "pkg-accepts", "label": "accepts", "kind": "external-package", "description": "Content negotiation used by req.accepts / acceptsEncodings / acceptsCharsets / acceptsLanguages." },
+      { "id": "pkg-type-is", "label": "type-is", "kind": "external-package", "description": "Content-Type matching behind req.is." },
+      { "id": "pkg-proxy-addr", "label": "proxy-addr", "kind": "external-package", "description": "Trusted-proxy address resolution used by req.ip/ips and compileTrust." },
+      { "id": "pkg-qs", "label": "qs", "kind": "external-package", "description": "Extended query-string parser used when 'query parser' is set to 'extended'." },
+      { "id": "pkg-merge-descriptors", "label": "merge-descriptors", "kind": "external-package", "description": "Copies prototype descriptors; mixes EventEmitter and the app prototype onto the app function." },
+      { "id": "pkg-etag", "label": "etag", "kind": "external-package", "description": "Generates strong/weak ETags for res.send via the utils ETag generators." },
+      { "id": "pkg-debug", "label": "debug", "kind": "external-package", "description": "Namespaced debug logging (express:application, express:view)." }
+    ],
+    "edges": [
+      { "from": "entry", "to": "express", "relationship": "re-exports" },
+      { "from": "express", "to": "application", "relationship": "mixes in as app prototype" },
+      { "from": "express", "to": "request", "relationship": "exposes as app.request" },
+      { "from": "express", "to": "response", "relationship": "exposes as app.response" },
+      { "from": "express", "to": "pkg-router", "relationship": "re-exports Router/Route" },
+      { "from": "express", "to": "pkg-body-parser", "relationship": "re-exports json/raw/text/urlencoded" },
+      { "from": "express", "to": "pkg-serve-static", "relationship": "re-exports as static" },
+      { "from": "express", "to": "pkg-merge-descriptors", "relationship": "uses to mix prototypes" },
+      { "from": "application", "to": "view", "relationship": "instantiates for render" },
+      { "from": "application", "to": "utils", "relationship": "imports method list + compilers" },
+      { "from": "application", "to": "pkg-router", "relationship": "lazily creates base Router" },
+      { "from": "application", "to": "pkg-finalhandler", "relationship": "installs as default handler" },
+      { "from": "application", "to": "node-http", "relationship": "http.createServer in app.listen" },
+      { "from": "application", "to": "pkg-debug", "relationship": "logs" },
+      { "from": "request", "to": "node-http", "relationship": "extends IncomingMessage.prototype" },
+      { "from": "request", "to": "pkg-accepts", "relationship": "delegates negotiation" },
+      { "from": "request", "to": "pkg-type-is", "relationship": "delegates req.is" },
+      { "from": "request", "to": "pkg-proxy-addr", "relationship": "resolves req.ip/ips" },
+      { "from": "response", "to": "node-http", "relationship": "extends ServerResponse.prototype" },
+      { "from": "response", "to": "pkg-send", "relationship": "streams sendFile/download" },
+      { "from": "response", "to": "utils", "relationship": "uses normalizeType/setCharset" },
+      { "from": "response", "to": "application", "relationship": "res.render delegates to app.render" },
+      { "from": "utils", "to": "pkg-proxy-addr", "relationship": "compileTrust uses" },
+      { "from": "utils", "to": "pkg-qs", "relationship": "extended query parser" },
+      { "from": "utils", "to": "pkg-etag", "relationship": "ETag generation" }
+    ]
+  },
+  "codebaseMap": [
+    {
+      "path": "lib",
+      "purpose": "The entire framework. Six files, ~2,300 LOC: the factory, the app prototype, the req/res prototypes, the view abstraction, and helpers. Everything a newcomer needs to understand Express lives here.",
+      "role": "core domain",
+      "keyFiles": [
+        { "path": "lib/express.js", "note": "createApplication() factory and the module's public exports (Router, static, json...)." },
+        { "path": "lib/application.js", "note": "app prototype: settings, use/route/verb methods, app.handle dispatch, listen." },
+        { "path": "lib/request.js", "note": "req prototype over http.IncomingMessage; lazy getters and negotiation helpers." },
+        { "path": "lib/response.js", "note": "res prototype over http.ServerResponse; send/json/sendFile/render/redirect." },
+        { "path": "lib/view.js", "note": "View: template file resolution and lazy engine loading." },
+        { "path": "lib/utils.js", "note": "method list, ETag generators, and the compileETag/QueryParser/Trust option compilers." }
+      ]
+    },
+    {
+      "path": "index.js",
+      "purpose": "The package entrypoint declared in package.json. A single require that re-exports lib/express.js, so `require('express')` returns createApplication.",
+      "role": "entrypoint",
+      "keyFiles": [
+        { "path": "index.js", "note": "module.exports = require('./lib/express') — nothing else." }
+      ]
+    },
+    {
+      "path": "test",
+      "purpose": "The Mocha suite, one file per public method (req.*.js, res.*.js, app.*.js) plus Router/Route unit tests. These are the clearest executable spec of intended behavior and drive the app with SuperTest.",
+      "role": "tests",
+      "keyFiles": [
+        { "path": "test/app.router.js", "note": "Largest test file (940 LOC): routing behavior and edge cases." },
+        { "path": "test/res.send.js", "note": "Exercises the res.send funnel: types, ETags, freshness, HEAD." },
+        { "path": "test/support/env.js", "note": "Required before the suite (sets NODE_ENV=test) via the mocha --require flag." }
+      ]
+    },
+    {
+      "path": "test/acceptance",
+      "purpose": "Acceptance tests that run each example app end-to-end, guaranteeing the examples in examples/ actually work and doubling as integration coverage.",
+      "role": "tests",
+      "keyFiles": [
+        { "path": "test/acceptance/web-service.js", "note": "Drives the web-service example against a real server." }
+      ]
+    },
+    {
+      "path": "examples",
+      "purpose": "~25 runnable example apps (auth, mvc, route-separation, sessions, content-negotiation...) each with its own views/. The best place to learn idiomatic Express usage; every example is covered by an acceptance test.",
+      "role": "supporting",
+      "keyFiles": [
+        { "path": "examples/hello-world/index.js", "note": "The minimal app: express(), app.get('/'), app.listen(3000)." },
+        { "path": "examples/mvc/index.js", "note": "A larger example showing routing, controllers, and view rendering." }
+      ]
+    },
+    {
+      "path": ".github/workflows",
+      "purpose": "CI definitions. ci.yml runs a separate lint job plus a test matrix across Node 18-26 on Ubuntu and Windows; legacy.yml, codeql.yml, and scorecard.yml add older-Node, security-scan, and supply-chain checks.",
+      "role": "config",
+      "keyFiles": [
+        { "path": ".github/workflows/ci.yml", "note": "Lint job (npm run lint) + test matrix (npm test) — the checks a PR must pass." }
+      ]
+    }
+  ],
+  "tour": [
+    {
+      "order": 1,
+      "title": "The entrypoint and the factory",
+      "files": [
+        { "path": "index.js" },
+        { "path": "lib/express.js", "startLine": 36, "endLine": 82 }
+      ],
+      "why": "Start where `require('express')` lands. index.js just forwards to lib/express.js, whose createApplication() is the seed of the entire object model — read it first because every other file is a prototype this factory wires together.",
+      "notice": "That `app` is a plain function delegating to app.handle, that merge-descriptors mixes EventEmitter + the application prototype onto it, and that Router/static/json are simply re-exported from npm packages — Express is largely a curator of small modules."
+    },
+    {
+      "order": 2,
+      "title": "How settings and the default config work",
+      "files": [
+        { "path": "lib/application.js", "startLine": 90, "endLine": 141 },
+        { "path": "lib/application.js", "startLine": 351, "endLine": 383 }
+      ],
+      "why": "Before dispatch, understand the settings bag every request will consult. defaultConfiguration seeds the defaults and app.set shows the compile-on-write trick, so later references to 'trust proxy fn' or 'etag fn' won't be mysterious.",
+      "notice": "That app.set stores a value AND, for etag/query parser/trust proxy, compiles a companion function; and that defaults like view cache flip on only when NODE_ENV is production."
+    },
+    {
+      "order": 3,
+      "title": "The request lifecycle: app.handle",
+      "files": [
+        { "path": "lib/application.js", "startLine": 152, "endLine": 178 },
+        { "path": "lib/application.js", "startLine": 59, "endLine": 83 }
+      ],
+      "why": "This is the spine of the framework and the payoff of steps 1-2: it is where a raw Node req/res becomes an Express req/res and control passes to the router. Read app.init alongside it to see the lazy base-router getter it hands off to.",
+      "notice": "The two Object.setPrototypeOf calls that graft the app's request/response prototypes onto the native objects, and that finalhandler is the default terminal callback when nothing in the stack responds."
+    },
+    {
+      "order": 4,
+      "title": "Mounting middleware and generating the verb methods",
+      "files": [
+        { "path": "lib/application.js", "startLine": 190, "endLine": 244 },
+        { "path": "lib/application.js", "startLine": 471, "endLine": 503 }
+      ],
+      "why": "Now that dispatch is clear, see how routes and middleware get registered in the first place. app.use handles the path/app-mount cases; the methods.forEach loop shows app.get/post/... are thin proxies to the router — demystifying the API surface most users touch.",
+      "notice": "That app.use special-cases mounting a sub-app (emitting 'mount' and restoring req.app), and that app.get is overloaded: one argument reads a setting, more than one defines a route."
+    },
+    {
+      "order": 5,
+      "title": "req: decorating http.IncomingMessage",
+      "files": [
+        { "path": "lib/request.js", "startLine": 30, "endLine": 37 },
+        { "path": "lib/request.js", "startLine": 230, "endLine": 241 },
+        { "path": "lib/request.js", "startLine": 297, "endLine": 315 }
+      ],
+      "why": "With dispatch understood, look at what req actually gains. Reading the prototype creation plus a couple of getters (query, protocol) shows the lazy-getter pattern and how getters lean on app settings — the same shape repeats for ip, host, subdomains.",
+      "notice": "That req inherits from IncomingMessage.prototype (no subclass), that getters are defined with a local defineGetter helper, and that protocol/ip/host all consult the compiled 'trust proxy fn' from step 2."
+    },
+    {
+      "order": 6,
+      "title": "res.send: the response funnel",
+      "files": [
+        { "path": "lib/response.js", "startLine": 43, "endLine": 50 },
+        { "path": "lib/response.js", "startLine": 126, "endLine": 248 }
+      ],
+      "why": "res.send is the single most important method to understand on the response side: json, jsonp, sendStatus, and redirect all funnel through it. Read it after req so you see both halves of a request/response, and see how much HTTP correctness lives in one function.",
+      "notice": "The Content-Type inference, the Content-Length + ETag generation, the req.fresh -> 304 short-circuit, and the HEAD/204/205 body-stripping — and that res.json just stringifies then calls res.send."
+    },
+    {
+      "order": 7,
+      "title": "Views and file transfer at the edges",
+      "files": [
+        { "path": "lib/response.js", "startLine": 897, "endLine": 921 },
+        { "path": "lib/view.js", "startLine": 52, "endLine": 95 },
+        { "path": "lib/response.js", "startLine": 373, "endLine": 415 }
+      ],
+      "why": "Finish with the two delegated concerns you have not yet seen: template rendering and file streaming. These sit at the boundary and hand off to app.render/View and the send package respectively, rounding out the mental model of what Express does itself vs. delegates.",
+      "notice": "That res.render is a thin wrapper over app.render + View, that View lazily require()s an engine by file extension via its __express export, and that res.sendFile just configures and pipes the `send` stream."
+    },
+    {
+      "order": 8,
+      "title": "The tests as executable spec",
+      "files": [
+        { "path": "test/res.send.js" },
+        { "path": "test/support/env.js" }
+      ],
+      "why": "Close the loop by reading a test file for a method you just studied. The suite is organized one-file-per-method and driven with SuperTest, so it is the most precise statement of intended behavior and the place your own changes will need coverage.",
+      "notice": "How SuperTest boots the app as a real server and asserts on status/headers/body, and that test/support/env.js (loaded via mocha --require) forces NODE_ENV=test so error logging stays quiet."
+    }
+  ],
+  "hotspots": {
+    "entries": [
+      { "path": "package.json", "commits": 160, "recentActivity": "active", "insight": "By far the most-touched file, which for a library is meaningful signal: this is where the 27 runtime dependencies get version-bumped. Express's surface area is small precisely because so much behavior lives in those deps, so most 'Express' changes are actually dependency updates recorded here." },
+      { "path": "History.md", "commits": 138, "recentActivity": "active", "insight": "The hand-maintained changelog. Its churn tracks release cadence; skim the top entries to see what the maintainers consider a user-facing change and how v5 differs from v4." },
+      { "path": "lib/response.js", "commits": 39, "recentActivity": "active", "insight": "The most-churned source file and the largest (908 LOC). It concentrates HTTP-correctness edge cases (ETags, ranges, cookies, JSONP security mitigations), so it is both central and the file most likely to have a subtle bug or a follow-up fix — read it carefully before changing send/json." },
+      { "path": "lib/application.js", "commits": 15, "recentActivity": "active", "insight": "Still actively edited because it holds the dispatch path and the settings system. Changes here ripple through every request, which is why they land with test updates — a good file to watch for how core behavior evolves." },
+      { "path": "lib/request.js", "commits": 9, "recentActivity": "active", "insight": "Recent activity clusters around the trust-proxy-dependent getters (protocol, host, ip). If you see security or reverse-proxy fixes, this file and compileTrust in utils.js are the usual pair." },
+      { "path": "lib/utils.js", "commits": 15, "recentActivity": "dormant", "insight": "Moderately churned historically but quiet lately, matching its role: the compile* option helpers are stable infrastructure. Safe ground to read to learn how settings become functions without expecting it to shift under you." },
+      { "path": "test/app.router.js", "commits": 18, "recentActivity": "dormant", "insight": "The largest and most-edited test file, but now dormant — a sign routing behavior settled once routing itself was extracted into the external `router` package in v5. Its history is a good record of past routing edge cases." }
+    ],
+    "interpretation": "The churn splits cleanly into three stories. The genuine top-of-list files (package.json, History.md, CI workflows) reflect that a mature framework's day-to-day work is dependency bumps and release housekeeping, not core rewrites. Among source files, lib/response.js dominates — it is the largest file and the richest in HTTP edge cases, so a newcomer should treat it as the highest-risk area. And the once-hot test/app.router.js going dormant is itself informative: routing was moved out to the `router` dependency in v5, so the framework's own code is now smaller and steadier than its history suggests."
+  },
+  "setup": {
+    "prerequisites": [
+      "Node.js >= 18 (package.json engines; CI tests Node 18 through 26)",
+      "npm (ships with Node); no other toolchain or database is required",
+      "git, to clone the repository"
+    ],
+    "setup": [
+      {
+        "title": "Clone the repository",
+        "commands": ["git clone https://github.com/expressjs/express.git", "cd express"],
+        "notes": "Express itself has no build step — it is plain CommonJS JavaScript run directly by Node."
+      },
+      {
+        "title": "Install dependencies",
+        "commands": ["npm install"],
+        "notes": "Installs the 27 runtime deps plus dev tooling (mocha, supertest, eslint, ejs/hbs for example views). CI uses `npm install --ignore-scripts --include=dev`; plain `npm install` is fine locally."
+      }
+    ],
+    "run": [
+      {
+        "title": "Run an example app",
+        "commands": ["node examples/hello-world", "node examples/mvc"],
+        "notes": "There is no `npm start` script — Express is a library, not an app. The examples/ apps are the way to run real servers; hello-world listens on http://localhost:3000."
+      },
+      {
+        "title": "Use it as a dependency",
+        "commands": ["npm install express"],
+        "notes": "In a consumer project: `const app = require('express')()` then `app.get('/', (req,res) => res.send('Hello World'))` and `app.listen(3000)` (see Readme.md)."
+      }
+    ],
+    "test": [
+      {
+        "title": "Run the full test suite",
+        "commands": ["npm test"],
+        "notes": "Runs `mocha --require test/support/env --reporter spec --check-leaks test/ test/acceptance/`. No database or services needed."
+      },
+      {
+        "title": "Run tests with coverage",
+        "commands": ["npm run test-cov"],
+        "notes": "Wraps the suite in nyc and writes an HTML coverage report; `npm run test-ci` produces lcov for CI."
+      },
+      {
+        "title": "Lint",
+        "commands": ["npm run lint"],
+        "notes": "Runs `eslint .`. This is a separate required CI job from the test matrix; `npm run lint:fix` autofixes."
+      }
+    ]
+  },
+  "firstTasks": [
+    {
+      "title": "Add or extend a res.* unit test",
+      "description": "Pick a response helper you understand from the tour (e.g. res.send or res.json) and add a test case in the matching test/res.*.js file for a behavior branch that interests you, running it with `npm test`.",
+      "difficulty": "easy",
+      "files": ["test/res.send.js", "test/res.json.js", "lib/response.js"],
+      "rationale": "The one-file-per-method layout plus SuperTest makes tests approachable, and writing one teaches how the suite drives a real server without risking any production behavior — the safest possible first change."
+    },
+    {
+      "title": "Trace and document one req getter end-to-end",
+      "description": "Follow a getter such as req.hostname or req.protocol from lib/request.js into the compiled 'trust proxy fn' in lib/utils.js, then improve the inline comment or JSDoc to spell out the trust-proxy interaction you found.",
+      "difficulty": "easy",
+      "files": ["lib/request.js", "lib/utils.js"],
+      "rationale": "It forces you to connect the settings system to the request getters — the single most confusing hop for newcomers — while making a small, low-risk, review-friendly documentation improvement."
+    },
+    {
+      "title": "Harden a res.send edge case",
+      "description": "Study the Content-Length / ETag / freshness logic in res.send (response.js:126-220), find an under-tested branch (e.g. the 205 Reset Content header handling or ArrayBuffer bodies), and add a focused test plus any small fix it reveals.",
+      "difficulty": "medium",
+      "files": ["lib/response.js", "test/res.send.js"],
+      "rationale": "res.send is the most central and most-churned source function; working here teaches the HTTP-correctness concerns at the heart of the framework while staying scoped to one method with strong existing test coverage to lean on."
+    },
+    {
+      "title": "Add a new app setting with a compiled companion function",
+      "description": "Introduce a new setting in the app.set switch (application.js:363) that compiles a helper via a new function in lib/utils.js, following the exact pattern of 'etag'/'query parser'/'trust proxy', and cover it in test/config.js.",
+      "difficulty": "hard",
+      "files": ["lib/application.js", "lib/utils.js", "test/config.js"],
+      "rationale": "It requires understanding the full settings-compilation mechanism and how defaultConfiguration and app.set interact — a genuine cross-cutting change that touches the framework's core configuration model rather than a leaf method."
+    }
+  ]
+}
