@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { dataSource } from "@/lib/datasource";
+import { resolveDataSource } from "@/lib/datasource";
 import { EmptyState, SectionHeader } from "@/components/ui";
 import { TourStepper } from "@/components/TourStepper";
 
@@ -14,6 +14,7 @@ export default async function TourPage({
 }) {
   const { id } = await params;
   const { step } = await searchParams;
+  const dataSource = await resolveDataSource();
   const analysis = await dataSource.getAnalysis(id);
   if (!analysis) notFound();
 

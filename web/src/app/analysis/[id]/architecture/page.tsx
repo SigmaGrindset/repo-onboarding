@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { dataSource } from "@/lib/datasource";
+import { resolveDataSource } from "@/lib/datasource";
 import { Markdown } from "@/lib/markdown";
 import { Badge, Card, EmptyState, SectionHeader } from "@/components/ui";
 import { Mermaid } from "@/components/Mermaid";
@@ -12,6 +12,7 @@ export default async function ArchitecturePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const dataSource = await resolveDataSource();
   const analysis = await dataSource.getAnalysis(id);
   if (!analysis) notFound();
 

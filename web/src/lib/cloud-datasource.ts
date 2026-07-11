@@ -1,0 +1,80 @@
+/**
+ * Cloud-mode data source: Neon Postgres (metadata) + Vercel Blob (payload),
+ * gated by the `analysis_access` authorization table.
+ *
+ * Implements the same `DataSource` contract as the fs source, so every page and
+ * API talks to one interface. This module is imported ONLY in cloud mode (via
+ * `resolveDataSource`), so its Clerk/DB/Blob imports never load locally.
+ *
+ * Id handling:
+ *  - `db_<uuid>` ids resolve here (DB + Blob, access-checked).
+ *  - Fixture ids fall through to the fs source, so public demo analyses stay
+ *    viewable by direct link even in cloud mode.
+ *
+ * The signed-in user is read from Clerk inside `getAnalysis`/`listAnalyses`,
+ * which keeps the `DataSource` interface unchanged AND guarantees every read
+ * path passes through the access helper — callers cannot bypass it.
+ */
+
+import { auth } from "@clerk/nextjs/server";
+import type { Analysis } from "@schema/analysis";
+import type { AnalysisSummary, DataSource } from "./datasource";
+import { fsDataSource } from "./datasource";
+import { isCloudId, toCloudId, uuidFromCloudId } from "./ids";
+import {
+  canReadAnalysis,
+  getBlobKey,
+  listAnalysesFor,
+} from "./access";
+import { getAnalysisPayload } from "./blob";
+
+async function currentUserId(): Promise<string | null> {
+  const { userId } = await auth();
+  return userId ?? null;
+}
+
+export const cloudDataSource: DataSource = {
+  async listAnalyses(): Promise<AnalysisSummary[]> {
+    const userId = await currentUserId();
+    if (!userId) return [];
+    const rows = await listAnalysesFor(userId);
+    return rows.map((r) => ({
+      id: toCloudId(r.id),
+      repoName: r.repoName,
+      repoUrl: r.repoUrl,
+      // Language/size stats live only in the payload, not the metadata table.
+      // The index card degrades gracefully when these are empty/zero.
+      primaryLanguage: "",
+      totalFiles: 0,
+      totalLoc: 0,
+      analyzedAt: r.createdAt.toISOString(),
+      summary: r.summary,
+    }));
+  },
+
+  async getAnalysis(id: string): Promise<Analysis | null> {
+    // Fixtures remain public demos, readable by direct link in cloud mode too.
+    if (!isCloudId(id)) return fsDataSource.getAnalysis(id);
+
+    const uuid = uuidFromCloudId(id);
+    if (!uuid) return null;
+
+    const userId = await currentUserId();
+    if (!userId) return null;
+
+    // THE authorization chokepoint — no cloud payload is returned without it.
+    if (!(await canReadAnalysis(userId, uuid))) return null;
+
+    const blobKey = await getBlobKey(uuid);
+    if (!blobKey) return null;
+
+    const raw = await getAnalysisPayload(blobKey);
+    if (!raw) return null;
+
+    try {
+      return JSON.parse(raw) as Analysis;
+    } catch {
+      return null;
+    }
+  },
+};

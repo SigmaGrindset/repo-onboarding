@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { dataSource } from "@/lib/datasource";
+import { resolveDataSource } from "@/lib/datasource";
 import { SectionHeader, EmptyState } from "@/components/ui";
 import { DependencyGraph } from "@/components/DependencyGraph";
 
@@ -11,6 +11,7 @@ export default async function GraphPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const dataSource = await resolveDataSource();
   const analysis = await dataSource.getAnalysis(id);
   if (!analysis) notFound();
 

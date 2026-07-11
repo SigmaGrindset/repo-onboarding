@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { dataSource } from "@/lib/datasource";
+import { resolveDataSource } from "@/lib/datasource";
 import { formatDate, shortSha } from "@/lib/format";
 import { SectionNav } from "@/components/SectionNav";
 
@@ -14,6 +14,7 @@ export default async function AnalysisLayout({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const dataSource = await resolveDataSource();
   const analysis = await dataSource.getAnalysis(id);
   if (!analysis) notFound();
 

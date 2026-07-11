@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { dataSource } from "@/lib/datasource";
+import { resolveDataSource } from "@/lib/datasource";
 import { formatNumber } from "@/lib/format";
 import {
   CATEGORY_ORDER,
@@ -18,6 +18,7 @@ export default async function OverviewPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const dataSource = await resolveDataSource();
   const analysis = await dataSource.getAnalysis(id);
   if (!analysis) notFound();
 

@@ -94,4 +94,27 @@ export const fsDataSource: DataSource = {
   },
 };
 
+import { isCloudMode } from "./mode";
+
+/**
+ * Pick the data source for the active mode. Cloud mode is loaded via dynamic
+ * import so its Clerk/DB/Blob dependencies are NEVER evaluated in local mode.
+ *
+ * Every page and API route obtains its data source through this function, so
+ * the mode switch and (in cloud mode) the per-user access checks are enforced
+ * uniformly. In cloud mode the source still delegates fixture ids to the fs
+ * source, so demo analyses stay viewable.
+ */
+export async function resolveDataSource(): Promise<DataSource> {
+  if (isCloudMode()) {
+    const { cloudDataSource } = await import("./cloud-datasource");
+    return cloudDataSource;
+  }
+  return fsDataSource;
+}
+
+/**
+ * Back-compat alias — the fs source. Prefer `resolveDataSource()` in pages so
+ * cloud mode is honored. Kept so any direct fixture reads keep working.
+ */
 export const dataSource: DataSource = fsDataSource;

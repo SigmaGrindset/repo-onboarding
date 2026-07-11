@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { dataSource } from "@/lib/datasource";
+import { resolveDataSource } from "@/lib/datasource";
 import { difficultyStyle } from "@/lib/styles";
 import { Badge, Card, EmptyState, FileChip, SectionHeader } from "@/components/ui";
 
@@ -13,6 +13,7 @@ export default async function TasksPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const dataSource = await resolveDataSource();
   const analysis = await dataSource.getAnalysis(id);
   if (!analysis) notFound();
 
