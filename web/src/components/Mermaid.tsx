@@ -31,6 +31,11 @@ export function Mermaid({ source }: { source: string }) {
         mermaid.initialize({
           startOnLoad: false,
           securityLevel: "strict",
+          // Without this, Mermaid 11 appends its own "Syntax error" element to
+          // document.body on parse failure (visible stacked at the bottom of
+          // the page, doubled under dev StrictMode). We render our own
+          // <pre> fallback instead.
+          suppressErrorRendering: true,
           theme: dark ? "dark" : "default",
           fontFamily:
             'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
@@ -38,13 +43,25 @@ export function Mermaid({ source }: { source: string }) {
 
         counter += 1;
         const id = `mmd-${Date.now()}-${counter}`;
-        const { svg } = await mermaid.render(id, source);
-        if (cancelled) return;
-        if (hostRef.current) {
-          hostRef.current.innerHTML = svg;
+        try {
+          const { svg } = await mermaid.render(id, source);
+          if (cancelled) return;
+          if (hostRef.current) {
+            hostRef.current.innerHTML = svg;
+          }
+          setError(null);
+          setRendered(true);
+        } catch (renderError) {
+          // Belt-and-braces: remove any scratch/error nodes Mermaid left
+          // attached directly to <body> for this render id. (Scoped to body
+          // children only, so a successfully mounted SVG inside our host —
+          // which reuses the same id — is never touched.)
+          for (const nodeId of [id, `d${id}`]) {
+            const el = document.getElementById(nodeId);
+            if (el && el.parentElement === document.body) el.remove();
+          }
+          throw renderError;
         }
-        setError(null);
-        setRendered(true);
       } catch (e) {
         if (cancelled) return;
         setError(e instanceof Error ? e.message : "Failed to render diagram");

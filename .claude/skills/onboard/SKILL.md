@@ -123,6 +123,9 @@ Extract, per schema section, as you read:
   reflect **actual imports/boundaries you saw in code** — not an idealized textbook picture.
   Prefer `flowchart` for module/layer structure, `sequence` for a key request/data flow,
   `er` for the persistence model. Give 2–4 sections; multiple diagrams is better.
+  Diagram sources must NOT contain `;` inside statement/message/label text — Mermaid
+  parses `;` as a statement separator, so the diagram fails to render. Use commas,
+  arrows (`→`), or "then" instead (e.g. `BEGIN → insert → COMMIT`, not `BEGIN; insert; COMMIT`).
 - **dependencyGraph** — `nodes[]` for the important internal modules (with repo-relative
   `path`), key external packages (from manifests), and external services/datastores;
   `edges[]` for the real relationships (imports/calls/reads-from/implements). Every

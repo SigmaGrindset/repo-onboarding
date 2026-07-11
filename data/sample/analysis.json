@@ -60,7 +60,7 @@
       "diagram": {
         "type": "sequence",
         "title": "POST /transfers happy path",
-        "source": "sequenceDiagram\n  actor Client\n  participant API as Fastify handler\n  participant H as TransferFunds handler\n  participant D as Ledger domain\n  participant Repo as Postgres repo\n  participant OB as Outbox worker\n  Client->>API: POST /transfers {from,to,amount}\n  API->>H: TransferFundsCommand\n  H->>Repo: load(from), load(to)\n  Repo-->>H: accounts + snapshots\n  H->>D: ledger.transfer(from,to,money)\n  D-->>H: JournalEntry[] (balanced)\n  H->>Repo: BEGIN; insert entries; insert outbox; COMMIT\n  Repo-->>H: ok\n  H-->>API: TransferResult\n  API-->>Client: 201 Created\n  OB->>Repo: poll unpublished outbox\n  OB->>OB: publish settlement.v1\n  OB->>Repo: mark published"
+        "source": "sequenceDiagram\n  actor Client\n  participant API as Fastify handler\n  participant H as TransferFunds handler\n  participant D as Ledger domain\n  participant Repo as Postgres repo\n  participant OB as Outbox worker\n  Client->>API: POST /transfers {from,to,amount}\n  API->>H: TransferFundsCommand\n  H->>Repo: load(from), load(to)\n  Repo-->>H: accounts + snapshots\n  H->>D: ledger.transfer(from,to,money)\n  D-->>H: JournalEntry[] (balanced)\n  H->>Repo: BEGIN → insert entries → insert outbox → COMMIT\n  Repo-->>H: ok\n  H-->>API: TransferResult\n  API-->>Client: 201 Created\n  OB->>Repo: poll unpublished outbox\n  OB->>OB: publish settlement.v1\n  OB->>Repo: mark published"
       }
     },
     {
