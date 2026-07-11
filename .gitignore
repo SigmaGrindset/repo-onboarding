@@ -1,4 +1,6 @@
 node_modules/
+# Analyses of private repos stay local-only (viewer picks them up from data/ regardless)
+data/fer-mentor/
 .next/
 out/
 dist/
