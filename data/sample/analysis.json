@@ -1,0 +1,389 @@
+{
+  "schemaVersion": "1.0.0",
+  "metadata": {
+    "repoName": "ledgerline (DEMO SAMPLE)",
+    "repoUrl": "https://github.com/acme-example/ledgerline-demo",
+    "analyzedAt": "2026-07-11T14:22:05Z",
+    "analyzerVersion": "onboard/0.1.0",
+    "commitSha": "9f3c1ab7d0e4562b8c1f0a9d7e6b4c2a1f8e0d3c",
+    "primaryLanguage": "TypeScript",
+    "stats": {
+      "totalFiles": 214,
+      "totalLoc": 18740,
+      "languages": [
+        { "language": "TypeScript", "files": 168, "loc": 15320, "percentage": 81.8 },
+        { "language": "SQL", "files": 19, "loc": 1420, "percentage": 7.6 },
+        { "language": "JSON", "files": 14, "loc": 980, "percentage": 5.2 },
+        { "language": "YAML", "files": 8, "loc": 610, "percentage": 3.3 },
+        { "language": "Markdown", "files": 5, "loc": 410, "percentage": 2.1 }
+      ]
+    }
+  },
+  "pitch": {
+    "summary": "SAMPLE/DEMO FIXTURE — ledgerline is a fictional medium-sized TypeScript web service used as the reference analysis for the Repo Onboarding tool. It implements a double-entry, event-sourced ledger exposed over an HTTP API: money movements are recorded as immutable journal entries, account balances are derived by folding those events, and an outbox pattern publishes settlement events to downstream consumers. It is designed to demonstrate how a well-factored domain-driven service is structured, from HTTP boundary through application services to a pure domain core and a Postgres-backed persistence layer.",
+    "audience": "Backend engineers joining a payments/fintech team who need to understand an event-sourced, double-entry ledger and its DDD-style layering before making changes.",
+    "techStack": [
+      { "name": "TypeScript", "category": "language", "role": "The entire service is written in strict-mode TypeScript; domain invariants are encoded in the type system (branded Money and AccountId types)." },
+      { "name": "Node.js", "category": "platform", "role": "Runtime for the HTTP server, the outbox worker, and the CLI migration tool." },
+      { "name": "Fastify", "category": "framework", "role": "HTTP framework at the API boundary; route schemas double as request validation via JSON Schema." },
+      { "name": "PostgreSQL", "category": "database", "role": "System of record: stores the append-only journal, the derived balance snapshots, and the transactional outbox table." },
+      { "name": "Drizzle ORM", "category": "library", "role": "Typed query builder and schema definitions; used for all reads/writes and to generate SQL migrations." },
+      { "name": "Zod", "category": "library", "role": "Validates and parses inbound command payloads in the application layer before they reach the domain." },
+      { "name": "Vitest", "category": "tooling", "role": "Unit and integration test runner; domain tests run in-memory, integration tests hit a disposable Postgres via Testcontainers." },
+      { "name": "Pino", "category": "library", "role": "Structured JSON logging with per-request correlation ids threaded through the application layer." },
+      { "name": "Docker Compose", "category": "infra", "role": "Spins up Postgres and a fake downstream consumer for local development and integration tests." },
+      { "name": "OpenTelemetry", "category": "tooling", "role": "Traces requests from HTTP handler through domain command handling to database spans." }
+    ]
+  },
+  "architecture": [
+    {
+      "title": "Layered, dependency-inverted design",
+      "body": "ledgerline follows a strict hexagonal / ports-and-adapters layering. Dependencies point inward: `interfaces` (HTTP, CLI) depend on `application`, which depends on the pure `domain`, which depends on nothing. Infrastructure (Postgres repositories, the outbox publisher) implements ports declared by the application layer and is wired in at the composition root (`src/main.ts`). This keeps the domain free of framework and I/O concerns, so business rules are testable in isolation. When reading the code, always ask which layer a file belongs to before assuming what it may import.",
+      "diagram": {
+        "type": "flowchart",
+        "title": "Ports & adapters layering",
+        "source": "flowchart TD\n  subgraph interfaces[\"interfaces (adapters-in)\"]\n    HTTP[\"HTTP API (Fastify)\"]\n    CLI[\"migrate CLI\"]\n  end\n  subgraph application[\"application\"]\n    CMD[\"command handlers\"]\n    QRY[\"query handlers\"]\n    PORTS[\"ports (interfaces)\"]\n  end\n  subgraph domain[\"domain (pure)\"]\n    LEDGER[\"Ledger aggregate\"]\n    ENTRY[\"JournalEntry\"]\n    MONEY[\"Money value object\"]\n  end\n  subgraph infra[\"infrastructure (adapters-out)\"]\n    REPO[\"Postgres repositories\"]\n    OUTBOX[\"Outbox publisher\"]\n  end\n  HTTP --> CMD\n  HTTP --> QRY\n  CLI --> REPO\n  CMD --> LEDGER\n  QRY --> PORTS\n  CMD --> PORTS\n  LEDGER --> ENTRY\n  ENTRY --> MONEY\n  REPO -.implements.-> PORTS\n  OUTBOX -.implements.-> PORTS"
+      }
+    },
+    {
+      "title": "Event sourcing and derived balances",
+      "body": "The ledger never stores mutable balances as the source of truth. Every money movement appends immutable `JournalEntry` events to the `journal` table. An account's balance is the fold of all entries touching it. For performance, a `balance_snapshots` table caches the balance at a known event sequence; reads replay only the entries after the snapshot. This is why you will see both a write path (append entries) and a rebuild path (recompute snapshots). Newcomers frequently trip on this: mutating a balance directly is always a bug — you emit an entry instead.",
+      "diagram": {
+        "type": "er",
+        "title": "Core persistence model",
+        "source": "erDiagram\n  ACCOUNT ||--o{ JOURNAL_ENTRY : \"debited/credited\"\n  ACCOUNT ||--o| BALANCE_SNAPSHOT : \"cached at seq\"\n  TRANSFER ||--|{ JOURNAL_ENTRY : \"produces 2+\"\n  JOURNAL_ENTRY ||--o| OUTBOX : \"enqueues\"\n  ACCOUNT {\n    uuid id PK\n    string currency\n    string status\n  }\n  JOURNAL_ENTRY {\n    bigint seq PK\n    uuid account_id FK\n    uuid transfer_id FK\n    bigint amount_minor\n    string direction\n    timestamptz created_at\n  }\n  BALANCE_SNAPSHOT {\n    uuid account_id PK\n    bigint at_seq\n    bigint balance_minor\n  }\n  OUTBOX {\n    uuid id PK\n    string topic\n    jsonb payload\n    timestamptz published_at\n  }"
+      }
+    },
+    {
+      "title": "The transfer command lifecycle",
+      "body": "A transfer is the canonical write. The HTTP handler parses the request, the `TransferFunds` command handler loads both accounts, the domain validates the invariant that debits equal credits and that no account goes below its allowed floor, then the handler persists the new entries and an outbox row in a single database transaction. The outbox worker later publishes the settlement event. Follow this path end-to-end — it touches every layer and is the fastest way to understand the whole service.",
+      "diagram": {
+        "type": "sequence",
+        "title": "POST /transfers happy path",
+        "source": "sequenceDiagram\n  actor Client\n  participant API as Fastify handler\n  participant H as TransferFunds handler\n  participant D as Ledger domain\n  participant Repo as Postgres repo\n  participant OB as Outbox worker\n  Client->>API: POST /transfers {from,to,amount}\n  API->>H: TransferFundsCommand\n  H->>Repo: load(from), load(to)\n  Repo-->>H: accounts + snapshots\n  H->>D: ledger.transfer(from,to,money)\n  D-->>H: JournalEntry[] (balanced)\n  H->>Repo: BEGIN; insert entries; insert outbox; COMMIT\n  Repo-->>H: ok\n  H-->>API: TransferResult\n  API-->>Client: 201 Created\n  OB->>Repo: poll unpublished outbox\n  OB->>OB: publish settlement.v1\n  OB->>Repo: mark published"
+      }
+    },
+    {
+      "title": "Concurrency and idempotency",
+      "body": "Every transfer carries a client-supplied `idempotencyKey`. The handler upserts it into an `idempotency_keys` table with a unique constraint inside the same transaction as the entries; a duplicate key short-circuits and returns the original result rather than double-posting. Optimistic concurrency is enforced with the account's `version` column: two concurrent transfers on the same account cause one to fail the version check and retry. Understanding these two mechanisms explains most of the defensive code in the application layer."
+    }
+  ],
+  "dependencyGraph": {
+    "nodes": [
+      { "id": "main", "label": "src/main.ts", "kind": "entrypoint", "path": "src/main.ts", "description": "Composition root: builds config, wires adapters to ports, starts the HTTP server and outbox worker." },
+      { "id": "http-server", "label": "http/server", "kind": "internal-module", "path": "src/interfaces/http/server.ts", "description": "Fastify instance, plugin registration, error mapping." },
+      { "id": "http-routes-transfers", "label": "http/routes/transfers", "kind": "internal-module", "path": "src/interfaces/http/routes/transfers.ts", "description": "POST /transfers and GET /transfers/:id route handlers." },
+      { "id": "http-routes-accounts", "label": "http/routes/accounts", "kind": "internal-module", "path": "src/interfaces/http/routes/accounts.ts", "description": "Account creation and balance query routes." },
+      { "id": "cli-migrate", "label": "cli/migrate", "kind": "internal-module", "path": "src/interfaces/cli/migrate.ts", "description": "Runs Drizzle migrations from the command line." },
+      { "id": "app-transfer", "label": "application/TransferFunds", "kind": "internal-module", "path": "src/application/commands/transfer-funds.ts", "description": "Command handler orchestrating a transfer across load, domain, persist, outbox." },
+      { "id": "app-open-account", "label": "application/OpenAccount", "kind": "internal-module", "path": "src/application/commands/open-account.ts", "description": "Creates a new account with a starting currency and floor." },
+      { "id": "app-get-balance", "label": "application/GetBalance", "kind": "internal-module", "path": "src/application/queries/get-balance.ts", "description": "Query handler that folds entries over the latest snapshot." },
+      { "id": "app-ports", "label": "application/ports", "kind": "internal-module", "path": "src/application/ports.ts", "description": "Interfaces the domain-facing layer depends on: LedgerRepository, OutboxPort, Clock, IdGenerator." },
+      { "id": "domain-ledger", "label": "domain/Ledger", "kind": "internal-module", "path": "src/domain/ledger.ts", "description": "Aggregate enforcing double-entry and floor invariants; produces balanced JournalEntry[]." },
+      { "id": "domain-journal-entry", "label": "domain/JournalEntry", "kind": "internal-module", "path": "src/domain/journal-entry.ts", "description": "Immutable event value object representing one debit or credit." },
+      { "id": "domain-money", "label": "domain/Money", "kind": "internal-module", "path": "src/domain/money.ts", "description": "Branded integer-minor-units value object; forbids float arithmetic and cross-currency ops." },
+      { "id": "domain-account", "label": "domain/Account", "kind": "internal-module", "path": "src/domain/account.ts", "description": "Account entity with currency, floor, status, and optimistic version." },
+      { "id": "infra-repo", "label": "infrastructure/PgLedgerRepository", "kind": "internal-module", "path": "src/infrastructure/pg/ledger-repository.ts", "description": "Implements LedgerRepository over Drizzle; handles snapshots and version checks." },
+      { "id": "infra-outbox", "label": "infrastructure/OutboxPublisher", "kind": "internal-module", "path": "src/infrastructure/outbox/publisher.ts", "description": "Polls the outbox table and publishes settlement events; implements OutboxPort." },
+      { "id": "infra-schema", "label": "infrastructure/db-schema", "kind": "internal-module", "path": "src/infrastructure/pg/schema.ts", "description": "Drizzle table definitions for journal, accounts, snapshots, outbox, idempotency_keys." },
+      { "id": "config", "label": "config", "kind": "internal-module", "path": "src/config.ts", "description": "Loads and validates environment configuration with Zod." },
+      { "id": "telemetry", "label": "observability/telemetry", "kind": "internal-module", "path": "src/observability/telemetry.ts", "description": "OpenTelemetry setup and Pino logger factory." },
+      { "id": "pkg-fastify", "label": "fastify", "kind": "external-package", "description": "HTTP framework." },
+      { "id": "pkg-drizzle", "label": "drizzle-orm", "kind": "external-package", "description": "Typed SQL query builder and migrations." },
+      { "id": "pkg-zod", "label": "zod", "kind": "external-package", "description": "Runtime schema validation." },
+      { "id": "pkg-pino", "label": "pino", "kind": "external-package", "description": "Structured logging." },
+      { "id": "pkg-otel", "label": "@opentelemetry/sdk-node", "kind": "external-package", "description": "Distributed tracing SDK." },
+      { "id": "ext-postgres", "label": "PostgreSQL", "kind": "datastore", "description": "System-of-record database." },
+      { "id": "ext-consumer", "label": "settlement consumer", "kind": "external-service", "description": "Downstream service that receives published settlement.v1 events." }
+    ],
+    "edges": [
+      { "from": "main", "to": "http-server", "relationship": "starts" },
+      { "from": "main", "to": "infra-outbox", "relationship": "starts" },
+      { "from": "main", "to": "config", "relationship": "reads" },
+      { "from": "main", "to": "telemetry", "relationship": "initializes" },
+      { "from": "http-server", "to": "http-routes-transfers", "relationship": "registers" },
+      { "from": "http-server", "to": "http-routes-accounts", "relationship": "registers" },
+      { "from": "http-server", "to": "pkg-fastify", "relationship": "uses" },
+      { "from": "http-routes-transfers", "to": "app-transfer", "relationship": "invokes" },
+      { "from": "http-routes-transfers", "to": "app-get-balance", "relationship": "invokes" },
+      { "from": "http-routes-accounts", "to": "app-open-account", "relationship": "invokes" },
+      { "from": "http-routes-accounts", "to": "app-get-balance", "relationship": "invokes" },
+      { "from": "cli-migrate", "to": "infra-schema", "relationship": "migrates" },
+      { "from": "app-transfer", "to": "domain-ledger", "relationship": "calls" },
+      { "from": "app-transfer", "to": "app-ports", "relationship": "depends on" },
+      { "from": "app-open-account", "to": "domain-account", "relationship": "creates" },
+      { "from": "app-open-account", "to": "app-ports", "relationship": "depends on" },
+      { "from": "app-get-balance", "to": "app-ports", "relationship": "depends on" },
+      { "from": "app-transfer", "to": "pkg-zod", "relationship": "validates with" },
+      { "from": "domain-ledger", "to": "domain-journal-entry", "relationship": "produces" },
+      { "from": "domain-ledger", "to": "domain-account", "relationship": "operates on" },
+      { "from": "domain-journal-entry", "to": "domain-money", "relationship": "holds" },
+      { "from": "domain-account", "to": "domain-money", "relationship": "holds" },
+      { "from": "infra-repo", "to": "app-ports", "relationship": "implements" },
+      { "from": "infra-outbox", "to": "app-ports", "relationship": "implements" },
+      { "from": "infra-repo", "to": "infra-schema", "relationship": "queries" },
+      { "from": "infra-repo", "to": "pkg-drizzle", "relationship": "uses" },
+      { "from": "infra-repo", "to": "ext-postgres", "relationship": "reads/writes" },
+      { "from": "infra-outbox", "to": "ext-postgres", "relationship": "polls" },
+      { "from": "infra-outbox", "to": "ext-consumer", "relationship": "publishes to" },
+      { "from": "telemetry", "to": "pkg-pino", "relationship": "uses" },
+      { "from": "telemetry", "to": "pkg-otel", "relationship": "uses" },
+      { "from": "config", "to": "pkg-zod", "relationship": "validates with" }
+    ]
+  },
+  "codebaseMap": [
+    {
+      "path": "src/domain",
+      "purpose": "The pure business core: aggregates, entities, and value objects encoding the double-entry ledger rules with zero I/O or framework dependencies.",
+      "role": "core domain",
+      "keyFiles": [
+        { "path": "src/domain/ledger.ts", "note": "Ledger aggregate; the transfer invariant lives here." },
+        { "path": "src/domain/money.ts", "note": "Branded Money value object in integer minor units." },
+        { "path": "src/domain/journal-entry.ts", "note": "Immutable debit/credit event." },
+        { "path": "src/domain/account.ts", "note": "Account entity with floor, status, and version." }
+      ]
+    },
+    {
+      "path": "src/application",
+      "purpose": "Use-case orchestration: command and query handlers that load state via ports, invoke the domain, and persist results transactionally. Declares the ports that infrastructure must implement.",
+      "role": "application layer",
+      "keyFiles": [
+        { "path": "src/application/commands/transfer-funds.ts", "note": "The canonical write path; read this first." },
+        { "path": "src/application/ports.ts", "note": "LedgerRepository, OutboxPort, Clock, IdGenerator interfaces." },
+        { "path": "src/application/queries/get-balance.ts", "note": "Folds entries over the latest snapshot." }
+      ]
+    },
+    {
+      "path": "src/interfaces/http",
+      "purpose": "The HTTP boundary built on Fastify: route definitions, request/response schemas, and error-to-status mapping. Thin — it only translates HTTP to commands/queries.",
+      "role": "inbound adapter",
+      "keyFiles": [
+        { "path": "src/interfaces/http/server.ts", "note": "Fastify setup and plugin wiring." },
+        { "path": "src/interfaces/http/routes/transfers.ts", "note": "POST /transfers, GET /transfers/:id." },
+        { "path": "src/interfaces/http/error-mapper.ts", "note": "Maps domain errors to HTTP status codes." }
+      ]
+    },
+    {
+      "path": "src/infrastructure/pg",
+      "purpose": "Postgres adapters implementing the application ports via Drizzle, including snapshot handling and optimistic-version checks.",
+      "role": "outbound adapter",
+      "keyFiles": [
+        { "path": "src/infrastructure/pg/ledger-repository.ts", "note": "Implements LedgerRepository; snapshot + version logic." },
+        { "path": "src/infrastructure/pg/schema.ts", "note": "Drizzle table definitions and relations." }
+      ]
+    },
+    {
+      "path": "src/infrastructure/outbox",
+      "purpose": "Transactional outbox worker that polls unpublished rows and emits settlement events to downstream consumers, giving at-least-once delivery.",
+      "role": "outbound adapter",
+      "keyFiles": [
+        { "path": "src/infrastructure/outbox/publisher.ts", "note": "Poll loop and publish-then-mark logic." }
+      ]
+    },
+    {
+      "path": "migrations",
+      "purpose": "Drizzle-generated SQL migrations that define and evolve the journal, accounts, snapshots, outbox, and idempotency tables.",
+      "role": "config / schema",
+      "keyFiles": [
+        { "path": "migrations/0001_init.sql", "note": "Creates the core ledger tables." }
+      ]
+    },
+    {
+      "path": "test",
+      "purpose": "Vitest suites: fast in-memory domain unit tests plus integration tests that run against a throwaway Postgres via Testcontainers.",
+      "role": "tests",
+      "keyFiles": [
+        { "path": "test/domain/ledger.test.ts", "note": "Exhaustive invariant tests for the aggregate." },
+        { "path": "test/integration/transfer.int.test.ts", "note": "End-to-end transfer against real Postgres." }
+      ]
+    },
+    {
+      "path": "src/observability",
+      "purpose": "Cross-cutting logging and tracing: the Pino logger factory and OpenTelemetry SDK bootstrap, wired so correlation ids flow from HTTP into domain command handling.",
+      "role": "supporting",
+      "keyFiles": [
+        { "path": "src/observability/telemetry.ts", "note": "OTel + Pino setup." }
+      ]
+    }
+  ],
+  "tour": [
+    {
+      "order": 1,
+      "title": "Read the money model first",
+      "files": [{ "path": "src/domain/money.ts" }],
+      "why": "Money is the atom every other concept is built from; understanding that balances are integer minor units (never floats) and that cross-currency arithmetic is a type error prevents almost every misconception a newcomer forms about this ledger.",
+      "notice": "The branded type trick that makes a raw number unusable where a Money is required, and the deliberate absence of any division or float operation."
+    },
+    {
+      "order": 2,
+      "title": "The JournalEntry event",
+      "files": [{ "path": "src/domain/journal-entry.ts" }],
+      "why": "Once Money is clear, the next building block is the immutable event that records a single debit or credit; everything downstream (balances, outbox, snapshots) is a projection of these, so it must be understood before any handler.",
+      "notice": "That entries are immutable and carry a direction plus a transfer id — there is no 'update balance' anywhere; state changes are always new entries."
+    },
+    {
+      "order": 3,
+      "title": "The Ledger aggregate and its invariant",
+      "files": [{ "path": "src/domain/ledger.ts", "startLine": 1, "endLine": 90 }],
+      "why": "This is the heart of the domain: it is where the double-entry rule (debits equal credits) and the account floor rule are enforced. Reading it now, with Money and JournalEntry understood, shows how business rules are expressed as pure functions returning events.",
+      "notice": "That `transfer()` returns a balanced array of JournalEntry and throws typed domain errors — it performs no I/O and knows nothing about Postgres."
+    },
+    {
+      "order": 4,
+      "title": "The ports the application depends on",
+      "files": [{ "path": "src/application/ports.ts" }],
+      "why": "Before reading the command handler, see the interfaces it programs against; this reveals the dependency inversion that keeps the domain pure and makes it obvious what infrastructure must provide.",
+      "notice": "That LedgerRepository and OutboxPort are plain interfaces here — the Postgres implementation is nowhere in sight, which is the whole point of the architecture."
+    },
+    {
+      "order": 5,
+      "title": "The TransferFunds command handler — the spine of the service",
+      "files": [{ "path": "src/application/commands/transfer-funds.ts" }],
+      "why": "This single file ties together every layer you have read: it validates input, loads accounts through ports, calls the domain, and persists entries plus an outbox row in one transaction. It is the fastest path to a whole-system mental model.",
+      "notice": "The single transactional boundary wrapping entry inserts, the outbox insert, and the idempotency-key upsert — and how the version check drives optimistic concurrency retries."
+    },
+    {
+      "order": 6,
+      "title": "The Postgres repository implementation",
+      "files": [{ "path": "src/infrastructure/pg/ledger-repository.ts" }],
+      "why": "Now that you know what the handler expects from a LedgerRepository, seeing the concrete implementation grounds the abstraction in real SQL, snapshots, and version columns.",
+      "notice": "How reads fold only the entries after the latest balance snapshot, and how the optimistic version is asserted in the UPDATE's WHERE clause."
+    },
+    {
+      "order": 7,
+      "title": "The HTTP route that starts it all",
+      "files": [{ "path": "src/interfaces/http/routes/transfers.ts" }, { "path": "src/interfaces/http/error-mapper.ts" }],
+      "why": "With the write path understood inside-out, zoom back to the boundary to see how thin the HTTP layer is — it only parses the request into a command and maps domain errors to status codes.",
+      "notice": "That the route contains no business logic and that each typed domain error maps to a specific HTTP status via the error-mapper."
+    },
+    {
+      "order": 8,
+      "title": "The outbox publisher and delivery guarantees",
+      "files": [{ "path": "src/infrastructure/outbox/publisher.ts" }],
+      "why": "The transfer wrote an outbox row but did not deliver it; this final step closes the loop and explains the at-least-once delivery guarantee that downstream consumers rely on.",
+      "notice": "The publish-then-mark ordering that makes redelivery (not loss) the failure mode, and why consumers must be idempotent as a result."
+    }
+  ],
+  "hotspots": {
+    "entries": [
+      { "path": "src/application/commands/transfer-funds.ts", "commits": 47, "churnScore": 1830, "recentActivity": "active", "insight": "The most-edited file in the repo: it is where new transfer rules, idempotency, and concurrency handling accreted. High churn here means it is both central and still evolving — read it carefully and expect follow-up PRs to touch it." },
+      { "path": "src/domain/ledger.ts", "commits": 38, "churnScore": 1210, "recentActivity": "active", "insight": "Frequent changes track the maturing of business invariants (floors, currency rules). Because it is pure, changes here are usually accompanied by domain tests — a good place to see how rules are specified." },
+      { "path": "src/infrastructure/pg/ledger-repository.ts", "commits": 31, "churnScore": 1490, "recentActivity": "moderate", "insight": "Churn spikes correlate with performance work on snapshots and version checks. If you hit a balance-read bug, history shows this file is the usual suspect." },
+      { "path": "src/infrastructure/pg/schema.ts", "commits": 26, "churnScore": 640, "recentActivity": "moderate", "insight": "Schema evolution shows the data model is not fully settled; each change here pairs with a migration, so treat the two as a unit." },
+      { "path": "src/infrastructure/outbox/publisher.ts", "commits": 19, "churnScore": 720, "recentActivity": "moderate", "insight": "Repeated fixes around delivery ordering and retry backoff — the comments and history here encode hard-won lessons about at-least-once semantics." },
+      { "path": "src/interfaces/http/routes/transfers.ts", "commits": 22, "churnScore": 510, "recentActivity": "active", "insight": "Mostly API-shape churn (validation, error responses). Lower risk than the domain, but a good indicator of how the public contract has changed." },
+      { "path": "src/config.ts", "commits": 9, "churnScore": 180, "recentActivity": "dormant", "insight": "Rarely touched and stable — a safe file to read to learn what the service needs from its environment without worrying it will shift under you." }
+    ],
+    "interpretation": "Churn is concentrated in the write path (transfer handler, ledger aggregate, and Postgres repository), which confirms those three files are both the architectural core and the current locus of active development. A newcomer should invest reading time there and treat the low-churn config and domain value objects as stable ground to stand on."
+  },
+  "setup": {
+    "prerequisites": [
+      "Node.js >= 20.11 and npm >= 10",
+      "Docker Desktop (for the local Postgres and integration tests)",
+      "A POSIX-ish shell (bash/zsh); Windows users should use WSL2 or Git Bash"
+    ],
+    "setup": [
+      {
+        "title": "Install dependencies",
+        "commands": ["npm ci"],
+        "notes": "Use npm ci for a clean, lockfile-exact install; npm install is fine for day-to-day work."
+      },
+      {
+        "title": "Start Postgres and the fake consumer",
+        "commands": ["docker compose up -d"],
+        "notes": "Brings up Postgres on localhost:5432 and a stub settlement consumer on :4001."
+      },
+      {
+        "title": "Configure environment",
+        "commands": ["cp .env.example .env"],
+        "notes": "Defaults point at the docker-compose Postgres; no edits are needed for local dev."
+      },
+      {
+        "title": "Run database migrations",
+        "commands": ["npm run db:migrate"],
+        "notes": "Applies everything in migrations/ via the migrate CLI (src/interfaces/cli/migrate.ts)."
+      }
+    ],
+    "run": [
+      {
+        "title": "Start the API in watch mode",
+        "commands": ["npm run dev"],
+        "notes": "Runs the Fastify server and the outbox worker with hot reload; API listens on http://localhost:3000."
+      },
+      {
+        "title": "Smoke-test a transfer",
+        "commands": [
+          "curl -s -X POST localhost:3000/accounts -d '{\"currency\":\"USD\"}' -H 'content-type: application/json'",
+          "curl -s -X POST localhost:3000/transfers -H 'content-type: application/json' -d '{\"from\":\"<id-a>\",\"to\":\"<id-b>\",\"amount\":1000,\"idempotencyKey\":\"demo-1\"}'"
+        ],
+        "notes": "amount is in minor units (1000 = $10.00). Substitute the account ids returned by the first call."
+      }
+    ],
+    "test": [
+      {
+        "title": "Run fast domain unit tests",
+        "commands": ["npm run test:unit"],
+        "notes": "Pure, in-memory, sub-second; no Docker needed."
+      },
+      {
+        "title": "Run integration tests",
+        "commands": ["npm run test:int"],
+        "notes": "Spins up a disposable Postgres via Testcontainers; requires Docker to be running."
+      },
+      {
+        "title": "Full check (types, lint, all tests)",
+        "commands": ["npm run check"],
+        "notes": "What CI runs: tsc --noEmit, eslint, and the complete Vitest suite."
+      }
+    ]
+  },
+  "firstTasks": [
+    {
+      "title": "Add a GET /accounts/:id/history endpoint",
+      "description": "Expose the raw journal entries for an account as a paginated read model, reusing the existing GetBalance query plumbing to fetch entries.",
+      "difficulty": "easy",
+      "files": [
+        "src/interfaces/http/routes/accounts.ts",
+        "src/application/queries/get-balance.ts",
+        "src/infrastructure/pg/ledger-repository.ts"
+      ],
+      "rationale": "It is read-only and cannot corrupt the ledger, yet it walks the newcomer through the full query path from HTTP to Postgres, cementing the layering."
+    },
+    {
+      "title": "Support a per-account overdraft floor",
+      "description": "Let OpenAccount accept an optional negative floor and enforce it in the Ledger aggregate so approved accounts may go negative down to a limit.",
+      "difficulty": "medium",
+      "files": [
+        "src/domain/account.ts",
+        "src/domain/ledger.ts",
+        "src/application/commands/open-account.ts",
+        "test/domain/ledger.test.ts"
+      ],
+      "rationale": "It is a genuine domain rule change scoped to the pure core, so it teaches how invariants and their unit tests are written without touching infrastructure."
+    },
+    {
+      "title": "Add exponential backoff to the outbox publisher",
+      "description": "Replace the fixed poll interval on publish failures with capped exponential backoff and jitter, and add a metric for retry counts.",
+      "difficulty": "medium",
+      "files": [
+        "src/infrastructure/outbox/publisher.ts",
+        "src/observability/telemetry.ts",
+        "test/integration/outbox.int.test.ts"
+      ],
+      "rationale": "It exposes the at-least-once delivery model and the observability wiring while staying contained to one adapter, a realistic reliability task."
+    },
+    {
+      "title": "Introduce a multi-currency transfer guard",
+      "description": "Reject transfers between accounts of different currencies at the domain boundary with a typed error, and map it to HTTP 422.",
+      "difficulty": "hard",
+      "files": [
+        "src/domain/ledger.ts",
+        "src/domain/money.ts",
+        "src/interfaces/http/error-mapper.ts",
+        "test/domain/ledger.test.ts",
+        "test/integration/transfer.int.test.ts"
+      ],
+      "rationale": "It spans domain, value objects, and the HTTP error contract, forcing the newcomer to touch every layer and understand how errors propagate outward — a strong capstone onboarding task."
+    }
+  ]
+}

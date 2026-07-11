@@ -1,0 +1,497 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://repo-onboarding.dev/schema/analysis.schema.json",
+  "title": "Analysis",
+  "description": "Repo Onboarding analysis document. The full, self-describing contract between the analysis engine (the /onboard skill) and the presentation engine (the Next.js viewer). Every section is required and structured so the UI can render it directly without parsing prose.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "metadata",
+    "pitch",
+    "architecture",
+    "dependencyGraph",
+    "codebaseMap",
+    "tour",
+    "hotspots",
+    "setup",
+    "firstTasks"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "description": "Semantic version of this analysis contract, so consumers can detect/evolve. Current: 1.0.0",
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "metadata": { "$ref": "#/$defs/Metadata" },
+    "pitch": { "$ref": "#/$defs/ElevatorPitch" },
+    "architecture": {
+      "description": "Ordered architecture narrative. At least one section must carry a Mermaid diagram.",
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/ArchitectureSection" },
+      "contains": {
+        "type": "object",
+        "required": ["diagram"],
+        "properties": { "diagram": { "$ref": "#/$defs/MermaidDiagram" } }
+      },
+      "minContains": 1
+    },
+    "dependencyGraph": { "$ref": "#/$defs/DependencyGraph" },
+    "codebaseMap": {
+      "description": "Annotated directory tree. Each entry annotates one directory or notable path.",
+      "type": "array",
+      "minItems": 3,
+      "items": { "$ref": "#/$defs/CodebaseMapEntry" }
+    },
+    "tour": {
+      "description": "Guided reading tour: the ordered heart of onboarding. Each step forces an explicit rationale.",
+      "type": "array",
+      "minItems": 3,
+      "items": { "$ref": "#/$defs/TourStep" }
+    },
+    "hotspots": { "$ref": "#/$defs/Hotspots" },
+    "setup": { "$ref": "#/$defs/SetupGuide" },
+    "firstTasks": {
+      "description": "Suggested first tasks for a new contributor.",
+      "type": "array",
+      "minItems": 2,
+      "items": { "$ref": "#/$defs/FirstTask" }
+    }
+  },
+  "$defs": {
+    "Metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repoName",
+        "repoUrl",
+        "analyzedAt",
+        "analyzerVersion",
+        "commitSha",
+        "primaryLanguage",
+        "stats"
+      ],
+      "properties": {
+        "repoName": { "type": "string", "minLength": 1 },
+        "repoUrl": {
+          "description": "Canonical remote URL, or null for a local-only path.",
+          "type": ["string", "null"],
+          "format": "uri"
+        },
+        "analyzedAt": {
+          "description": "When the analysis was produced (RFC 3339 / ISO 8601).",
+          "type": "string",
+          "format": "date-time"
+        },
+        "analyzerVersion": {
+          "description": "Version of the /onboard analysis engine that produced this document.",
+          "type": "string",
+          "minLength": 1
+        },
+        "commitSha": {
+          "description": "Commit SHA analyzed, or null if not a git checkout / unknown.",
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-fA-F]{7,40}$"
+        },
+        "primaryLanguage": { "type": "string", "minLength": 1 },
+        "stats": { "$ref": "#/$defs/RepoStats" }
+      }
+    },
+    "RepoStats": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["totalFiles", "totalLoc", "languages"],
+      "properties": {
+        "totalFiles": { "type": "integer", "minimum": 0 },
+        "totalLoc": { "type": "integer", "minimum": 0 },
+        "languages": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/LanguageStat" }
+        }
+      }
+    },
+    "LanguageStat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["language", "files", "loc", "percentage"],
+      "properties": {
+        "language": { "type": "string", "minLength": 1 },
+        "files": { "type": "integer", "minimum": 0 },
+        "loc": { "type": "integer", "minimum": 0 },
+        "percentage": {
+          "description": "Share of code by LOC, 0-100.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        }
+      }
+    },
+    "ElevatorPitch": {
+      "description": "What the repo is/does, who it's for, and the structured tech stack.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summary", "audience", "techStack"],
+      "properties": {
+        "summary": {
+          "description": "A few sentences describing what the repo is and does. Must have substance.",
+          "type": "string",
+          "minLength": 80
+        },
+        "audience": {
+          "description": "Who this repo is for / who would work in it.",
+          "type": "string",
+          "minLength": 20
+        },
+        "techStack": {
+          "type": "array",
+          "minItems": 3,
+          "items": { "$ref": "#/$defs/TechStackEntry" }
+        }
+      }
+    },
+    "TechStackEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "category", "role"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "category": {
+          "type": "string",
+          "enum": [
+            "language",
+            "framework",
+            "library",
+            "database",
+            "infra",
+            "tooling",
+            "platform",
+            "protocol",
+            "other"
+          ]
+        },
+        "role": {
+          "description": "What this technology does specifically in THIS repo (not a generic description).",
+          "type": "string",
+          "minLength": 15
+        }
+      }
+    },
+    "ArchitectureSection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "body"],
+      "properties": {
+        "title": { "type": "string", "minLength": 1 },
+        "body": {
+          "description": "Markdown prose explaining this architectural aspect.",
+          "type": "string",
+          "minLength": 60
+        },
+        "diagram": { "$ref": "#/$defs/MermaidDiagram" }
+      }
+    },
+    "MermaidDiagram": {
+      "description": "A Mermaid diagram stored as source plus a declared type so the UI can render appropriately.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "source"],
+      "properties": {
+        "type": {
+          "description": "Mermaid diagram family, used by the UI to pick rendering hints.",
+          "type": "string",
+          "enum": [
+            "flowchart",
+            "sequence",
+            "class",
+            "state",
+            "er",
+            "graph",
+            "c4",
+            "gantt",
+            "mindmap",
+            "journey",
+            "other"
+          ]
+        },
+        "title": { "type": "string", "minLength": 1 },
+        "source": {
+          "description": "Raw Mermaid diagram source (the text between the ```mermaid fences).",
+          "type": "string",
+          "minLength": 20
+        }
+      }
+    },
+    "DependencyGraph": {
+      "description": "Module/dependency graph: internal modules and key external packages, plus their relationships.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nodes", "edges"],
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "minItems": 3,
+          "items": { "$ref": "#/$defs/GraphNode" }
+        },
+        "edges": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/GraphEdge" }
+        }
+      }
+    },
+    "GraphNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "kind"],
+      "properties": {
+        "id": {
+          "description": "Stable unique node id, referenced by edges.",
+          "type": "string",
+          "minLength": 1
+        },
+        "label": { "type": "string", "minLength": 1 },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "internal-module",
+            "external-package",
+            "entrypoint",
+            "service",
+            "datastore",
+            "external-service",
+            "other"
+          ]
+        },
+        "description": { "type": "string", "minLength": 1 },
+        "path": {
+          "description": "Repo-relative path for internal nodes (omit for external packages).",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "GraphEdge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to"],
+      "properties": {
+        "from": {
+          "description": "Source node id (must match a GraphNode.id).",
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "description": "Target node id (must match a GraphNode.id).",
+          "type": "string",
+          "minLength": 1
+        },
+        "relationship": {
+          "description": "Optional edge label, e.g. 'imports', 'calls', 'reads from', 'depends on'.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "CodebaseMapEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "purpose", "role"],
+      "properties": {
+        "path": {
+          "description": "Repo-relative directory or path this entry annotates.",
+          "type": "string",
+          "minLength": 1
+        },
+        "purpose": {
+          "description": "What lives here and why it exists.",
+          "type": "string",
+          "minLength": 30
+        },
+        "role": {
+          "description": "Importance / role of this path for a newcomer, e.g. 'core domain', 'entrypoint', 'supporting', 'config', 'tests'.",
+          "type": "string",
+          "minLength": 3
+        },
+        "keyFiles": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/KeyFile" }
+        }
+      }
+    },
+    "KeyFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "note"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "note": {
+          "description": "One-line note about what this file is/does.",
+          "type": "string",
+          "minLength": 5
+        }
+      }
+    },
+    "TourStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["order", "title", "files", "why", "notice"],
+      "properties": {
+        "order": {
+          "description": "1-based position in the tour.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "title": { "type": "string", "minLength": 1 },
+        "files": {
+          "description": "One or more files (with optional line ranges) this step directs the reader to.",
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/FileRef" }
+        },
+        "why": {
+          "description": "Why read THIS file at THIS point in the tour — the ordering rationale. Forced to be substantive.",
+          "type": "string",
+          "minLength": 40
+        },
+        "notice": {
+          "description": "What the reader should specifically notice / take away here.",
+          "type": "string",
+          "minLength": 40
+        }
+      }
+    },
+    "FileRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "startLine": { "type": "integer", "minimum": 1 },
+        "endLine": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "Hotspots": {
+      "description": "Git churn hotspots plus an overall interpretation for a newcomer.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entries", "interpretation"],
+      "properties": {
+        "entries": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/Hotspot" }
+        },
+        "interpretation": {
+          "description": "Short overall reading of what the hotspots tell a newcomer.",
+          "type": "string",
+          "minLength": 60
+        }
+      }
+    },
+    "Hotspot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "commits", "recentActivity", "insight"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "commits": {
+          "description": "Number of commits touching this path in the analyzed window.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "churnScore": {
+          "description": "Optional composite churn score (lines added+removed, or a normalized metric).",
+          "type": "number",
+          "minimum": 0
+        },
+        "recentActivity": {
+          "description": "How recently/actively this path is changing.",
+          "type": "string",
+          "enum": ["active", "moderate", "dormant"]
+        },
+        "insight": {
+          "description": "Why this path is hot and what that tells a newcomer.",
+          "type": "string",
+          "minLength": 30
+        }
+      }
+    },
+    "SetupGuide": {
+      "description": "Prerequisites plus structured setup / run / test instructions.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["prerequisites", "setup", "run", "test"],
+      "properties": {
+        "prerequisites": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 3 }
+        },
+        "setup": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/SetupStep" }
+        },
+        "run": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/SetupStep" }
+        },
+        "test": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/SetupStep" }
+        }
+      }
+    },
+    "SetupStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "commands"],
+      "properties": {
+        "title": { "type": "string", "minLength": 1 },
+        "commands": {
+          "description": "Shell commands for this step, one per array element.",
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "notes": {
+          "description": "Optional caveats, gotchas, or context for this step.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "FirstTask": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "description", "difficulty", "files", "rationale"],
+      "properties": {
+        "title": { "type": "string", "minLength": 1 },
+        "description": {
+          "description": "What the task involves.",
+          "type": "string",
+          "minLength": 40
+        },
+        "difficulty": {
+          "type": "string",
+          "enum": ["easy", "medium", "hard"]
+        },
+        "files": {
+          "description": "Repo-relative files most relevant to this task.",
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "rationale": {
+          "description": "Why this is a good first task for a newcomer.",
+          "type": "string",
+          "minLength": 30
+        }
+      }
+    }
+  }
+}

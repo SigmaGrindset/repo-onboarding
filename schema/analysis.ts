@@ -1,0 +1,267 @@
+/**
+ * Repo Onboarding — analysis document types.
+ *
+ * These types are the hand-maintained TypeScript mirror of
+ * `schema/analysis.schema.json`. They MUST agree with the JSON Schema exactly.
+ * The schema is the source of truth for validation; these types are the source
+ * of truth for compile-time safety in the skill and the web viewer.
+ *
+ * Contract version: schemaVersion "1.0.0".
+ */
+
+/** Semantic version string, e.g. "1.0.0". */
+export type SchemaVersion = string;
+
+/** The full analysis document — the top-level contract. */
+export interface Analysis {
+  /** Semantic version of this contract, e.g. "1.0.0". */
+  schemaVersion: SchemaVersion;
+  metadata: Metadata;
+  pitch: ElevatorPitch;
+  /**
+   * Ordered architecture narrative. At least one section must carry a
+   * Mermaid `diagram` (enforced by the schema's `contains` constraint).
+   */
+  architecture: ArchitectureSection[];
+  dependencyGraph: DependencyGraph;
+  /** Annotated directory tree. */
+  codebaseMap: CodebaseMapEntry[];
+  /** Guided reading tour — the ordered heart of onboarding. */
+  tour: TourStep[];
+  hotspots: Hotspots;
+  setup: SetupGuide;
+  /** Suggested first tasks for a new contributor. */
+  firstTasks: FirstTask[];
+}
+
+// ---------------------------------------------------------------------------
+// Metadata
+// ---------------------------------------------------------------------------
+
+export interface Metadata {
+  repoName: string;
+  /** Canonical remote URL, or null for a local-only path. */
+  repoUrl: string | null;
+  /** When the analysis was produced (RFC 3339 / ISO 8601 date-time). */
+  analyzedAt: string;
+  /** Version of the /onboard engine that produced this document. */
+  analyzerVersion: string;
+  /** Commit SHA analyzed, or null if unknown / not a git checkout. */
+  commitSha: string | null;
+  primaryLanguage: string;
+  stats: RepoStats;
+}
+
+export interface RepoStats {
+  totalFiles: number;
+  totalLoc: number;
+  languages: LanguageStat[];
+}
+
+export interface LanguageStat {
+  language: string;
+  files: number;
+  loc: number;
+  /** Share of code by LOC, 0-100. */
+  percentage: number;
+}
+
+// ---------------------------------------------------------------------------
+// Elevator pitch + tech stack
+// ---------------------------------------------------------------------------
+
+export interface ElevatorPitch {
+  /** A few sentences describing what the repo is and does. */
+  summary: string;
+  /** Who this repo is for / who would work in it. */
+  audience: string;
+  techStack: TechStackEntry[];
+}
+
+export type TechStackCategory =
+  | "language"
+  | "framework"
+  | "library"
+  | "database"
+  | "infra"
+  | "tooling"
+  | "platform"
+  | "protocol"
+  | "other";
+
+export interface TechStackEntry {
+  name: string;
+  category: TechStackCategory;
+  /** What this technology does specifically in THIS repo. */
+  role: string;
+}
+
+// ---------------------------------------------------------------------------
+// Architecture narrative
+// ---------------------------------------------------------------------------
+
+export interface ArchitectureSection {
+  title: string;
+  /** Markdown prose explaining this architectural aspect. */
+  body: string;
+  /** Optional Mermaid diagram for this section. */
+  diagram?: MermaidDiagram;
+}
+
+export type MermaidDiagramType =
+  | "flowchart"
+  | "sequence"
+  | "class"
+  | "state"
+  | "er"
+  | "graph"
+  | "c4"
+  | "gantt"
+  | "mindmap"
+  | "journey"
+  | "other";
+
+export interface MermaidDiagram {
+  /** Mermaid diagram family, used by the UI to pick rendering hints. */
+  type: MermaidDiagramType;
+  title?: string;
+  /** Raw Mermaid source (the text between the ```mermaid fences). */
+  source: string;
+}
+
+// ---------------------------------------------------------------------------
+// Module / dependency graph
+// ---------------------------------------------------------------------------
+
+export interface DependencyGraph {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
+export type GraphNodeKind =
+  | "internal-module"
+  | "external-package"
+  | "entrypoint"
+  | "service"
+  | "datastore"
+  | "external-service"
+  | "other";
+
+export interface GraphNode {
+  /** Stable unique node id, referenced by edges. */
+  id: string;
+  label: string;
+  kind: GraphNodeKind;
+  description?: string;
+  /** Repo-relative path for internal nodes (omit for external packages). */
+  path?: string;
+}
+
+export interface GraphEdge {
+  /** Source node id (must match a GraphNode.id). */
+  from: string;
+  /** Target node id (must match a GraphNode.id). */
+  to: string;
+  /** Optional edge label, e.g. "imports", "calls", "reads from". */
+  relationship?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Codebase map
+// ---------------------------------------------------------------------------
+
+export interface CodebaseMapEntry {
+  /** Repo-relative directory or path this entry annotates. */
+  path: string;
+  /** What lives here and why it exists. */
+  purpose: string;
+  /** Importance / role of this path for a newcomer. */
+  role: string;
+  keyFiles?: KeyFile[];
+}
+
+export interface KeyFile {
+  path: string;
+  /** One-line note about what this file is/does. */
+  note: string;
+}
+
+// ---------------------------------------------------------------------------
+// Guided reading tour
+// ---------------------------------------------------------------------------
+
+export interface TourStep {
+  /** 1-based position in the tour. */
+  order: number;
+  title: string;
+  /** One or more files (with optional line ranges) this step points to. */
+  files: FileRef[];
+  /** Why read THIS file at THIS point in the tour — the ordering rationale. */
+  why: string;
+  /** What the reader should specifically notice / take away here. */
+  notice: string;
+}
+
+export interface FileRef {
+  path: string;
+  startLine?: number;
+  endLine?: number;
+}
+
+// ---------------------------------------------------------------------------
+// Git churn hotspots
+// ---------------------------------------------------------------------------
+
+export interface Hotspots {
+  entries: Hotspot[];
+  /** Short overall reading of what the hotspots tell a newcomer. */
+  interpretation: string;
+}
+
+export type RecentActivity = "active" | "moderate" | "dormant";
+
+export interface Hotspot {
+  path: string;
+  /** Number of commits touching this path in the analyzed window. */
+  commits: number;
+  /** Optional composite churn score (lines added+removed, or normalized). */
+  churnScore?: number;
+  recentActivity: RecentActivity;
+  /** Why this path is hot and what that tells a newcomer. */
+  insight: string;
+}
+
+// ---------------------------------------------------------------------------
+// Setup / run / test
+// ---------------------------------------------------------------------------
+
+export interface SetupGuide {
+  prerequisites: string[];
+  setup: SetupStep[];
+  run: SetupStep[];
+  test: SetupStep[];
+}
+
+export interface SetupStep {
+  title: string;
+  /** Shell commands for this step, one per array element. */
+  commands: string[];
+  /** Optional caveats, gotchas, or context for this step. */
+  notes?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Suggested first tasks
+// ---------------------------------------------------------------------------
+
+export type Difficulty = "easy" | "medium" | "hard";
+
+export interface FirstTask {
+  title: string;
+  description: string;
+  difficulty: Difficulty;
+  /** Repo-relative files most relevant to this task. */
+  files: string[];
+  /** Why this is a good first task for a newcomer. */
+  rationale: string;
+}

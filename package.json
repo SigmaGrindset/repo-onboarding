@@ -1,0 +1,16 @@
+{
+  "name": "repo-onboarding",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Turn any GitHub repo into a rich, interactive onboarding website. Analysis engine (Claude Code /onboard skill) + Next.js presentation engine, joined by analysis.json.",
+  "type": "module",
+  "scripts": {
+    "validate:sample": "node schema/validate.mjs data/sample/analysis.json",
+    "validate": "node schema/validate.mjs"
+  },
+  "devDependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "typescript": "^5.6.3"
+  }
+}
