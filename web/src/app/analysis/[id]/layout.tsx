@@ -1,8 +1,9 @@
 import { Suspense } from "react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { resolveDataSource } from "@/lib/datasource";
-import { formatDate, shortSha } from "@/lib/format";
+import { getAnalysisCached } from "@/lib/datasource";
+import { formatDate, shortSha, snippet } from "@/lib/format";
 import { SectionNav } from "@/components/SectionNav";
 import { StalenessBadge } from "@/components/StalenessBadge";
 import { ShareDialog } from "@/components/ShareDialog";
@@ -10,6 +11,43 @@ import { isCloudMode } from "@/lib/mode";
 import { isCloudId, uuidFromCloudId } from "@/lib/ids";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * Per-analysis metadata so a shared link unfurls with the repo's name and pitch
+ * rather than the generic site title. The `og:image` / `twitter:image` tags are
+ * injected automatically by the sibling `opengraph-image.tsx`; here we set the
+ * title, description and the large-image Twitter card. Returns empty metadata
+ * for an unresolved id so it inherits the root defaults.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const analysis = await getAnalysisCached(id);
+  if (!analysis) return {};
+
+  const { metadata, pitch } = analysis;
+  const title = `${metadata.repoName} · Repo Onboarding`;
+  const description = snippet(pitch.summary, 200);
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      type: "article",
+      siteName: "Repo Onboarding",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+    },
+  };
+}
 
 export default async function AnalysisLayout({
   children,
@@ -19,8 +57,7 @@ export default async function AnalysisLayout({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const dataSource = await resolveDataSource();
-  const analysis = await dataSource.getAnalysis(id);
+  const analysis = await getAnalysisCached(id);
   if (!analysis) notFound();
 
   const { metadata } = analysis;

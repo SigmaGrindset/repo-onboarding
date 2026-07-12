@@ -1,12 +1,29 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { isCloudMode } from "@/lib/mode";
+import { siteUrl } from "@/lib/site";
 import { SiteHeader } from "@/components/SiteHeader";
 
+const description =
+  "Interactive onboarding for any codebase — architecture, guided tour, dependency graph, hotspots and setup, rendered from a single analysis.json.";
+
 export const metadata: Metadata = {
+  // Absolute base so file-convention OG/Twitter image URLs are fetchable by
+  // social crawlers (Slack, Discord, X). Per-analysis routes override the rest.
+  metadataBase: new URL(siteUrl()),
   title: "Repo Onboarding",
-  description:
-    "Interactive onboarding for any codebase — architecture, guided tour, dependency graph, hotspots and setup, rendered from a single analysis.json.",
+  description,
+  openGraph: {
+    title: "Repo Onboarding",
+    description,
+    siteName: "Repo Onboarding",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Repo Onboarding",
+    description,
+  },
 };
 
 export default async function RootLayout({

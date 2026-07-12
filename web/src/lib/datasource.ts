@@ -1,6 +1,7 @@
 // Server-only module: importing node:fs keeps it out of client bundles.
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { cache } from "react";
 import type { Analysis } from "@schema/analysis";
 
 /**
@@ -118,3 +119,19 @@ export async function resolveDataSource(): Promise<DataSource> {
  * cloud mode is honored. Kept so any direct fixture reads keep working.
  */
 export const dataSource: DataSource = fsDataSource;
+
+/**
+ * Request-memoized `getAnalysis`. A single analysis route renders the layout,
+ * the page, and (for social crawlers) `generateMetadata` — all needing the same
+ * document. React's `cache` collapses those into one fetch per request, which
+ * matters most in cloud mode where a read is a Neon + Blob round trip.
+ *
+ * The OG image route is a *separate* request and won't share this cache, which
+ * is fine — it does exactly one fetch of its own.
+ */
+export const getAnalysisCached = cache(
+  async (id: string): Promise<Analysis | null> => {
+    const source = await resolveDataSource();
+    return source.getAnalysis(id);
+  },
+);

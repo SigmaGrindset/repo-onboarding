@@ -30,10 +30,13 @@ async function getCloudHandler(): Promise<ProxyFn> {
   const { clerkMiddleware, createRouteMatcher } = await import(
     "@clerk/nextjs/server"
   );
-  // Public routes: home (with sign-in CTA), Clerk's sign-in/sign-up flows, and
-  // unlisted-link analysis URLs `/analysis/st_<uuid-token>` (+ any sub-path).
+  // Public routes: home (with sign-in CTA), the site's default OG image so the
+  // landing page unfurls on social, Clerk's sign-in/sign-up flows, and
+  // unlisted-link analysis URLs `/analysis/st_<uuid-token>` (+ any sub-path,
+  // e.g. `/opengraph-image`, so shared links unfurl without an account).
   const isPublic = createRouteMatcher([
     "/",
+    "/opengraph-image(.*)",
     "/sign-in(.*)",
     "/sign-up(.*)",
     /^\/analysis\/st_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\/.*)?$/i,
