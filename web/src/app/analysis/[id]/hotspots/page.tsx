@@ -30,7 +30,11 @@ export default async function HotspotsPage({
         <EmptyState title="No hotspots in this analysis." />
       ) : (
         <>
-          <ChurnChart entries={entries} />
+          <ChurnChart
+            entries={entries}
+            repoUrl={analysis.metadata.repoUrl}
+            commitSha={analysis.metadata.commitSha}
+          />
 
           {hotspots.interpretation ? (
             <Card className="mt-6 border-accent/20 bg-accent-soft p-5">

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { resolveDataSource } from "@/lib/datasource";
+import { githubBlobUrl } from "@/lib/github";
 import { difficultyStyle } from "@/lib/styles";
 import { Badge, Card, EmptyState, FileChip, SectionHeader } from "@/components/ui";
 
@@ -17,6 +18,7 @@ export default async function TasksPage({
   const analysis = await dataSource.getAnalysis(id);
   if (!analysis) notFound();
 
+  const { repoUrl, commitSha } = analysis.metadata;
   const tasks = [...analysis.firstTasks].sort(
     (a, b) => DIFFICULTY_ORDER[a.difficulty] - DIFFICULTY_ORDER[b.difficulty],
   );
@@ -66,7 +68,11 @@ export default async function TasksPage({
                     </h4>
                     <div className="flex flex-wrap gap-2">
                       {task.files.map((f) => (
-                        <FileChip key={f} path={f} />
+                        <FileChip
+                          key={f}
+                          path={f}
+                          href={githubBlobUrl(repoUrl, commitSha, f)}
+                        />
                       ))}
                     </div>
                   </div>

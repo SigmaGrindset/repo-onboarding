@@ -8,17 +8,7 @@
  * null so a rate-limited or private repo is not re-queried on every view.
  */
 import { unstable_cache } from "next/cache";
-
-export function parseGitHubRepo(
-  repoUrl: string | null,
-): { owner: string; repo: string } | null {
-  if (!repoUrl) return null;
-  const m =
-    /^https?:\/\/(?:www\.)?github\.com\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/.exec(
-      repoUrl,
-    );
-  return m ? { owner: m[1], repo: m[2] } : null;
-}
+import { parseGitHubRepo } from "./github";
 
 const fetchCommitsBehind = unstable_cache(
   async (owner: string, repo: string, sha: string): Promise<number | null> => {

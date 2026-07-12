@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { resolveDataSource } from "@/lib/datasource";
+import { githubBlobUrl } from "@/lib/github";
 import { slugify } from "@/lib/format";
 import { roleTint } from "@/lib/styles";
 import { Badge, Card, EmptyState, FileChip, SectionHeader } from "@/components/ui";
@@ -18,6 +19,7 @@ export default async function MapPage({
   if (!analysis) notFound();
 
   const map = analysis.codebaseMap;
+  const { repoUrl, commitSha } = analysis.metadata;
 
   return (
     <div>
@@ -61,7 +63,10 @@ export default async function MapPage({
                         key={f.path}
                         className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3"
                       >
-                        <FileChip path={f.path} />
+                        <FileChip
+                          path={f.path}
+                          href={githubBlobUrl(repoUrl, commitSha, f.path)}
+                        />
                         <span className="text-[0.83rem] text-muted">
                           {f.note}
                         </span>

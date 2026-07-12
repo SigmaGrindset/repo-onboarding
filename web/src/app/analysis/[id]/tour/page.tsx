@@ -31,7 +31,12 @@ export default async function TourPage({
       {steps.length === 0 ? (
         <EmptyState title="No guided tour in this analysis." />
       ) : (
-        <TourStepper steps={steps} initialStep={initialStep} />
+        <TourStepper
+          steps={steps}
+          initialStep={initialStep}
+          repoUrl={analysis.metadata.repoUrl}
+          commitSha={analysis.metadata.commitSha}
+        />
       )}
     </div>
   );

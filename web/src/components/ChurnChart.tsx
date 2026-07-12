@@ -3,11 +3,20 @@
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { Hotspot } from "@schema/analysis";
+import { githubBlobUrl } from "@/lib/github";
 import { ACTIVITY_BAR_COLOR, activityStyle } from "@/lib/styles";
 import { Badge } from "@/components/ui";
 import { formatNumber, slugify } from "@/lib/format";
 
-export function ChurnChart({ entries }: { entries: Hotspot[] }) {
+export function ChurnChart({
+  entries,
+  repoUrl,
+  commitSha,
+}: {
+  entries: Hotspot[];
+  repoUrl: string | null;
+  commitSha: string | null;
+}) {
   // Command-palette deep link: ?file=<slug> opens and scrolls to that entry.
   const fileParam = useSearchParams().get("file");
   const paramIndex = fileParam
@@ -39,6 +48,7 @@ export function ChurnChart({ entries }: { entries: Hotspot[] }) {
         const pct = (h.commits / max) * 100;
         const isOpen = open === i;
         const activity = activityStyle(h.recentActivity);
+        const href = githubBlobUrl(repoUrl, commitSha, h.path);
         return (
           <li
             key={h.path}
@@ -107,6 +117,16 @@ export function ChurnChart({ entries }: { entries: Hotspot[] }) {
                 <p className="text-[0.86rem] leading-relaxed text-muted">
                   {h.insight}
                 </p>
+                {href ? (
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="mt-2 inline-block text-xs font-medium text-accent hover:underline"
+                  >
+                    View source at analyzed commit ↗
+                  </a>
+                ) : null}
               </div>
             ) : null}
           </li>

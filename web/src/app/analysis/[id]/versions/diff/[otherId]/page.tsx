@@ -10,7 +10,7 @@ import type {
 import { diffAnalyses } from "@/lib/diff";
 import { getAnalysisCached } from "@/lib/datasource";
 import { repoKeyFor } from "@/lib/repo-key";
-import { parseGitHubRepo } from "@/lib/staleness";
+import { parseGitHubRepo } from "@/lib/github";
 import { formatDate, formatNumber, shortSha } from "@/lib/format";
 import { Markdown } from "@/lib/markdown";
 import {

@@ -67,17 +67,22 @@ export function SectionHeader({
   );
 }
 
-/** Monospace file-path chip, optionally with a line range. */
+/**
+ * Monospace file-path chip, optionally with a line range. With `href` it
+ * becomes an external link (source on GitHub at the analyzed commit).
+ */
 export function FileChip({
   path,
   startLine,
   endLine,
   title,
+  href,
 }: {
   path: string;
   startLine?: number;
   endLine?: number;
   title?: string;
+  href?: string | null;
 }) {
   const lines =
     startLine != null
@@ -85,11 +90,8 @@ export function FileChip({
         ? `:${startLine}-${endLine}`
         : `:${startLine}`
       : "";
-  return (
-    <span
-      title={title ?? path}
-      className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-border bg-surface-2 px-2 py-1 font-mono text-[0.78rem] text-text"
-    >
+  const body = (
+    <>
       <svg
         width="12"
         height="12"
@@ -110,9 +112,31 @@ export function FileChip({
         <span className="text-muted">
           {path.slice(0, path.length - basename(path).length)}
         </span>
-        <span className="text-text">{basename(path)}</span>
+        <span className="text-text group-hover/chip:text-accent group-hover/chip:underline">
+          {basename(path)}
+        </span>
         {lines ? <span className="text-accent">{lines}</span> : null}
       </span>
+    </>
+  );
+  const className =
+    "inline-flex max-w-full items-center gap-1.5 rounded-md border border-border bg-surface-2 px-2 py-1 font-mono text-[0.78rem] text-text";
+  if (href) {
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noreferrer noopener"
+        title={title ?? `${path} — view source on GitHub`}
+        className={`group/chip ${className} transition hover:border-border-strong`}
+      >
+        {body}
+      </a>
+    );
+  }
+  return (
+    <span title={title ?? path} className={className}>
+      {body}
     </span>
   );
 }

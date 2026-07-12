@@ -3,14 +3,19 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import type { TourStep } from "@schema/analysis";
+import { githubBlobUrl } from "@/lib/github";
 import { FileChip } from "@/components/ui";
 
 export function TourStepper({
   steps,
   initialStep,
+  repoUrl,
+  commitSha,
 }: {
   steps: TourStep[];
   initialStep: number;
+  repoUrl: string | null;
+  commitSha: string | null;
 }) {
   const total = steps.length;
   const router = useRouter();
@@ -116,6 +121,13 @@ export function TourStepper({
                 path={f.path}
                 startLine={f.startLine}
                 endLine={f.endLine}
+                href={githubBlobUrl(
+                  repoUrl,
+                  commitSha,
+                  f.path,
+                  f.startLine,
+                  f.endLine,
+                )}
               />
             ))}
           </div>
