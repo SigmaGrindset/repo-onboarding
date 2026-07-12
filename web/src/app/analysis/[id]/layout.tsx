@@ -1,8 +1,10 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { resolveDataSource } from "@/lib/datasource";
 import { formatDate, shortSha } from "@/lib/format";
 import { SectionNav } from "@/components/SectionNav";
+import { StalenessBadge } from "@/components/StalenessBadge";
 import { ShareDialog } from "@/components/ShareDialog";
 import { isCloudMode } from "@/lib/mode";
 import { isCloudId, uuidFromCloudId } from "@/lib/ids";
@@ -90,9 +92,19 @@ export default async function AnalysisLayout({
                 {metadata.repoUrl.replace(/^https?:\/\//, "")}
               </a>
             ) : null}
-            <p className="mt-2 text-[0.68rem] text-faint">
-              Analyzed {formatDate(metadata.analyzedAt)}
-            </p>
+            <Suspense
+              fallback={
+                <p className="mt-2 text-[0.68rem] text-faint">
+                  Analyzed {formatDate(metadata.analyzedAt)}
+                </p>
+              }
+            >
+              <StalenessBadge
+                repoUrl={metadata.repoUrl}
+                commitSha={metadata.commitSha}
+                analyzedAt={metadata.analyzedAt}
+              />
+            </Suspense>
           </div>
 
           {canShare ? <ShareDialog analysisId={id} /> : null}

@@ -24,6 +24,18 @@ export function formatDate(iso: string): string {
   }).format(d);
 }
 
+/** ISO date-time -> "today" | "yesterday" | "23 days ago" | "3 months ago" | "2 years ago". */
+export function relativeDate(iso: string): string {
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return iso;
+  const days = Math.max(0, Math.floor((Date.now() - t) / 86_400_000));
+  if (days === 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 60) return `${days} days ago`;
+  if (days < 730) return `${Math.floor(days / 30.44)} months ago`;
+  return `${Math.floor(days / 365.25)} years ago`;
+}
+
 /** Short absolute commit sha, e.g. "9f3c1ab". */
 export function shortSha(sha: string | null): string | null {
   return sha ? sha.slice(0, 7) : null;
