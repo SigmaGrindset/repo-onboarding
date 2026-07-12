@@ -130,6 +130,13 @@ body {
   outline-offset: 2px;
 }
 
+/* Controls that provide their own, quieter focus treatment (e.g. the
+   command-palette input, whose container tints on :focus-within). Declared
+   after the global rule so it wins at equal specificity. */
+.focus-quiet:focus-visible {
+  outline: none;
+}
+
 /* Rendered-markdown prose */
 .prose {
   color: var(--text);

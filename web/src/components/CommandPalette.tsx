@@ -158,7 +158,7 @@ export function CommandPalette({ items }: { items: SearchItem[] }) {
             onClick={(e) => e.stopPropagation()}
             className="mx-auto mt-[10vh] w-full max-w-lg overflow-hidden rounded-xl border border-border bg-surface shadow-2xl"
           >
-            <div className="flex items-center gap-2.5 border-b border-border px-4">
+            <div className="flex items-center gap-2.5 border-b border-border px-4 transition-colors focus-within:border-accent/35">
               <span className="text-faint">
                 <SearchIcon />
               </span>
@@ -172,7 +172,7 @@ export function CommandPalette({ items }: { items: SearchItem[] }) {
                 onKeyDown={onInputKey}
                 placeholder="Jump to a section, tour step, directory or hotspot…"
                 aria-label="Search this analysis"
-                className="w-full bg-transparent py-3.5 text-sm text-text outline-none placeholder:text-faint"
+                className="focus-quiet w-full bg-transparent py-3.5 text-sm text-text outline-none placeholder:text-faint"
               />
               <kbd className="shrink-0 rounded border border-border bg-surface-2 px-1.5 py-0.5 font-sans text-[0.65rem] font-medium text-faint">
                 Esc
