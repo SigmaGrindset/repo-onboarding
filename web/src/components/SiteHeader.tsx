@@ -17,9 +17,11 @@ export function SiteHeader() {
           <span className="text-sm font-semibold text-text">
             Repo Onboarding
           </span>
-          <span className="rounded-full border border-border bg-surface px-2 py-0.5 text-[0.65rem] font-medium text-muted">
-            {cloud ? "cloud" : "local"}
-          </span>
+          {!cloud && (
+            <span className="rounded-full border border-border bg-surface px-2 py-0.5 text-[0.65rem] font-medium text-muted">
+              local
+            </span>
+          )}
         </Link>
 
         {cloud ? (
