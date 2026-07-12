@@ -17,4 +17,5 @@ export const ANALYSIS_SECTIONS: AnalysisSection[] = [
   { slug: "hotspots", label: "Hotspots" },
   { slug: "setup", label: "Setup" },
   { slug: "tasks", label: "First Tasks" },
+  { slug: "versions", label: "Versions" },
 ];

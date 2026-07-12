@@ -11,6 +11,22 @@ export default async function IndexPage() {
   const dataSource = await resolveDataSource();
   const analyses = await dataSource.listAnalyses();
 
+  // Group a repo's versions into one card. Cloud rows carry a `repoKey`; the
+  // list is newest-first, so the first row seen per key is the newest and the
+  // one rendered. Fixtures have no repoKey — they fall back to their unique id,
+  // so every fixture stays its own single-version group (pixel-identical).
+  const groups = new Map<string, { newest: (typeof analyses)[number]; count: number }>();
+  for (const a of analyses) {
+    const key = a.repoKey ?? a.id;
+    const existing = groups.get(key);
+    if (existing) {
+      existing.count += 1;
+    } else {
+      groups.set(key, { newest: a, count: 1 });
+    }
+  }
+  const cards = [...groups.values()];
+
   return (
     <div className="mx-auto w-full max-w-6xl px-5 py-10 sm:px-8 sm:py-16">
       <header className="mb-12">
@@ -60,7 +76,7 @@ export default async function IndexPage() {
         />
       ) : (
         <ul className="grid grid-cols-1 gap-5 md:grid-cols-2">
-          {analyses.map((a) => {
+          {cards.map(({ newest: a, count }) => {
             const hasStats = a.totalFiles > 0 || a.totalLoc > 0;
             return (
               <li key={a.id}>
@@ -104,6 +120,11 @@ export default async function IndexPage() {
                           LOC
                         </span>
                       </>
+                    ) : null}
+                    {count > 1 ? (
+                      <Badge className="border-border bg-surface-2 text-muted">
+                        {count} versions
+                      </Badge>
                     ) : null}
                     <span className="ml-auto inline-flex items-center gap-1 font-medium text-accent opacity-0 transition group-hover:opacity-100">
                       Explore

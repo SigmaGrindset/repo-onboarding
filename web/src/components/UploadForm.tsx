@@ -67,9 +67,13 @@ export function UploadForm() {
         headers: { "Content-Type": "application/json" },
         body: text,
       });
-      const data: { id?: string; error?: string; errors?: string[] } = await res
-        .json()
-        .catch(() => ({}));
+      const data: {
+        id?: string;
+        version?: number;
+        repoName?: string;
+        error?: string;
+        errors?: string[];
+      } = await res.json().catch(() => ({}));
       if (!res.ok) {
         setNotice(null);
         setBusy(false);
@@ -80,7 +84,13 @@ export function UploadForm() {
         }
         return;
       }
-      setNotice("Uploaded. Opening…");
+      setNotice(
+        data.version && data.version > 1
+          ? `Uploaded version ${data.version}${
+              data.repoName ? ` of ${data.repoName}` : ""
+            }. Opening…`
+          : "Uploaded. Opening…",
+      );
       router.push(`/analysis/${data.id}`);
     } catch (err) {
       setNotice(null);

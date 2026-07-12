@@ -14,6 +14,7 @@ const ICONS: Record<string, ReactNode> = {
   hotspots: <IconHotspots />,
   setup: <IconSetup />,
   tasks: <IconTasks />,
+  versions: <IconVersions />,
 };
 
 export function SectionNav({ id }: { id: string }) {
@@ -141,6 +142,15 @@ function IconTasks() {
     <>
       <rect x="2.5" y="2" width="11" height="12" rx="1.5" />
       <path d="M5 5.5l1 1 2-2M5 10l1 1 2-2M10 5h1.5M10 10h1.5" />
+    </>,
+  );
+}
+function IconVersions() {
+  return svg(
+    <>
+      <path d="M2.5 8a5.5 5.5 0 1 0 1.6-3.9" />
+      <path d="M2.5 2v2.5H5" />
+      <path d="M8 5v3l2 1.2" />
     </>,
   );
 }

@@ -187,6 +187,35 @@ export function kindStyle(k: GraphNodeKind): KindStyle {
 }
 
 /**
+ * Diff delta semantics — emerald = added, amber = changed, rose = removed.
+ * Literal class strings (light + dark aware), matching the other style helpers
+ * so Tailwind v4 can scan them.
+ */
+export type DiffKind = "added" | "changed" | "removed";
+
+const DIFF_KIND_STYLES: Record<DiffKind, BadgeStyle> = {
+  added: {
+    label: "Added",
+    className:
+      "bg-emerald-500/12 text-emerald-600 dark:text-emerald-300 border-emerald-500/25",
+  },
+  changed: {
+    label: "Changed",
+    className:
+      "bg-amber-500/12 text-amber-600 dark:text-amber-300 border-amber-500/25",
+  },
+  removed: {
+    label: "Removed",
+    className:
+      "bg-rose-500/12 text-rose-600 dark:text-rose-300 border-rose-500/25",
+  },
+};
+
+export function diffKindStyle(kind: DiffKind): BadgeStyle {
+  return DIFF_KIND_STYLES[kind] ?? DIFF_KIND_STYLES.changed;
+}
+
+/**
  * Free-form codebase-map roles get a stable tint chosen by hashing the label,
  * so "core domain" is always the same colour across renders.
  */

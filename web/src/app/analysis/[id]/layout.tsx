@@ -67,14 +67,23 @@ export default async function AnalysisLayout({
 
   // Owner-only Share control: cloud mode + a db_ id whose owner is the signer.
   // st_ share ids fail isCloudId, so anonymous link viewers never see it.
+  // In the same pass, resolve the version lineage so the info card can link to
+  // history when more than one version is readable.
   let canShare = false;
+  let versionOrdinal: number | null = null;
+  let versionCount = 0;
   if (isCloudMode() && isCloudId(id)) {
     const uuid = uuidFromCloudId(id);
     if (uuid) {
       const { auth } = await import("@clerk/nextjs/server");
-      const { isOwner } = await import("@/lib/access");
+      const { isOwner, listVersionsFor } = await import("@/lib/access");
       const { userId } = await auth();
-      canShare = userId ? await isOwner(userId, uuid) : false;
+      if (userId) {
+        canShare = await isOwner(userId, uuid);
+        const versions = await listVersionsFor(userId, uuid);
+        versionCount = versions.length;
+        versionOrdinal = versions.find((v) => v.id === uuid)?.version ?? null;
+      }
     }
   }
 
@@ -144,6 +153,14 @@ export default async function AnalysisLayout({
                 analyzedAt={metadata.analyzedAt}
               />
             </Suspense>
+            {versionCount > 1 ? (
+              <Link
+                href={`/analysis/${id}/versions`}
+                className="mt-2 block text-[0.7rem] font-medium text-accent hover:underline"
+              >
+                {versionOrdinal ? `v${versionOrdinal} · ` : ""}View history
+              </Link>
+            ) : null}
           </div>
 
           {canShare ? <ShareDialog analysisId={id} /> : null}
