@@ -14,8 +14,16 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Stamps the resolved theme on <html> before first paint so a stored choice
+  // never flashes the wrong palette. Runs before hydration, hence
+  // suppressHydrationWarning on <html>.
+  const themeScript = `(function(){try{var t=localStorage.getItem("theme");if(t!=="light"&&t!=="dark"){t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}document.documentElement.dataset.theme=t}catch(e){}})()`;
+
   const tree = (
-    <html lang="en" className="h-full antialiased">
+    <html lang="en" className="h-full antialiased" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
       <body className="flex min-h-full flex-col bg-bg text-text">
         <SiteHeader />
         <div className="flex-1">{children}</div>

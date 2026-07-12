@@ -1,11 +1,17 @@
 @import "tailwindcss";
 
+/* The `dark:` variant follows the resolved theme stamped on <html> by the
+   pre-paint script in layout.tsx, not the OS media query. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 /* ------------------------------------------------------------------ */
-/* Design tokens — theme-aware via prefers-color-scheme.               */
+/* Design tokens — theme-aware via html[data-theme], which the         */
+/* pre-paint script resolves from the stored choice or the OS.         */
 /* Exposed to Tailwind as utilities (bg-surface, text-muted, …) below. */
 /* ------------------------------------------------------------------ */
 
 :root {
+  color-scheme: light;
   --bg: #f6f7f9;
   --surface: #ffffff;
   --surface-2: #f0f2f5;
@@ -21,8 +27,28 @@
   --accent-soft: rgba(79, 91, 213, 0.1);
 }
 
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0a0e16;
+  --surface: #111725;
+  --surface-2: #172032;
+  --surface-3: #1f2a40;
+  --border: #232f47;
+  --border-strong: #31405e;
+  --text: #e7edf7;
+  --muted: #9aa7bd;
+  --faint: #66748d;
+  --accent: #7b8cff;
+  --accent-hover: #93a1ff;
+  --accent-fg: #0a0e16;
+  --accent-soft: rgba(123, 140, 255, 0.14);
+}
+
+/* No-JS fallback: without the pre-paint script the attribute is never set,
+   so keep following the OS preference. Same values as the block above. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
     --bg: #0a0e16;
     --surface: #111725;
     --surface-2: #172032;

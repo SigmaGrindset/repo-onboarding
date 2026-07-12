@@ -4,10 +4,12 @@ import { useEffect, useRef, useState } from "react";
 
 let counter = 0;
 
-function prefersDark(): boolean {
+function isDarkTheme(): boolean {
+  // The resolved theme is stamped on <html data-theme> before paint by the
+  // inline script in layout.tsx (and kept current by ThemeToggle).
   return (
-    typeof window !== "undefined" &&
-    window.matchMedia("(prefers-color-scheme: dark)").matches
+    typeof document !== "undefined" &&
+    document.documentElement.dataset.theme === "dark"
   );
 }
 
@@ -27,7 +29,7 @@ export function Mermaid({ source }: { source: string }) {
     async function render() {
       try {
         const mermaid = (await import("mermaid")).default;
-        const dark = prefersDark();
+        const dark = isDarkTheme();
         mermaid.initialize({
           startOnLoad: false,
           securityLevel: "strict",
@@ -71,17 +73,25 @@ export function Mermaid({ source }: { source: string }) {
 
     render();
 
-    // Re-render when the colour scheme changes so the diagram matches the theme.
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const onChange = () => {
+    // Re-render when the theme changes so the diagram matches. Watching the
+    // data-theme attribute covers both the header toggle and OS changes
+    // (ThemeToggle re-stamps the attribute while following the OS).
+    let lastDark = isDarkTheme();
+    const observer = new MutationObserver(() => {
+      const dark = isDarkTheme();
+      if (dark === lastDark) return;
+      lastDark = dark;
       setRendered(false);
       render();
-    };
-    mq.addEventListener("change", onChange);
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
 
     return () => {
       cancelled = true;
-      mq.removeEventListener("change", onChange);
+      observer.disconnect();
     };
   }, [source]);
 

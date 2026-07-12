@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { isCloudMode } from "@/lib/mode";
 import { CloudAuthNav } from "./CloudAuthNav";
+import { ThemeToggle } from "./ThemeToggle";
 
 /**
  * Top bar shown on every page. In cloud mode it hosts Clerk sign-in / user
@@ -24,16 +25,19 @@ export function SiteHeader() {
           )}
         </Link>
 
-        {cloud ? (
-          <CloudAuthNav />
-        ) : (
-          <Link
-            href="/upload"
-            className="text-xs font-medium text-muted transition hover:text-text"
-          >
-            Upload
-          </Link>
-        )}
+        <div className="flex items-center gap-3">
+          {cloud ? (
+            <CloudAuthNav />
+          ) : (
+            <Link
+              href="/upload"
+              className="text-xs font-medium text-muted transition hover:text-text"
+            >
+              Upload
+            </Link>
+          )}
+          <ThemeToggle />
+        </div>
       </div>
     </header>
   );
