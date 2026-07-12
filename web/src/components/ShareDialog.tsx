@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 /**
  * Owner-only Share dialog (cloud mode). Two ways to share one analysis:
@@ -30,9 +31,18 @@ export function ShareDialog({ analysisId }: { analysisId: string }) {
         <IconShare />
         Share
       </button>
-      {open ? (
-        <ShareOverlay analysisId={analysisId} onClose={() => setOpen(false)} />
-      ) : null}
+      {/* Portaled to <body>: the sidebar's sticky container forms its own
+          stacking context, so the fixed overlay would otherwise paint under
+          positioned main-column content. */}
+      {open
+        ? createPortal(
+            <ShareOverlay
+              analysisId={analysisId}
+              onClose={() => setOpen(false)}
+            />,
+            document.body,
+          )
+        : null}
     </>
   );
 }

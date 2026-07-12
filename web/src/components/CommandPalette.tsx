@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { SearchItem } from "@/lib/search-index";
 
 const GROUP_ORDER: SearchItem["group"][] = [
@@ -146,7 +147,11 @@ export function CommandPalette({ items }: { items: SearchItem[] }) {
         </kbd>
       </button>
 
+      {/* Portaled to <body>: the sidebar's sticky container forms its own
+          stacking context, so a fixed overlay rendered inside it would paint
+          under positioned main-column content (e.g. Mermaid flowcharts). */}
       {open ? (
+        createPortal(
         <div
           className="fixed inset-0 z-50 bg-black/40 p-4 backdrop-blur-sm"
           onClick={close}
@@ -241,7 +246,9 @@ export function CommandPalette({ items }: { items: SearchItem[] }) {
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
+        )
       ) : null}
     </>
   );
