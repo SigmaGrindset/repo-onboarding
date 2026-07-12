@@ -3,8 +3,11 @@
  *
  *  - local mode: a pass-through. Clerk is never imported or invoked, so no keys
  *    are required and nothing reaches the network.
- *  - cloud mode: Clerk protects everything except the home page and Clerk's own
- *    sign-in/sign-up routes. `/analysis/*`, `/upload` and `/api/*` require auth.
+ *  - cloud mode: Clerk protects everything except the home page, Clerk's own
+ *    sign-in/sign-up routes, and unlisted-link analysis URLs
+ *    (`/analysis/st_<uuid-token>`), which are viewable without an account — the
+ *    secret token is the capability. Every other `/analysis/*`, `/upload` and
+ *    all `/api/*` still require auth.
  *
  * `@clerk/nextjs/server` is imported dynamically, only in cloud mode, so the
  * Edge bundle stays lean and local mode never evaluates Clerk code. Clerk 7 on
@@ -27,8 +30,14 @@ async function getCloudHandler(): Promise<ProxyFn> {
   const { clerkMiddleware, createRouteMatcher } = await import(
     "@clerk/nextjs/server"
   );
-  // Public routes: home (with sign-in CTA) and Clerk's sign-in/sign-up flows.
-  const isPublic = createRouteMatcher(["/", "/sign-in(.*)", "/sign-up(.*)"]);
+  // Public routes: home (with sign-in CTA), Clerk's sign-in/sign-up flows, and
+  // unlisted-link analysis URLs `/analysis/st_<uuid-token>` (+ any sub-path).
+  const isPublic = createRouteMatcher([
+    "/",
+    "/sign-in(.*)",
+    "/sign-up(.*)",
+    /^\/analysis\/st_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\/.*)?$/i,
+  ]);
   cloudHandler = clerkMiddleware(async (auth, req) => {
     if (!isPublic(req)) {
       await auth.protect();

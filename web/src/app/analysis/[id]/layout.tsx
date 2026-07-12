@@ -3,6 +3,9 @@ import { notFound } from "next/navigation";
 import { resolveDataSource } from "@/lib/datasource";
 import { formatDate, shortSha } from "@/lib/format";
 import { SectionNav } from "@/components/SectionNav";
+import { ShareDialog } from "@/components/ShareDialog";
+import { isCloudMode } from "@/lib/mode";
+import { isCloudId, uuidFromCloudId } from "@/lib/ids";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +23,19 @@ export default async function AnalysisLayout({
 
   const { metadata } = analysis;
   const sha = shortSha(metadata.commitSha);
+
+  // Owner-only Share control: cloud mode + a db_ id whose owner is the signer.
+  // st_ share ids fail isCloudId, so anonymous link viewers never see it.
+  let canShare = false;
+  if (isCloudMode() && isCloudId(id)) {
+    const uuid = uuidFromCloudId(id);
+    if (uuid) {
+      const { auth } = await import("@clerk/nextjs/server");
+      const { isOwner } = await import("@/lib/access");
+      const { userId } = await auth();
+      canShare = userId ? await isOwner(userId, uuid) : false;
+    }
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:flex-row lg:gap-8 lg:py-8">
@@ -78,6 +94,8 @@ export default async function AnalysisLayout({
               Analyzed {formatDate(metadata.analyzedAt)}
             </p>
           </div>
+
+          {canShare ? <ShareDialog analysisId={id} /> : null}
 
           <SectionNav id={id} />
         </div>

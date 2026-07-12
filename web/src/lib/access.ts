@@ -96,3 +96,95 @@ export async function getBlobKey(analysisId: string): Promise<string | null> {
     .limit(1);
   return rows[0]?.blobKey ?? null;
 }
+
+/**
+ * Resolve an analysis by its unlisted-link share token. Returns its id + blob
+ * key, or null when no analysis has that (non-null) token. The secret token is
+ * the capability — this bypasses `canReadAnalysis` by design, so anyone with the
+ * link can read the payload without signing in.
+ */
+export async function getAnalysisByShareToken(
+  token: string,
+): Promise<{ id: string; blobKey: string } | null> {
+  if (!token) return null;
+  const rows = await getDb()
+    .select({ id: analyses.id, blobKey: analyses.blobKey })
+    .from(analyses)
+    .where(eq(analyses.shareToken, token))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/** The Clerk user ids granted viewer access to `analysisId`. */
+export async function listViewers(analysisId: string): Promise<string[]> {
+  if (!analysisId) return [];
+  const rows = await getDb()
+    .select({ userId: analysisAccess.userId })
+    .from(analysisAccess)
+    .where(
+      and(
+        eq(analysisAccess.analysisId, analysisId),
+        eq(analysisAccess.role, "viewer"),
+      ),
+    );
+  return rows.map((r) => r.userId);
+}
+
+/**
+ * Grant `userId` viewer access to `analysisId`. Idempotent: the composite PK
+ * makes a repeat share a no-op via `onConflictDoNothing`.
+ */
+export async function addViewer(
+  analysisId: string,
+  userId: string,
+): Promise<void> {
+  await getDb()
+    .insert(analysisAccess)
+    .values({ analysisId, userId, role: "viewer" })
+    .onConflictDoNothing();
+}
+
+/**
+ * Revoke `userId`'s viewer access to `analysisId`. Constrained to role='viewer'
+ * so the owner row can never be removed by this path.
+ */
+export async function removeViewer(
+  analysisId: string,
+  userId: string,
+): Promise<void> {
+  await getDb()
+    .delete(analysisAccess)
+    .where(
+      and(
+        eq(analysisAccess.analysisId, analysisId),
+        eq(analysisAccess.userId, userId),
+        eq(analysisAccess.role, "viewer"),
+      ),
+    );
+}
+
+/** The current unlisted-link share token for `analysisId`, or null if off. */
+export async function getShareToken(
+  analysisId: string,
+): Promise<string | null> {
+  const rows = await getDb()
+    .select({ shareToken: analyses.shareToken })
+    .from(analyses)
+    .where(eq(analyses.id, analysisId))
+    .limit(1);
+  return rows[0]?.shareToken ?? null;
+}
+
+/**
+ * Set (or clear) the unlisted-link share token for `analysisId`. Passing a new
+ * token rotates the link; passing null turns link sharing off.
+ */
+export async function setShareToken(
+  analysisId: string,
+  token: string | null,
+): Promise<void> {
+  await getDb()
+    .update(analyses)
+    .set({ shareToken: token })
+    .where(eq(analyses.id, analysisId));
+}

@@ -7,6 +7,8 @@
  * `resolveDataSource`), so its Clerk/DB/Blob imports never load locally.
  *
  * Id handling:
+ *  - `st_<token>` share ids resolve first, WITHOUT auth — the unlisted-link
+ *    token is itself the capability, so anyone with the URL can view.
  *  - `db_<uuid>` ids resolve here (DB + Blob, access-checked).
  *  - Fixture ids fall through to the fs source, so public demo analyses stay
  *    viewable by direct link even in cloud mode.
@@ -20,9 +22,16 @@ import { auth } from "@clerk/nextjs/server";
 import type { Analysis } from "@schema/analysis";
 import type { AnalysisSummary, DataSource } from "./datasource";
 import { fsDataSource } from "./datasource";
-import { isCloudId, toCloudId, uuidFromCloudId } from "./ids";
+import {
+  isCloudId,
+  isShareId,
+  toCloudId,
+  tokenFromShareId,
+  uuidFromCloudId,
+} from "./ids";
 import {
   canReadAnalysis,
+  getAnalysisByShareToken,
   getBlobKey,
   listAnalysesFor,
 } from "./access";
@@ -53,6 +62,22 @@ export const cloudDataSource: DataSource = {
   },
 
   async getAnalysis(id: string): Promise<Analysis | null> {
+    // Unlisted-link ids resolve by their secret token — NO auth, NO access
+    // check. Holding the token is the capability to view.
+    if (isShareId(id)) {
+      const token = tokenFromShareId(id);
+      if (!token) return null;
+      const row = await getAnalysisByShareToken(token);
+      if (!row) return null;
+      const raw = await getAnalysisPayload(row.blobKey);
+      if (!raw) return null;
+      try {
+        return JSON.parse(raw) as Analysis;
+      } catch {
+        return null;
+      }
+    }
+
     // Fixtures remain public demos, readable by direct link in cloud mode too.
     if (!isCloudId(id)) return fsDataSource.getAnalysis(id);
 

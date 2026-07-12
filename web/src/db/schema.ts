@@ -30,6 +30,12 @@ export const analyses = pgTable("analyses", {
   blobKey: text("blob_key").notNull(),
   /** Short elevator-pitch summary, denormalized for cheap index cards. */
   summary: text("summary").notNull(),
+  /**
+   * Unlisted-link share token (a v4 UUID stored as text). When set, anyone with
+   * the URL `/analysis/st_<share_token>` can view without signing in. Null means
+   * link sharing is off; unique so a token maps to at most one analysis.
+   */
+  shareToken: text("share_token").unique(),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

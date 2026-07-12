@@ -8,6 +8,13 @@
       "when": 1783782952545,
       "tag": "0000_bumpy_scalphunter",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1783826615410,
+      "tag": "0001_panoramic_kinsey_walden",
+      "breakpoints": true
     }
   ]
 }
