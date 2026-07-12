@@ -1,14 +1,37 @@
 "use client";
 
-import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import type { Hotspot } from "@schema/analysis";
 import { ACTIVITY_BAR_COLOR, activityStyle } from "@/lib/styles";
 import { Badge } from "@/components/ui";
-import { formatNumber } from "@/lib/format";
+import { formatNumber, slugify } from "@/lib/format";
 
 export function ChurnChart({ entries }: { entries: Hotspot[] }) {
-  const [open, setOpen] = useState<number | null>(0);
+  // Command-palette deep link: ?file=<slug> opens and scrolls to that entry.
+  const fileParam = useSearchParams().get("file");
+  const paramIndex = fileParam
+    ? entries.findIndex((e) => slugify(e.path) === fileParam)
+    : -1;
+
+  const [open, setOpen] = useState<number | null>(
+    paramIndex >= 0 ? paramIndex : 0,
+  );
   const max = Math.max(1, ...entries.map((e) => e.commits));
+
+  // Same-page jump: adjust state during render when the param changes
+  // (the React "derived state" pattern), scroll after commit.
+  const [applied, setApplied] = useState(fileParam);
+  if (fileParam !== applied) {
+    setApplied(fileParam);
+    if (paramIndex >= 0) setOpen(paramIndex);
+  }
+  useEffect(() => {
+    if (!fileParam) return;
+    document
+      .getElementById(`hotspot-${fileParam}`)
+      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [fileParam]);
 
   return (
     <ul className="space-y-2.5">
@@ -19,7 +42,8 @@ export function ChurnChart({ entries }: { entries: Hotspot[] }) {
         return (
           <li
             key={h.path}
-            className="overflow-hidden rounded-xl border border-border bg-surface"
+            id={`hotspot-${slugify(h.path)}`}
+            className="scroll-mt-20 overflow-hidden rounded-xl border border-border bg-surface"
           >
             <button
               type="button"

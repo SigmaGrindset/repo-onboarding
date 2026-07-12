@@ -3,23 +3,18 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
+import { ANALYSIS_SECTIONS } from "@/lib/sections";
 
-interface Section {
-  slug: string;
-  label: string;
-  icon: ReactNode;
-}
-
-const SECTIONS: Section[] = [
-  { slug: "", label: "Overview", icon: <IconOverview /> },
-  { slug: "architecture", label: "Architecture", icon: <IconArchitecture /> },
-  { slug: "graph", label: "Dependency Graph", icon: <IconGraph /> },
-  { slug: "map", label: "Codebase Map", icon: <IconMap /> },
-  { slug: "tour", label: "Guided Tour", icon: <IconTour /> },
-  { slug: "hotspots", label: "Hotspots", icon: <IconHotspots /> },
-  { slug: "setup", label: "Setup", icon: <IconSetup /> },
-  { slug: "tasks", label: "First Tasks", icon: <IconTasks /> },
-];
+const ICONS: Record<string, ReactNode> = {
+  "": <IconOverview />,
+  architecture: <IconArchitecture />,
+  graph: <IconGraph />,
+  map: <IconMap />,
+  tour: <IconTour />,
+  hotspots: <IconHotspots />,
+  setup: <IconSetup />,
+  tasks: <IconTasks />,
+};
 
 export function SectionNav({ id }: { id: string }) {
   const pathname = usePathname();
@@ -30,7 +25,7 @@ export function SectionNav({ id }: { id: string }) {
       aria-label="Analysis sections"
       className="flex gap-1.5 overflow-x-auto pb-1 lg:flex-col lg:gap-0.5 lg:overflow-visible lg:pb-0"
     >
-      {SECTIONS.map((s) => {
+      {ANALYSIS_SECTIONS.map((s) => {
         const href = s.slug ? `${base}/${s.slug}` : base;
         const active =
           s.slug === ""
@@ -50,7 +45,7 @@ export function SectionNav({ id }: { id: string }) {
             <span
               className={`shrink-0 ${active ? "text-accent" : "text-faint"}`}
             >
-              {s.icon}
+              {ICONS[s.slug]}
             </span>
             <span className="whitespace-nowrap">{s.label}</span>
           </Link>

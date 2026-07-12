@@ -1,8 +1,10 @@
 import { notFound } from "next/navigation";
 import { resolveDataSource } from "@/lib/datasource";
+import { slugify } from "@/lib/format";
 import { Markdown } from "@/lib/markdown";
 import { Badge, Card, EmptyState, SectionHeader } from "@/components/ui";
 import { Mermaid } from "@/components/Mermaid";
+import { JumpToParam } from "@/components/JumpToParam";
 
 export const dynamic = "force-dynamic";
 
@@ -26,12 +28,18 @@ export default async function ArchitecturePage({
         description="The ordered narrative of the system's design, with diagrams rendered inline. Read top to bottom."
       />
 
+      <JumpToParam param="section" prefix="arch-" />
+
       {sections.length === 0 ? (
         <EmptyState title="No architecture sections in this analysis." />
       ) : (
         <div className="space-y-6">
           {sections.map((section, i) => (
-            <Card key={i} className="overflow-hidden">
+            <Card
+              key={i}
+              id={`arch-${slugify(section.title)}`}
+              className="scroll-mt-20 overflow-hidden"
+            >
               <div className="border-b border-border px-5 py-4 sm:px-6">
                 <div className="flex items-center gap-3">
                   <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-soft text-xs font-semibold text-accent">

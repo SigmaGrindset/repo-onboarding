@@ -7,6 +7,8 @@ import { formatDate, shortSha, snippet } from "@/lib/format";
 import { SectionNav } from "@/components/SectionNav";
 import { StalenessBadge } from "@/components/StalenessBadge";
 import { ShareDialog } from "@/components/ShareDialog";
+import { CommandPalette } from "@/components/CommandPalette";
+import { buildSearchIndex } from "@/lib/search-index";
 import { isCloudMode } from "@/lib/mode";
 import { isCloudId, uuidFromCloudId } from "@/lib/ids";
 
@@ -145,6 +147,10 @@ export default async function AnalysisLayout({
           </div>
 
           {canShare ? <ShareDialog analysisId={id} /> : null}
+
+          <CommandPalette
+            items={buildSearchIndex(analysis, `/analysis/${id}`)}
+          />
 
           <SectionNav id={id} />
         </div>

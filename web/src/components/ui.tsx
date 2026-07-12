@@ -18,16 +18,19 @@ export function Badge({
   );
 }
 
-/** A surface card container. */
+/** A surface card container. `id` makes it a deep-link / jump target. */
 export function Card({
   children,
   className = "",
+  id,
 }: {
   children: ReactNode;
   className?: string;
+  id?: string;
 }) {
   return (
     <div
+      id={id}
       className={`rounded-xl border border-border bg-surface ${className}`}
     >
       {children}

@@ -193,6 +193,20 @@ body {
   color: var(--muted);
 }
 
+/* Brief attention flash on elements the command palette jumps to */
+.jump-flash {
+  animation: jump-flash 1.6s ease-out;
+}
+@keyframes jump-flash {
+  0%,
+  35% {
+    box-shadow: 0 0 0 3px var(--accent);
+  }
+  100% {
+    box-shadow: 0 0 0 3px transparent;
+  }
+}
+
 /* Mermaid diagrams should scale to their container */
 .mermaid-host svg {
   max-width: 100%;

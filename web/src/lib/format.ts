@@ -49,6 +49,16 @@ export function snippet(text: string, max = 220): string {
   return `${cut.slice(0, lastSpace > 0 ? lastSpace : max).trimEnd()}…`;
 }
 
+/** "src/App Router.tsx" -> "src-app-router-tsx". DOM-id and URL-safe slug. */
+export function slugify(s: string): string {
+  return (
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "item"
+  );
+}
+
 /** Last path segment, e.g. "src/domain/money.ts" -> "money.ts". */
 export function basename(p: string): string {
   const parts = p.split(/[\\/]/).filter(Boolean);

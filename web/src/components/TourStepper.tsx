@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import type { TourStep } from "@schema/analysis";
 import { FileChip } from "@/components/ui";
@@ -20,6 +20,17 @@ export function TourStepper({
     [total],
   );
   const [current, setCurrent] = useState(() => clamp(initialStep));
+
+  // Follow ?step= changes pushed from outside (e.g. the command palette)
+  // while already mounted. State is adjusted during render (the React
+  // "derived state" pattern); our own replace below round-trips as a no-op.
+  const stepParam = useSearchParams().get("step");
+  const [applied, setApplied] = useState(stepParam);
+  if (stepParam !== applied) {
+    setApplied(stepParam);
+    const n = Number.parseInt(stepParam ?? "", 10);
+    if (Number.isFinite(n) && clamp(n) !== current) setCurrent(clamp(n));
+  }
 
   // Reflect the step in the URL for deep-linking, without scrolling.
   useEffect(() => {

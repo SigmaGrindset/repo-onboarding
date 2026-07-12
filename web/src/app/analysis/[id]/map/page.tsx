@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
 import { resolveDataSource } from "@/lib/datasource";
+import { slugify } from "@/lib/format";
 import { roleTint } from "@/lib/styles";
 import { Badge, Card, EmptyState, FileChip, SectionHeader } from "@/components/ui";
+import { JumpToParam } from "@/components/JumpToParam";
 
 export const dynamic = "force-dynamic";
 
@@ -25,12 +27,18 @@ export default async function MapPage({
         description="An annotated tour of the directory structure — what each area is for, why it matters to a newcomer, and the files worth opening first."
       />
 
+      <JumpToParam param="entry" prefix="dir-" />
+
       {map.length === 0 ? (
         <EmptyState title="No codebase map in this analysis." />
       ) : (
         <div className="space-y-4">
           {map.map((entry) => (
-            <Card key={entry.path} className="p-5">
+            <Card
+              key={entry.path}
+              id={`dir-${slugify(entry.path)}`}
+              className="scroll-mt-20 p-5"
+            >
               <div className="flex flex-wrap items-center gap-2">
                 <code className="rounded-md border border-border bg-surface-2 px-2 py-1 font-mono text-sm text-text">
                   {entry.path}
