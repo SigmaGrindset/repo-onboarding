@@ -18,6 +18,11 @@ export interface AnalysisSummary {
   id: string;
   repoName: string;
   repoUrl: string | null;
+  /**
+   * Cloud-only lineage key that groups a repo's versions (see `@/lib/repo-key`).
+   * The fs source leaves this undefined, so fixtures never group into versions.
+   */
+  repoKey?: string;
   primaryLanguage: string;
   totalFiles: number;
   totalLoc: number;

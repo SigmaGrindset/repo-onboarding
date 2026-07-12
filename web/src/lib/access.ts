@@ -6,10 +6,15 @@
  * so the moment a future "share" feature inserts a role='viewer' row, that user
  * can read and see the analysis with no other code change.
  *
+ * This is also the ONE place lineage ("versions") queries may live:
+ * `listVersionsFor` groups a repo's analyses by (`owner_id`, `repo_key`) and is
+ * likewise access-gated through `analysis_access`. Keeping it here preserves the
+ * chokepoint doctrine — no other module may join on `repo_key`.
+ *
  * Server-only: imports the Neon client. Only reachable in cloud mode.
  */
 
-import { and, eq, desc } from "drizzle-orm";
+import { and, eq, asc, desc } from "drizzle-orm";
 import { getDb } from "@/db/db";
 import { analyses, analysisAccess } from "@/db/schema";
 
@@ -61,6 +66,7 @@ export interface AccessibleAnalysis {
   id: string;
   repoName: string;
   repoUrl: string | null;
+  repoKey: string;
   summary: string;
   createdAt: Date;
 }
@@ -78,6 +84,7 @@ export async function listAnalysesFor(
       id: analyses.id,
       repoName: analyses.repoName,
       repoUrl: analyses.repoUrl,
+      repoKey: analyses.repoKey,
       summary: analyses.summary,
       createdAt: analyses.createdAt,
     })
@@ -85,6 +92,93 @@ export async function listAnalysesFor(
     .innerJoin(analyses, eq(analyses.id, analysisAccess.analysisId))
     .where(eq(analysisAccess.userId, userId))
     .orderBy(desc(analyses.createdAt));
+}
+
+/** One entry in a repo's version lineage, oldest = version 1. */
+export interface AnalysisVersion {
+  id: string; // db uuid (caller wraps with toCloudId)
+  version: number; // 1-based ordinal within rows visible to this user, oldest = 1
+  createdAt: Date;
+  analyzedAt: Date | null; // null for pre-migration rows
+  commitSha: string | null;
+  summary: string;
+  isLatest: boolean;
+}
+
+/**
+ * The ordered version lineage of the analysis `analysisId`, restricted to rows
+ * `userId` may read (INNER JOINed through `analysis_access`). The anchor row
+ * defines the lineage via its (`owner_id`, `repo_key`); versions are read-time
+ * ordinals (oldest = 1), never stored.
+ *
+ * Returns [] when the anchor is missing, either id is falsy, or the anchor
+ * itself is not among the readable rows (the user can't see it).
+ */
+export async function listVersionsFor(
+  userId: string,
+  analysisId: string,
+): Promise<AnalysisVersion[]> {
+  if (!userId || !analysisId) return [];
+
+  const db = getDb();
+
+  // Resolve the anchor's lineage coordinates.
+  const anchorRows = await db
+    .select({ ownerId: analyses.ownerId, repoKey: analyses.repoKey })
+    .from(analyses)
+    .where(eq(analyses.id, analysisId))
+    .limit(1);
+  const anchor = anchorRows[0];
+  if (!anchor) return [];
+
+  // Empty repo_key must never group (shouldn't happen post-backfill): treat the
+  // anchor as a lone v1, but only if the user actually has access to it.
+  if (anchor.repoKey === "") {
+    if (!(await canReadAnalysis(userId, analysisId))) return [];
+    const soloRows = await db
+      .select({
+        id: analyses.id,
+        createdAt: analyses.createdAt,
+        analyzedAt: analyses.analyzedAt,
+        commitSha: analyses.commitSha,
+        summary: analyses.summary,
+      })
+      .from(analyses)
+      .where(eq(analyses.id, analysisId))
+      .limit(1);
+    const solo = soloRows[0];
+    if (!solo) return [];
+    return [{ ...solo, version: 1, isLatest: true }];
+  }
+
+  // Lineage rows the user can read, oldest first.
+  const rows = await db
+    .select({
+      id: analyses.id,
+      createdAt: analyses.createdAt,
+      analyzedAt: analyses.analyzedAt,
+      commitSha: analyses.commitSha,
+      summary: analyses.summary,
+    })
+    .from(analyses)
+    .innerJoin(analysisAccess, eq(analysisAccess.analysisId, analyses.id))
+    .where(
+      and(
+        eq(analyses.ownerId, anchor.ownerId),
+        eq(analyses.repoKey, anchor.repoKey),
+        eq(analysisAccess.userId, userId),
+      ),
+    )
+    .orderBy(asc(analyses.createdAt));
+
+  // Safety: if the anchor isn't in the readable set, the user can't read it.
+  if (!rows.some((r) => r.id === analysisId)) return [];
+
+  return rows.map((r, i) => ({
+    ...r,
+    version: i + 1,
+    isLatest: i === rows.length - 1,
+  }));
 }
 
 /** Fetch the blob key for an analysis (used after an access check passes). */

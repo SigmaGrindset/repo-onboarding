@@ -51,6 +51,7 @@ export const cloudDataSource: DataSource = {
       id: toCloudId(r.id),
       repoName: r.repoName,
       repoUrl: r.repoUrl,
+      repoKey: r.repoKey,
       // Language/size stats live only in the payload, not the metadata table.
       // The index card degrades gracefully when these are empty/zero.
       primaryLanguage: "",

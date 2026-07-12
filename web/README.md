@@ -100,6 +100,12 @@ npx drizzle-kit push          # quick sync, good for dev
 npx drizzle-kit migrate
 ```
 
+> **Migration 0002 carries a data backfill.** It adds `repo_key` (plus
+> `commit_sha` / `analyzed_at`) and then runs an `UPDATE` to backfill `repo_key`
+> for existing rows. It MUST be applied with `npx drizzle-kit migrate`, which
+> runs the SQL verbatim. Do NOT use `npx drizzle-kit push` here — push diffs the
+> schema only and skips the `UPDATE`, leaving old rows with an empty `repo_key`.
+
 ## Architecture notes
 
 - `src/lib/datasource.ts` — the `DataSource` seam. `resolveDataSource()` picks

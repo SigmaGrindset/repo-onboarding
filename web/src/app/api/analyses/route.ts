@@ -60,6 +60,12 @@ export async function POST(req: Request) {
   }
   const analysis = result.data;
 
+  const { repoKeyFor } = await import("@/lib/repo-key");
+  const repoKey = repoKeyFor(
+    analysis.metadata.repoUrl,
+    analysis.metadata.repoName,
+  );
+
   const id = crypto.randomUUID();
 
   // Store the payload first; if the DB write fails, best-effort remove the blob.
@@ -80,8 +86,11 @@ export async function POST(req: Request) {
         ownerId: userId,
         repoName: analysis.metadata.repoName,
         repoUrl: analysis.metadata.repoUrl,
+        repoKey,
         blobKey: storedKey,
         summary: analysis.pitch.summary,
+        commitSha: analysis.metadata.commitSha,
+        analyzedAt: new Date(analysis.metadata.analyzedAt),
       }),
       db.insert(analysisAccess).values({
         analysisId: id,
@@ -100,6 +109,27 @@ export async function POST(req: Request) {
     );
   }
 
+  // Post-hoc, cosmetic version number: count this owner's rows in the same
+  // lineage. Read-time ordinals (see listVersionsFor) are authoritative; this is
+  // only a friendly hint for the just-uploaded version and never persisted.
+  let version = 1;
+  try {
+    const { getDb } = await import("@/db/db");
+    const { analyses } = await import("@/db/schema");
+    const { and, eq, count } = await import("drizzle-orm");
+    const db = getDb();
+    const rows = await db
+      .select({ n: count() })
+      .from(analyses)
+      .where(and(eq(analyses.ownerId, userId), eq(analyses.repoKey, repoKey)));
+    version = rows[0]?.n ?? 1;
+  } catch {
+    // Non-fatal: the row is already committed. Fall back to 1.
+  }
+
   const { toCloudId } = await import("@/lib/ids");
-  return NextResponse.json({ id: toCloudId(id) }, { status: 201 });
+  return NextResponse.json(
+    { id: toCloudId(id), version, repoName: analysis.metadata.repoName },
+    { status: 201 },
+  );
 }
