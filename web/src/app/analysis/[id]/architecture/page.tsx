@@ -58,7 +58,10 @@ export default async function ArchitecturePage({
                         </span>
                       ) : null}
                     </figcaption>
-                    <Mermaid source={section.diagram.source} />
+                    <Mermaid
+                      source={section.diagram.source}
+                      title={section.diagram.title ?? section.title}
+                    />
                   </figure>
                 ) : null}
               </div>

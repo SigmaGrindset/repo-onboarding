@@ -198,3 +198,12 @@ body {
   max-width: 100%;
   height: auto;
 }
+
+/* In the diagram lightbox the wrapper div carries the diagram's natural
+   (viewBox) size; the SVG fills it. !important beats Mermaid's inline
+   max-width so the diagram renders at full size and pan/zoom stays crisp. */
+.diagram-lightbox svg {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+}
