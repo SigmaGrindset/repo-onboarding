@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Let Tailwind detect the utility classes Streamdown emits (chat markdown). */
+@source "../../node_modules/streamdown/dist/*.js";
+
 /* The `dark:` variant follows the resolved theme stamped on <html> by the
    pre-paint script in layout.tsx, not the OS media query. */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));

@@ -10,7 +10,9 @@ import { ShareDialog } from "@/components/ShareDialog";
 import { CommandPalette } from "@/components/CommandPalette";
 import { buildSearchIndex } from "@/lib/search-index";
 import { isCloudMode } from "@/lib/mode";
-import { isCloudId, uuidFromCloudId } from "@/lib/ids";
+import { isCloudId, uuidFromCloudId, isShareId } from "@/lib/ids";
+import { isChatEnabled } from "@/lib/chat/config";
+import { ChatPanel } from "@/components/chat/ChatPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -64,6 +66,12 @@ export default async function AnalysisLayout({
 
   const { metadata } = analysis;
   const sha = shortSha(metadata.commitSha);
+
+  // "Ask this repo" chat: available when the AI Gateway key is set, except for
+  // anonymous share-link visitors in cloud mode (the API rejects them too, so
+  // showing the launcher would only offer a guaranteed 403). Only booleans and
+  // strings cross to the client — never the key itself.
+  const chatAvailable = isChatEnabled() && !(isCloudMode() && isShareId(id));
 
   // Owner-only Share control: cloud mode + a db_ id whose owner is the signer.
   // st_ share ids fail isCloudId, so anonymous link viewers never see it.
@@ -175,6 +183,10 @@ export default async function AnalysisLayout({
 
       {/* Main content */}
       <main className="min-w-0 flex-1">{children}</main>
+
+      {chatAvailable ? (
+        <ChatPanel analysisId={id} repoName={metadata.repoName} />
+      ) : null}
     </div>
   );
 }
