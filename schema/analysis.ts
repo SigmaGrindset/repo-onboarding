@@ -265,3 +265,62 @@ export interface FirstTask {
   /** Why this is a good first task for a newcomer. */
   rationale: string;
 }
+
+// ---------------------------------------------------------------------------
+// Validation issue contract
+// ---------------------------------------------------------------------------
+
+/**
+ * A single, structured schema-validation problem — the canonical error shape
+ * every validation surface emits: the `schema/validate.mjs --json` CLI output,
+ * the web upload API (`POST /api/analyses`), the future BYO-model CLI, and the
+ * token API. It is deliberately flat (short strings, no nested objects) so it
+ * reads cleanly in a terminal, an HTTP response, and a UI row alike, and so an
+ * agent can paste it straight back to regenerate a failing `analysis.json`.
+ *
+ * The runtime that derives these lives in `schema/validate-core.mjs`
+ * (`validateAnalysisDocument`). The Next.js app can neither cleanly import that
+ * ESM module nor this file's runtime from outside `web/`, so it keeps a mirror
+ * of BOTH this type and the derivation logic in
+ * `web/src/lib/validateAnalysis.ts`. This is the same mirroring doctrine the
+ * Ajv config already follows. If you change this shape, change all three
+ * (`schema/analysis.ts`, `schema/validate-core.mjs`, `validateAnalysis.ts`) in
+ * lockstep.
+ */
+export interface ValidationIssue {
+  /**
+   * JSON Pointer (Ajv `instancePath`) to the offending location, e.g.
+   * `/metadata/repoName` or `/pitch/techStack/0/category`. The document root
+   * (an empty instancePath) is normalized to the literal string `"(root)"`.
+   * For `additionalProperties` this points at the containing object; the
+   * offending property name appears in `expected`.
+   */
+  path: string;
+  /** Human-readable problem, taken verbatim from Ajv `message` (e.g. "must be integer"). */
+  message: string;
+  /**
+   * The failing rule: an Ajv keyword (`required`, `enum`, `type`,
+   * `additionalProperties`, `minItems`, `minLength`, `minimum`, `maximum`,
+   * `pattern`, `format`, `contains`, …) or `"edge-integrity"` for the optional
+   * dependency-graph cross-reference checks.
+   */
+  keyword: string;
+  /**
+   * Short, terminal-friendly rendering of what the schema expected, derived
+   * from `keyword` + Ajv `params` — e.g. `property "repoName"`,
+   * `one of: "easy", "medium", "hard"`, `type integer`, `at least 3 item(s)`,
+   * `>= 0`. Omitted when the keyword carries no useful expectation.
+   */
+  expected?: string;
+  /**
+   * Short rendering of the offending value found at `path` (JSON-encoded,
+   * truncated to 80 chars). `"undefined"` when the value is absent (e.g. a
+   * missing `required` property).
+   */
+  got?: string;
+}
+
+/** Result of validating a document against the analysis schema. */
+export type AnalysisValidationResult =
+  | { valid: true; issues: [] }
+  | { valid: false; issues: ValidationIssue[] };

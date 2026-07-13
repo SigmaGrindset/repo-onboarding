@@ -53,7 +53,7 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         error: "analysis.json failed schema validation.",
-        errors: result.errors.slice(0, 50),
+        issues: result.issues.slice(0, 50),
       },
       { status: 400 },
     );

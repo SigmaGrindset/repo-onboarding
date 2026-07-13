@@ -8,9 +8,11 @@
     "validate:sample": "node schema/validate.mjs data/sample/analysis.json",
     "validate": "node schema/validate.mjs"
   },
-  "devDependencies": {
+  "dependencies": {
     "ajv": "^8.17.1",
-    "ajv-formats": "^3.0.1",
+    "ajv-formats": "^3.0.1"
+  },
+  "devDependencies": {
     "typescript": "^5.6.3"
   }
 }

@@ -3,27 +3,30 @@
  * Validate a JSON document against the Repo Onboarding analysis schema.
  *
  * Usage:
- *   node schema/validate.mjs <path-to-json>
+ *   node schema/validate.mjs <path-to-json> [--json]
+ *
+ * Options:
+ *   --json   Print `{ valid, issues }` as JSON to stdout (machine-readable for
+ *            agents). Exit codes are unchanged; nothing is written to stderr on
+ *            a validation failure in this mode.
  *
  * Exit codes:
  *   0  valid
  *   1  invalid (schema violations printed)
  *   2  usage / IO / schema-compile error
  *
- * This script is intentionally dependency-light (ajv + ajv-formats only) so
- * that WP2's /onboard skill and WP4's upload endpoint can reuse it verbatim.
+ * This is a thin CLI over `schema/validate-core.mjs`, which owns the Ajv setup
+ * and the canonical {@link ValidationIssue} error contract. The /onboard skill
+ * and the web upload endpoint reuse that same core, so error shapes stay
+ * identical everywhere. `schema/edges-check.mjs` remains a separate standalone
+ * script (the skill invokes it directly).
  */
 
 import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 import process from "node:process";
 
-import Ajv2020 from "ajv/dist/2020.js";
-import addFormats from "ajv-formats";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const SCHEMA_PATH = resolve(__dirname, "analysis.schema.json");
+import { validateAnalysisDocument, formatIssueHuman } from "./validate-core.mjs";
 
 function fail(message, code = 2) {
   console.error(message);
@@ -45,46 +48,40 @@ async function loadJson(path, label) {
 }
 
 async function main() {
-  const target = process.argv[2];
+  const args = process.argv.slice(2);
+  const json = args.includes("--json");
+  const target = args.find((a) => !a.startsWith("--"));
   if (!target) {
     fail(
-      "Usage: node schema/validate.mjs <path-to-json>\n" +
-        "Validates the given JSON file against schema/analysis.schema.json."
+      "Usage: node schema/validate.mjs <path-to-json> [--json]\n" +
+        "Validates the given JSON file against schema/analysis.schema.json.",
     );
   }
 
   const targetPath = resolve(process.cwd(), target);
-  const schema = await loadJson(SCHEMA_PATH, "schema");
   const data = await loadJson(targetPath, "input document");
 
-  const ajv = new Ajv2020({ allErrors: true, strict: true });
-  addFormats(ajv);
-
-  let validate;
+  let result;
   try {
-    validate = ajv.compile(schema);
+    result = validateAnalysisDocument(data);
   } catch (err) {
-    fail(`Failed to compile schema: ${err.message}`);
+    fail(`Failed to compile/load schema: ${err.message}`);
   }
 
-  const valid = validate(data);
-  if (valid) {
+  if (json) {
+    // Machine-readable: only JSON on stdout, exit code still signals validity.
+    console.log(JSON.stringify({ valid: result.valid, issues: result.issues }, null, 2));
+    process.exit(result.valid ? 0 : 1);
+  }
+
+  if (result.valid) {
     console.log(`VALID: ${targetPath} conforms to analysis.schema.json`);
     process.exit(0);
   }
 
-  console.error(`INVALID: ${targetPath} has ${validate.errors.length} error(s):\n`);
-  for (const err of validate.errors) {
-    const where = err.instancePath || "(root)";
-    let msg = `  • ${where} ${err.message}`;
-    if (err.keyword === "additionalProperties" && err.params?.additionalProperty) {
-      msg += ` -> "${err.params.additionalProperty}"`;
-    } else if (err.keyword === "enum" && err.params?.allowedValues) {
-      msg += ` -> allowed: ${JSON.stringify(err.params.allowedValues)}`;
-    } else if (err.keyword === "required" && err.params?.missingProperty) {
-      msg += ` -> "${err.params.missingProperty}"`;
-    }
-    console.error(msg);
+  console.error(`INVALID: ${targetPath} has ${result.issues.length} error(s):\n`);
+  for (const issue of result.issues) {
+    console.error(formatIssueHuman(issue));
   }
   console.error("");
   process.exit(1);

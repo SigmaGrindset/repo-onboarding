@@ -2,13 +2,20 @@
 
 import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { ValidationIssue } from "@/lib/validateAnalysis";
 
 const MAX_BYTES = 5 * 1024 * 1024;
 
 /**
  * Client upload form: pick or drag-drop an analysis.json, POST it to
- * /api/analyses, then redirect to the new analysis on success. Schema
- * validation happens server-side; its errors are surfaced here.
+ * /api/analyses, then redirect to the new analysis on success.
+ *
+ * Two kinds of problems are surfaced. Schema-validation failures come back as
+ * structured `ValidationIssue[]` and render field-level (path chip + message +
+ * expected/got), with a "Copy for your agent" button that yields a paste-ready
+ * block to feed back to the model that generated the file. Everything else
+ * (client-side pre-checks, non-validation server errors) renders as plain
+ * message rows via `messages`.
  */
 export function UploadForm() {
   const router = useRouter();
@@ -16,31 +23,43 @@ export function UploadForm() {
   const [file, setFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [errors, setErrors] = useState<string[]>([]);
+  const [issues, setIssues] = useState<ValidationIssue[]>([]);
+  const [messages, setMessages] = useState<string[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
-  const pick = useCallback((f: File | null) => {
-    setErrors([]);
-    setNotice(null);
-    if (!f) {
-      setFile(null);
-      return;
-    }
-    const isJson = f.name.toLowerCase().endsWith(".json") || f.type === "application/json";
-    if (!isJson) {
-      setErrors(["Please choose a .json file."]);
-      setFile(null);
-      return;
-    }
-    if (f.size > MAX_BYTES) {
-      setErrors([
-        `That file is ${(f.size / 1024 / 1024).toFixed(1)} MB — the limit is 5 MB.`,
-      ]);
-      setFile(null);
-      return;
-    }
-    setFile(f);
+  const clearErrors = useCallback(() => {
+    setIssues([]);
+    setMessages([]);
+    setCopied(false);
   }, []);
+
+  const pick = useCallback(
+    (f: File | null) => {
+      clearErrors();
+      setNotice(null);
+      if (!f) {
+        setFile(null);
+        return;
+      }
+      const isJson =
+        f.name.toLowerCase().endsWith(".json") || f.type === "application/json";
+      if (!isJson) {
+        setMessages(["Please choose a .json file."]);
+        setFile(null);
+        return;
+      }
+      if (f.size > MAX_BYTES) {
+        setMessages([
+          `That file is ${(f.size / 1024 / 1024).toFixed(1)} MB — the limit is 5 MB.`,
+        ]);
+        setFile(null);
+        return;
+      }
+      setFile(f);
+    },
+    [clearErrors],
+  );
 
   const onDrop = useCallback(
     (e: React.DragEvent<HTMLDivElement>) => {
@@ -51,14 +70,34 @@ export function UploadForm() {
     [pick],
   );
 
+  const copyForAgent = useCallback(async () => {
+    const lines = issues.map((it) => {
+      const detail: string[] = [];
+      if (it.expected) detail.push(`expected ${it.expected}`);
+      if (it.got) detail.push(`got ${it.got}`);
+      const suffix = detail.length ? ` (${detail.join("; ")})` : "";
+      return `- \`${it.path}\` — ${it.message}${suffix}`;
+    });
+    const block = `Fix these schema validation errors in analysis.json and regenerate. Each line is a JSON Pointer path, the problem, and what was expected vs. found:\n\n${lines.join(
+      "\n",
+    )}`;
+    try {
+      await navigator.clipboard.writeText(block);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard unavailable (e.g. insecure context); silently ignore.
+    }
+  }, [issues]);
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!file) {
-      setErrors(["Choose an analysis.json first."]);
+      setMessages(["Choose an analysis.json first."]);
       return;
     }
     setBusy(true);
-    setErrors([]);
+    clearErrors();
     setNotice("Validating and uploading…");
     try {
       const text = await file.text();
@@ -73,14 +112,17 @@ export function UploadForm() {
         repoName?: string;
         error?: string;
         errors?: string[];
+        issues?: ValidationIssue[];
       } = await res.json().catch(() => ({}));
       if (!res.ok) {
         setNotice(null);
         setBusy(false);
-        if (Array.isArray(data.errors) && data.errors.length) {
-          setErrors(data.errors);
+        if (Array.isArray(data.issues) && data.issues.length) {
+          setIssues(data.issues);
+        } else if (Array.isArray(data.errors) && data.errors.length) {
+          setMessages(data.errors);
         } else {
-          setErrors([data.error ?? `Upload failed (HTTP ${res.status}).`]);
+          setMessages([data.error ?? `Upload failed (HTTP ${res.status}).`]);
         }
         return;
       }
@@ -95,9 +137,11 @@ export function UploadForm() {
     } catch (err) {
       setNotice(null);
       setBusy(false);
-      setErrors([err instanceof Error ? err.message : "Upload failed."]);
+      setMessages([err instanceof Error ? err.message : "Upload failed."]);
     }
   }
+
+  const problemCount = issues.length + messages.length;
 
   return (
     <form onSubmit={submit} className="space-y-4">
@@ -143,18 +187,61 @@ export function UploadForm() {
         )}
       </div>
 
-      {errors.length > 0 ? (
+      {problemCount > 0 ? (
         <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4">
-          <p className="text-sm font-semibold text-red-500">
-            {errors.length === 1 ? "Upload rejected" : `Upload rejected — ${errors.length} problems`}
-          </p>
-          <ul className="mt-2 space-y-1 text-xs text-red-500/90">
-            {errors.slice(0, 50).map((err, i) => (
-              <li key={i} className="font-mono">
-                {err}
-              </li>
-            ))}
-          </ul>
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-sm font-semibold text-red-500">
+              {problemCount === 1
+                ? "Upload rejected"
+                : `Upload rejected — ${problemCount} problems`}
+            </p>
+            {issues.length > 0 ? (
+              <button
+                type="button"
+                onClick={copyForAgent}
+                className="shrink-0 rounded-md border border-red-500/30 px-2 py-1 text-[11px] font-medium text-red-500 transition hover:bg-red-500/10"
+              >
+                {copied ? "Copied" : "Copy for your agent"}
+              </button>
+            ) : null}
+          </div>
+
+          {messages.length > 0 ? (
+            <ul className="mt-2 space-y-1 text-xs text-red-500/90">
+              {messages.map((m, i) => (
+                <li key={`m-${i}`}>{m}</li>
+              ))}
+            </ul>
+          ) : null}
+
+          {issues.length > 0 ? (
+            <ul className="mt-3 space-y-2.5">
+              {issues.slice(0, 50).map((issue, i) => (
+                <li key={`i-${i}`} className="text-xs leading-relaxed">
+                  <code className="mr-2 inline-block rounded bg-red-500/10 px-1.5 py-0.5 font-mono text-[11px] text-red-500">
+                    {issue.path}
+                  </code>
+                  <span className="text-red-500/90">{issue.message}</span>
+                  {issue.expected || issue.got ? (
+                    <span className="mt-0.5 block text-[11px] text-red-500/70">
+                      {issue.expected ? (
+                        <>
+                          expected{" "}
+                          <span className="font-mono">{issue.expected}</span>
+                        </>
+                      ) : null}
+                      {issue.expected && issue.got ? " · " : null}
+                      {issue.got ? (
+                        <>
+                          got <span className="font-mono">{issue.got}</span>
+                        </>
+                      ) : null}
+                    </span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
       ) : null}
 
