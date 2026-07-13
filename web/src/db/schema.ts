@@ -119,6 +119,26 @@ export const tourProgress = pgTable(
   (t) => [primaryKey({ columns: [t.analysisId, t.userId] })],
 );
 
+/**
+ * Per-user daily chat quota. One row per (user, UTC day); `count` is the number
+ * of messages sent that day. Consumed via an atomic conditional upsert in
+ * `@/lib/chat/quota` (`count < limit`), so old days simply accumulate rows and
+ * are irrelevant once the day key rolls over.
+ */
+export const chatQuota = pgTable(
+  "chat_quota",
+  {
+    userId: text("user_id").notNull(),
+    day: text("day").notNull(), // UTC "YYYY-MM-DD"
+    count: integer("count").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.day] })],
+);
+
 export type AnalysisRow = typeof analyses.$inferSelect;
 export type AnalysisAccessRow = typeof analysisAccess.$inferSelect;
 export type TourProgressRow = typeof tourProgress.$inferSelect;
+export type ChatQuotaRow = typeof chatQuota.$inferSelect;
