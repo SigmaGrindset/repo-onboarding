@@ -15,9 +15,13 @@ export function isChatEnabled(): boolean {
 /**
  * The AI Gateway model id (a plain "provider/model" string). Falls back to a
  * sensible default when `CHAT_MODEL` is unset or blank.
+ *
+ * The default is deliberately a model accessible on the AI Gateway free tier
+ * (verified 2026-07-13): gemini-3.x ids are paid-tier-only and return a 403
+ * RestrictedModelsError, whereas `google/gemini-2.5-flash` is permitted.
  */
 export function chatModelId(): string {
-  return process.env.CHAT_MODEL?.trim() || "google/gemini-3-flash";
+  return process.env.CHAT_MODEL?.trim() || "google/gemini-2.5-flash";
 }
 
 /**

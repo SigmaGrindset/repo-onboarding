@@ -147,6 +147,9 @@ export async function POST(
     tools,
     stopWhen: stepCountIs(5),
     maxOutputTokens: 2048,
+    // Free-tier gateway rate limits make aggressive retries counterproductive:
+    // the default retry burst extends the sliding-window cooldown, so cap at 1.
+    maxRetries: 1,
     abortSignal: req.signal,
     providerOptions: {
       gateway: { user: userId ?? "local", tags: ["feature:repo-chat"] },

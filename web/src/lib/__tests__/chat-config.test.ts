@@ -46,14 +46,14 @@ test("isChatEnabled: true when key is present", () => {
 });
 
 test("chatModelId: default when unset, override when set", () => {
-  assert.equal(chatModelId(), "google/gemini-3-flash");
+  assert.equal(chatModelId(), "google/gemini-2.5-flash");
   process.env.CHAT_MODEL = "anthropic/claude-sonnet-4";
   assert.equal(chatModelId(), "anthropic/claude-sonnet-4");
 });
 
 test("chatModelId: blank override falls back to default", () => {
   process.env.CHAT_MODEL = "   ";
-  assert.equal(chatModelId(), "google/gemini-3-flash");
+  assert.equal(chatModelId(), "google/gemini-2.5-flash");
 });
 
 test("chatDailyLimit: default 30 when unset", () => {
