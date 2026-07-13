@@ -1,7 +1,7 @@
 /**
  * Drizzle schema — the cloud-mode data model.
  *
- * Two tables, designed so that sharing lands later with zero rework:
+ * Three tables, designed so that sharing lands later with zero rework:
  *
  *  - `analyses`        — one row per uploaded analysis.json (metadata only; the
  *                        payload itself lives in Vercel Blob at `blob_key`).
@@ -15,6 +15,8 @@
  *                        "share" feature just inserts more rows with role
  *                        'viewer' and the existing read paths pick them up
  *                        automatically.
+ *  - `tour_progress`   — per-user guided-tour progress (furthest step reached),
+ *                        one row per (analysis, user).
  *
  * `analyses.id` is stored as text (an app-generated v4 UUID) so no Postgres
  * uuid extension is required.
@@ -26,6 +28,7 @@ import {
   timestamp,
   primaryKey,
   index,
+  integer,
 } from "drizzle-orm/pg-core";
 
 export const analyses = pgTable(
@@ -61,6 +64,12 @@ export const analyses = pgTable(
      * link sharing is off; unique so a token maps to at most one analysis.
      */
     shareToken: text("share_token").unique(),
+    /**
+     * Total guided-tour step count, denormalized from `tour.length` at upload so
+     * index cards can show "n steps" without fetching the Blob payload. 0 for
+     * rows written before the column existed (their badge is simply hidden).
+     */
+    tourSteps: integer("tour_steps").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -89,5 +98,27 @@ export const analysisAccess = pgTable(
   (t) => [primaryKey({ columns: [t.analysisId, t.userId] })],
 );
 
+/**
+ * Per-user guided-tour progress, keyed per analysis *version* (a new upload has
+ * a new tour, so progress starts fresh). `furthest_step` is the highest 1-based
+ * step the user has visited; writes only ever raise it (GREATEST upsert in
+ * `@/lib/tour-progress`).
+ */
+export const tourProgress = pgTable(
+  "tour_progress",
+  {
+    analysisId: text("analysis_id")
+      .notNull()
+      .references(() => analyses.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull(),
+    furthestStep: integer("furthest_step").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.analysisId, t.userId] })],
+);
+
 export type AnalysisRow = typeof analyses.$inferSelect;
 export type AnalysisAccessRow = typeof analysisAccess.$inferSelect;
+export type TourProgressRow = typeof tourProgress.$inferSelect;

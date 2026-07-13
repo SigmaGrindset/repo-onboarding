@@ -3,6 +3,7 @@ import { resolveDataSource } from "@/lib/datasource";
 import { isCloudMode } from "@/lib/mode";
 import { compactNumber, formatDate, snippet } from "@/lib/format";
 import { Badge, EmptyState } from "@/components/ui";
+import { TourProgressBadge } from "@/components/TourProgressBadge";
 
 export const dynamic = "force-dynamic";
 
@@ -120,6 +121,13 @@ export default async function IndexPage() {
                           LOC
                         </span>
                       </>
+                    ) : null}
+                    {a.tourSteps > 0 ? (
+                      <TourProgressBadge
+                        analysisId={a.id}
+                        totalSteps={a.tourSteps}
+                        furthest={a.tourFurthest}
+                      />
                     ) : null}
                     {count > 1 ? (
                       <Badge className="border-border bg-surface-2 text-muted">

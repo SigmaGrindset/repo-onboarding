@@ -91,6 +91,7 @@ export async function POST(req: Request) {
         summary: analysis.pitch.summary,
         commitSha: analysis.metadata.commitSha,
         analyzedAt: new Date(analysis.metadata.analyzedAt),
+        tourSteps: analysis.tour.length,
       }),
       db.insert(analysisAccess).values({
         analysisId: id,

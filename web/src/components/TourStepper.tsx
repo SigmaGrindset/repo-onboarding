@@ -1,19 +1,44 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import type { TourStep } from "@schema/analysis";
 import { githubBlobUrl } from "@/lib/github";
+import {
+  readLocalTourProgress,
+  writeLocalTourProgress,
+} from "@/lib/tour-progress-local";
 import { FileChip } from "@/components/ui";
+
+/** Inert subscription for useSyncExternalStore-as-hydration-signal. */
+const noopSubscribe = () => () => {};
 
 export function TourStepper({
   steps,
   initialStep,
+  analysisId,
+  storage,
+  initialFurthest,
+  resumeFromLocal,
   repoUrl,
   commitSha,
 }: {
   steps: TourStep[];
   initialStep: number;
+  /** Route id (`fixture`, `db_…` or `st_…`) — the progress storage key. */
+  analysisId: string;
+  /** Where furthest-step writes go: localStorage, or the per-user DB route. */
+  storage: "local" | "db";
+  /** Server-known furthest step ("db" storage); 0 when unknown/local. */
+  initialFurthest: number;
+  /** Jump to the locally stored furthest step after mount (no explicit ?step=). */
+  resumeFromLocal: boolean;
   repoUrl: string | null;
   commitSha: string | null;
 }) {
@@ -36,6 +61,42 @@ export function TourStepper({
     const n = Number.parseInt(stepParam ?? "", 10);
     if (Number.isFinite(n) && clamp(n) !== current) setCurrent(clamp(n));
   }
+
+  // Resume where the visitor left off: with no explicit ?step= in the URL,
+  // jump to the locally stored furthest step. The server can't read
+  // localStorage — unlike "db" storage, where the page resumes via initialStep
+  // — so this is a one-shot render-time adjustment (same derived-state pattern
+  // as the ?step= follower above) taken on the first post-hydration render,
+  // which is exactly when `hydrated` flips from its server snapshot.
+  const hydrated = useSyncExternalStore(
+    noopSubscribe,
+    () => true,
+    () => false,
+  );
+  const [resumed, setResumed] = useState(!resumeFromLocal);
+  if (hydrated && !resumed) {
+    setResumed(true);
+    const stored = readLocalTourProgress(analysisId, total);
+    if (stored > 1) setCurrent(clamp(stored));
+  }
+
+  // Persist the furthest step reached (monotonic — never lowered). Local mode
+  // writes localStorage; cloud analyses fire-and-forget to the progress route,
+  // whose GREATEST upsert makes late/out-of-order writes harmless.
+  const furthestRef = useRef(initialFurthest);
+  useEffect(() => {
+    if (current <= furthestRef.current) return;
+    furthestRef.current = current;
+    if (storage === "local") {
+      writeLocalTourProgress(analysisId, current);
+    } else {
+      fetch(`/api/analyses/${analysisId}/tour-progress`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ furthestStep: current }),
+      }).catch(() => {});
+    }
+  }, [current, storage, analysisId]);
 
   // Reflect the step in the URL for deep-linking, without scrolling.
   useEffect(() => {

@@ -28,6 +28,14 @@ export interface AnalysisSummary {
   totalLoc: number;
   analyzedAt: string;
   summary: string;
+  /** Guided-tour step count; 0 when the analysis has no tour. */
+  tourSteps: number;
+  /**
+   * Furthest tour step the current user has reached, when the server knows it
+   * (cloud rows). Undefined means the client should read localStorage instead
+   * (local mode / fixtures), so no mode flag needs to travel with the card.
+   */
+  tourFurthest?: number;
 }
 
 /**
@@ -62,6 +70,7 @@ function toSummary(id: string, a: Analysis): AnalysisSummary {
     totalLoc: a.metadata.stats.totalLoc,
     analyzedAt: a.metadata.analyzedAt,
     summary: a.pitch.summary,
+    tourSteps: a.tour.length,
   };
 }
 

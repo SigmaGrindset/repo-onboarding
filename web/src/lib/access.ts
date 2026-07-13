@@ -69,6 +69,8 @@ export interface AccessibleAnalysis {
   repoKey: string;
   summary: string;
   createdAt: Date;
+  /** Guided-tour step count (denormalized at upload; 0 for pre-column rows). */
+  tourSteps: number;
 }
 
 /**
@@ -87,6 +89,7 @@ export async function listAnalysesFor(
       repoKey: analyses.repoKey,
       summary: analyses.summary,
       createdAt: analyses.createdAt,
+      tourSteps: analyses.tourSteps,
     })
     .from(analysisAccess)
     .innerJoin(analyses, eq(analyses.id, analysisAccess.analysisId))
