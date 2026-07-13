@@ -36,6 +36,13 @@
       "when": 1783941245628,
       "tag": "0004_yielding_sabretooth",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1783976779643,
+      "tag": "0005_nosy_firestar",
+      "breakpoints": true
     }
   ]
 }

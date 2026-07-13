@@ -29,6 +29,7 @@ import {
   primaryKey,
   index,
   integer,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 export const analyses = pgTable(
@@ -138,7 +139,55 @@ export const chatQuota = pgTable(
   (t) => [primaryKey({ columns: [t.userId, t.day] })],
 );
 
+/**
+ * Personal API tokens for the publish CLI (cloud mode only).
+ *
+ * A token authenticates a user to the bearer-auth upload endpoint
+ * (`POST /api/v1/analyses`) — it does NOT authorize any analysis read (that is
+ * `analysis_access`'s job). One user may hold many named tokens.
+ *
+ * Only the SHA-256 hash of the plaintext is stored (`token_hash`, uniquely
+ * indexed for the auth lookup); the plaintext `roa_…` string is shown exactly
+ * once at creation and is unrecoverable thereafter. `token_prefix` keeps the
+ * first 12 plaintext chars (e.g. `roa_3f9a02c1`) purely so the UI can help a
+ * user tell their tokens apart — it is not a secret and never used for auth.
+ *
+ * Revocation is a HARD DELETE of the row (see `@/lib/tokens.revokeToken`): there
+ * is no soft-delete / disabled state, so a revoked token can never re-resolve.
+ */
+export const apiTokens = pgTable(
+  "api_tokens",
+  {
+    /** App-generated v4 UUID (stored as text). */
+    id: text("id").primaryKey(),
+    /** Clerk user id of the token owner. */
+    userId: text("user_id").notNull(),
+    /** Human label chosen at creation (e.g. "laptop CLI"). */
+    name: text("name").notNull(),
+    /**
+     * SHA-256 hex of the plaintext token — the only stored form of the secret.
+     * Uniqueness is enforced by `api_tokens_token_hash_idx` below (a unique
+     * index), which also serves the auth lookup.
+     */
+    tokenHash: text("token_hash").notNull(),
+    /** First 12 plaintext chars (`roa_xxxxxxxx`), for display only. */
+    tokenPrefix: text("token_prefix").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    /** Last time this token authenticated a request; null until first use. */
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  },
+  (t) => [
+    // The auth hot path looks a token up by its hash; also enforces uniqueness.
+    uniqueIndex("api_tokens_token_hash_idx").on(t.tokenHash),
+    // Lists a user's tokens for the /account page.
+    index("api_tokens_user_id_idx").on(t.userId),
+  ],
+);
+
 export type AnalysisRow = typeof analyses.$inferSelect;
 export type AnalysisAccessRow = typeof analysisAccess.$inferSelect;
 export type TourProgressRow = typeof tourProgress.$inferSelect;
 export type ChatQuotaRow = typeof chatQuota.$inferSelect;
+export type ApiTokenRow = typeof apiTokens.$inferSelect;

@@ -39,6 +39,9 @@ async function getCloudHandler(): Promise<ProxyFn> {
     "/opengraph-image(.*)",
     "/sign-in(.*)",
     "/sign-up(.*)",
+    // The versioned CLI API authenticates itself with a personal bearer token
+    // (see /api/v1/analyses), so Clerk must NOT 401/redirect it first.
+    "/api/v1(.*)",
     /^\/analysis\/st_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\/.*)?$/i,
   ]);
   cloudHandler = clerkMiddleware(async (auth, req) => {
