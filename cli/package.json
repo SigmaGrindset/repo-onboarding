@@ -1,0 +1,47 @@
+{
+  "name": "repo-onboarding",
+  "version": "0.1.0",
+  "description": "Turn any codebase into an interactive onboarding site — your own AI coding agent does the deep reading, the hosted viewer renders it. BYO-model, $0.",
+  "type": "module",
+  "bin": {
+    "repo-onboarding": "bin/repo-onboarding.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "bin",
+    "src",
+    "vendor",
+    "templates",
+    "README.md"
+  ],
+  "scripts": {
+    "sync": "node scripts/sync.mjs",
+    "test": "node --test test/*.test.mjs",
+    "prepublishOnly": "npm run sync && npm test"
+  },
+  "keywords": [
+    "onboarding",
+    "documentation",
+    "code-analysis",
+    "codebase",
+    "developer-tools",
+    "repo",
+    "ai",
+    "cli"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SigmaGrindset/repo-onboarding.git"
+  },
+  "homepage": "https://repo-onboarding-tau.vercel.app",
+  "bugs": {
+    "url": "https://github.com/SigmaGrindset/repo-onboarding/issues"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1"
+  }
+}
