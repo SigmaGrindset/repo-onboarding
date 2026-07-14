@@ -50,7 +50,11 @@ export default async function IndexPage() {
               <Link href="/upload" className="text-accent hover:underline">
                 Upload
               </Link>{" "}
-              to add another.
+              to add another, or{" "}
+              <Link href="/generate" className="text-accent hover:underline">
+                generate one
+              </Link>{" "}
+              for your own repo.
             </>
           ) : (
             <>
@@ -60,7 +64,11 @@ export default async function IndexPage() {
               </code>{" "}
               — architecture narrative, an interactive dependency graph, a guided
               reading tour, churn hotspots and a setup guide. Pick a codebase to
-              explore.
+              explore, or{" "}
+              <Link href="/generate" className="text-accent hover:underline">
+                generate one
+              </Link>{" "}
+              for your own repo.
             </>
           )}
         </p>

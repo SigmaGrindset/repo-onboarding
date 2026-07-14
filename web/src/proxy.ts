@@ -39,6 +39,8 @@ async function getCloudHandler(): Promise<ProxyFn> {
     "/opengraph-image(.*)",
     "/sign-in(.*)",
     "/sign-up(.*)",
+    // Public pitch for the BYO-model generation flow — informational, no auth.
+    "/generate(.*)",
     // The versioned CLI API authenticates itself with a personal bearer token
     // (see /api/v1/analyses), so Clerk must NOT 401/redirect it first.
     "/api/v1(.*)",

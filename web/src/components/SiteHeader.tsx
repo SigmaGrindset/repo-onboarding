@@ -26,6 +26,12 @@ export function SiteHeader() {
         </Link>
 
         <div className="flex items-center gap-3">
+          <Link
+            href="/generate"
+            className="text-xs font-medium text-muted transition hover:text-text"
+          >
+            Generate
+          </Link>
           {cloud ? (
             <CloudAuthNav />
           ) : (
