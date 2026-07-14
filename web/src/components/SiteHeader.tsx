@@ -5,8 +5,9 @@ import { ThemeToggle } from "./ThemeToggle";
 
 /**
  * Top bar shown on every page. In cloud mode it hosts Clerk sign-in / user
- * controls; in local mode it shows a plain "Upload" link (the upload page
- * explains that cloud mode is not configured) and a mode badge.
+ * controls (see CloudAuthNav); in local mode it shows plain "Generate" and
+ * "Upload" links (the upload page explains that cloud mode is not
+ * configured) and a mode badge.
  */
 export function SiteHeader() {
   const cloud = isCloudMode();
@@ -26,21 +27,23 @@ export function SiteHeader() {
         </Link>
 
         <div className="flex items-center gap-3">
-          <Link
-            href="/generate"
-            className="text-xs font-medium text-muted transition hover:text-text"
-          >
-            Generate
-          </Link>
           {cloud ? (
             <CloudAuthNav />
           ) : (
-            <Link
-              href="/upload"
-              className="text-xs font-medium text-muted transition hover:text-text"
-            >
-              Upload
-            </Link>
+            <>
+              <Link
+                href="/generate"
+                className="text-xs font-medium text-muted transition hover:text-text"
+              >
+                Generate
+              </Link>
+              <Link
+                href="/upload"
+                className="text-xs font-medium text-muted transition hover:text-text"
+              >
+                Upload
+              </Link>
+            </>
           )}
           <ThemeToggle />
         </div>
