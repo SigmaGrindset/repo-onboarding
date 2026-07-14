@@ -15,9 +15,12 @@ import { ChatSession } from "./ChatSession";
 export function ChatPanel({
   analysisId,
   repoName,
+  suggestedQuestions,
 }: {
   analysisId: string;
   repoName: string;
+  /** Per-section starter prompts keyed by section slug ("" = overview). */
+  suggestedQuestions: Record<string, string[]>;
 }) {
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
@@ -68,6 +71,7 @@ export function ChatPanel({
                 <ChatSession
                   analysisId={analysisId}
                   repoName={repoName}
+                  suggestedQuestions={suggestedQuestions}
                   onClose={close}
                 />
               </div>

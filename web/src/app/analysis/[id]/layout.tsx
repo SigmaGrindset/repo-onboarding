@@ -9,6 +9,7 @@ import { StalenessBadge } from "@/components/StalenessBadge";
 import { ShareDialog } from "@/components/ShareDialog";
 import { CommandPalette } from "@/components/CommandPalette";
 import { buildSearchIndex } from "@/lib/search-index";
+import { buildSuggestedQuestions } from "@/lib/suggested-questions";
 import { isCloudMode } from "@/lib/mode";
 import { isCloudId, uuidFromCloudId, isShareId } from "@/lib/ids";
 import { isChatEnabled } from "@/lib/chat/config";
@@ -185,7 +186,11 @@ export default async function AnalysisLayout({
       <main className="min-w-0 flex-1">{children}</main>
 
       {chatAvailable ? (
-        <ChatPanel analysisId={id} repoName={metadata.repoName} />
+        <ChatPanel
+          analysisId={id}
+          repoName={metadata.repoName}
+          suggestedQuestions={buildSuggestedQuestions(analysis)}
+        />
       ) : null}
     </div>
   );

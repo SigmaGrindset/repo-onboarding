@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { ChatMessage } from "./ChatMessage";
@@ -10,12 +11,8 @@ import {
   clearLocalChatHistory,
   capStoredMessages,
 } from "@/lib/chat-history-local";
-
-const EXAMPLE_QUESTIONS = [
-  "What does this repo do?",
-  "Where should I start reading?",
-  "How do I run the tests?",
-];
+import { DEFAULT_QUESTIONS } from "@/lib/suggested-questions";
+import { ANALYSIS_SECTIONS } from "@/lib/sections";
 
 /**
  * The live chat session: transcript, composer and the drawer header. Mounted
@@ -26,13 +23,19 @@ const EXAMPLE_QUESTIONS = [
 export function ChatSession({
   analysisId,
   repoName,
+  suggestedQuestions,
   onClose,
 }: {
   analysisId: string;
   repoName: string;
+  /** Per-section starter prompts keyed by section slug ("" = overview). */
+  suggestedQuestions: Record<string, string[]>;
   onClose: () => void;
 }) {
   const [input, setInput] = useState("");
+  const pathname = usePathname();
+  const starterQuestions =
+    suggestedQuestions[currentSectionSlug(pathname)] ?? DEFAULT_QUESTIONS;
   const listRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -139,7 +142,7 @@ export function ChatSession({
               analysis and, when reachable, the source files.
             </p>
             <div className="flex flex-col items-start gap-2">
-              {EXAMPLE_QUESTIONS.map((q) => (
+              {starterQuestions.map((q) => (
                 <button
                   key={q}
                   type="button"
@@ -204,6 +207,19 @@ export function ChatSession({
       </div>
     </>
   );
+}
+
+/**
+ * Resolve the analysis section for the current route so the empty state can
+ * show that section's starter prompts. Paths look like
+ * `/analysis/{id}` or `/analysis/{id}/{slug}[/...]` — take the segment after
+ * the id and match it against the canonical slugs (so `versions/diff/x`
+ * resolves to `versions`); anything unrecognized falls back to the overview.
+ */
+function currentSectionSlug(pathname: string): string {
+  const segments = pathname.split("/").filter(Boolean);
+  const candidate = segments[2] ?? "";
+  return ANALYSIS_SECTIONS.some((s) => s.slug === candidate) ? candidate : "";
 }
 
 /**
