@@ -79,3 +79,24 @@ export async function setTourProgress(
       },
     });
 }
+
+/**
+ * Forget `userId`'s progress in `analysisId` (the "Reset progress" action).
+ * Deleting the row — rather than zeroing it — is what lets the next
+ * `setTourProgress` land below the old furthest despite the GREATEST upsert.
+ * Idempotent: deleting a missing row is a no-op.
+ */
+export async function resetTourProgress(
+  userId: string,
+  analysisId: string,
+): Promise<void> {
+  if (!userId || !analysisId) return;
+  await getDb()
+    .delete(tourProgress)
+    .where(
+      and(
+        eq(tourProgress.analysisId, analysisId),
+        eq(tourProgress.userId, userId),
+      ),
+    );
+}

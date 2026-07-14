@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   useCallback,
@@ -11,6 +12,7 @@ import {
 import type { TourStep } from "@schema/analysis";
 import { githubBlobUrl } from "@/lib/github";
 import {
+  clearLocalTourProgress,
   readLocalTourProgress,
   writeLocalTourProgress,
 } from "@/lib/tour-progress-local";
@@ -113,8 +115,43 @@ export function TourStepper({
     return () => window.removeEventListener("keydown", onKey);
   }, [clamp]);
 
+  // Reset = back to fresh-visit state. Clearing storage first matters in
+  // local mode: the never-lower guard in writeLocalTourProgress compares
+  // against the *stored* value, so the persist effect's follow-up write of 1
+  // only lands on an empty key. (With total === 1 setCurrent(1) is a no-op and
+  // storage stays empty until the next mount rewrites 1 — same net state.)
+  const [confirmingReset, setConfirmingReset] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [resetError, setResetError] = useState(false);
+  const handleReset = async () => {
+    setResetError(false);
+    if (storage === "local") {
+      clearLocalTourProgress(analysisId);
+    } else {
+      // Await the DELETE so the effect's follow-up POST of furthestStep=1 is
+      // strictly ordered after it; on failure nothing is touched.
+      setResetting(true);
+      try {
+        const res = await fetch(`/api/analyses/${analysisId}/tour-progress`, {
+          method: "DELETE",
+        });
+        if (!res.ok) throw new Error(`reset failed: ${res.status}`);
+      } catch {
+        setResetError(true);
+        return;
+      } finally {
+        setResetting(false);
+      }
+    }
+    furthestRef.current = 0;
+    setConfirmingReset(false);
+    setCurrent(1);
+  };
+
   const step = steps[current - 1];
   if (!step) return null;
+
+  const atEnd = current === total;
 
   return (
     <div className="flex flex-col gap-5 lg:flex-row">
@@ -207,6 +244,62 @@ export function TourStepper({
           </div>
         </div>
 
+        {/* Completion ceremony — reaching the last step is what persists
+            furthest=total (and flips the index badge), so the card keys off
+            the same condition; ?step= deep-links to the end get it too. */}
+        {atEnd && (
+          <div className="tour-complete-pop mt-4 rounded-xl border border-emerald-500/25 bg-emerald-500/8 p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+                  🎉 Tour complete
+                </h3>
+                <p className="mt-1 text-[0.86rem] leading-relaxed text-text">
+                  You&apos;ve walked the whole reading path. Ready to get your
+                  hands dirty? First Tasks has good starting points.
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-3 pt-0.5 text-xs">
+                {confirmingReset ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleReset}
+                      disabled={resetting}
+                      className="font-medium text-red-500 transition hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {resetting ? "Resetting…" : "Confirm reset"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setConfirmingReset(false);
+                        setResetError(false);
+                      }}
+                      className="font-medium text-muted transition hover:text-text"
+                    >
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingReset(true)}
+                    className="font-medium text-muted transition hover:text-red-500"
+                  >
+                    Reset progress
+                  </button>
+                )}
+              </div>
+            </div>
+            {resetError && (
+              <p className="mt-2 text-xs text-red-500">
+                Couldn&apos;t reset — try again.
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Prev / next */}
         <div className="mt-4 flex items-center justify-between gap-3">
           <button
@@ -226,23 +319,43 @@ export function TourStepper({
             </svg>
             Previous
           </button>
-          <button
-            type="button"
-            onClick={() => setCurrent((c) => clamp(c + 1))}
-            disabled={current === total}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3.5 py-2 text-sm font-medium text-accent-fg transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Next
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
-              <path
-                d="M6 3.5 10.5 8 6 12.5"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </button>
+          {/* On the last step the primary action hands off to First Tasks —
+              deliberately skipping Hotspots, the literal next section; the
+              natural move after the tour is "go do something". */}
+          {atEnd ? (
+            <Link
+              href={`/analysis/${analysisId}/tasks`}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3.5 py-2 text-sm font-medium text-accent-fg transition hover:bg-accent-hover"
+            >
+              Continue to First Tasks
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
+                <path
+                  d="M6 3.5 10.5 8 6 12.5"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </Link>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setCurrent((c) => clamp(c + 1))}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3.5 py-2 text-sm font-medium text-accent-fg transition hover:bg-accent-hover"
+            >
+              Next
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
+                <path
+                  d="M6 3.5 10.5 8 6 12.5"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
     </div>

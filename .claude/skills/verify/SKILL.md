@@ -22,5 +22,6 @@ The Next.js app is in `web/` (repo root package.json is only the schema validato
 
 ## Gotchas
 
+- **`npm run build` corrupts a live dev server.** Build and dev share `web/.next`; building while the user's `next dev` runs clobbers state its render workers reference, and the *next* page they open dies with "Jest worker encountered 2 child process exceptions" (happened 2026-07-14). After any build, tell the user their dev server needs a restart (`Ctrl+C`, `npm run dev`; if still broken, delete `.next` first).
 - The long-running user dev server has missed rapid successive file edits before (served an intermediate compile). A real content change to the file forces a recompile; a bare mtime touch does not.
-- Dev server log: `web/.next/dev/logs/next-development.log` (JSON lines).
+- Dev server log: `web/.next/dev/logs/next-development.log` (JSON lines). Its timestamps look like clock times but are **uptime** (elapsed since server start) — correlate with wall clock via the server start time.

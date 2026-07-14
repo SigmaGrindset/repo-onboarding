@@ -1,13 +1,28 @@
 /**
- * Unit tests for the pure part of the tour-progress localStorage helpers.
+ * Unit tests for the tour-progress localStorage helpers.
  *
- * Run with `npm test` (which invokes `tsx --test`). Only `normalizeFurthest`
- * is exercised — the read/write helpers need a real `localStorage`.
+ * Run with `npm test` (which invokes `tsx --test`). `normalizeFurthest` is
+ * pure; the read/write/clear helpers run against a minimal in-memory
+ * `localStorage` stub installed on `globalThis`.
  */
 
-import { test } from "node:test";
+import { beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
-import { normalizeFurthest } from "../tour-progress-local";
+import {
+  clearLocalTourProgress,
+  normalizeFurthest,
+  readLocalTourProgress,
+  writeLocalTourProgress,
+} from "../tour-progress-local";
+
+const store = new Map<string, string>();
+(globalThis as { localStorage?: unknown }).localStorage = {
+  getItem: (key: string) => store.get(key) ?? null,
+  setItem: (key: string, value: string) => void store.set(key, value),
+  removeItem: (key: string) => void store.delete(key),
+};
+
+beforeEach(() => store.clear());
 
 test("normalizeFurthest parses stored strings", () => {
   assert.equal(normalizeFurthest("4", 9), 4);
@@ -42,4 +57,40 @@ test("normalizeFurthest clamps above total", () => {
   // Degenerate totals never yield a negative result.
   assert.equal(normalizeFurthest(3, 0), 0);
   assert.equal(normalizeFurthest(3, -1), 0);
+});
+
+test("write/read round-trip, keyed per analysis", () => {
+  writeLocalTourProgress("a1", 4);
+  assert.equal(readLocalTourProgress("a1", 9), 4);
+  assert.equal(readLocalTourProgress("a2", 9), 0);
+});
+
+test("writeLocalTourProgress never lowers", () => {
+  writeLocalTourProgress("a1", 5);
+  writeLocalTourProgress("a1", 3);
+  assert.equal(readLocalTourProgress("a1", 9), 5);
+});
+
+test("writeLocalTourProgress rejects invalid steps", () => {
+  writeLocalTourProgress("a1", 0);
+  writeLocalTourProgress("a1", -3);
+  writeLocalTourProgress("a1", 2.5);
+  assert.equal(readLocalTourProgress("a1", 9), 0);
+});
+
+test("clearLocalTourProgress removes the key", () => {
+  writeLocalTourProgress("a1", 7);
+  clearLocalTourProgress("a1");
+  assert.equal(readLocalTourProgress("a1", 9), 0);
+});
+
+test("clearLocalTourProgress tolerates a missing key", () => {
+  assert.doesNotThrow(() => clearLocalTourProgress("never-written"));
+});
+
+test("clear then write lands below the old furthest (the reset sequence)", () => {
+  writeLocalTourProgress("a1", 9);
+  clearLocalTourProgress("a1");
+  writeLocalTourProgress("a1", 1);
+  assert.equal(readLocalTourProgress("a1", 9), 1);
 });

@@ -217,6 +217,26 @@ body {
   }
 }
 
+/* Pop-in for the guided tour's completion card */
+.tour-complete-pop {
+  animation: tour-complete-pop 0.4s ease-out;
+}
+@keyframes tour-complete-pop {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tour-complete-pop {
+    animation: none;
+  }
+}
+
 /* Mermaid diagrams should scale to their container */
 .mermaid-host svg {
   max-width: 100%;

@@ -60,3 +60,14 @@ export function writeLocalTourProgress(analysisId: string, step: number): void {
     localStorage.setItem(key, String(step));
   } catch {}
 }
+
+/**
+ * Forget the stored progress for `analysisId` (the "Reset progress" action).
+ * Clearing first is what lets a subsequent `writeLocalTourProgress` land below
+ * the old furthest — the never-lower guard compares against the stored value.
+ */
+export function clearLocalTourProgress(analysisId: string): void {
+  try {
+    localStorage.removeItem(storageKey(analysisId));
+  } catch {}
+}

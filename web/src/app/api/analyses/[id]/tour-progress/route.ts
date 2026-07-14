@@ -2,14 +2,17 @@ import { NextResponse } from "next/server";
 import { isCloudMode } from "@/lib/mode";
 
 /**
- * POST /api/analyses/[id]/tour-progress — record the furthest guided-tour step
- * the signed-in user has reached (cloud mode, `db_` ids only; every other id
- * persists to localStorage client-side and never calls this).
+ * Guided-tour progress for the signed-in user (cloud mode, `db_` ids only;
+ * every other id persists to localStorage client-side and never calls this).
+ *
+ * POST — record the furthest step reached. The write is a monotonic GREATEST
+ * upsert, so replays and out-of-order requests can never lower progress.
+ * DELETE — reset progress by removing the row (the only way down, given the
+ * GREATEST upsert). Idempotent.
  *
  * Guard ladder mirrors the sibling routes: cloud-mode 503 → id 404 → auth 401
- * → access 403. Gated on read access (not ownership) — viewers take tours too.
- * The write is a monotonic GREATEST upsert, so replays and out-of-order
- * requests can never lower progress.
+ * → access 403. Gated on read access (not ownership) — viewers take tours too,
+ * and progress rows are self-scoped by userId.
  */
 
 export const runtime = "nodejs";
@@ -71,6 +74,44 @@ export async function POST(
 
   const { setTourProgress } = await import("@/lib/tour-progress");
   await setTourProgress(userId, uuid, furthestStep);
+
+  return NextResponse.json({ ok: true });
+}
+
+export async function DELETE(
+  _req: Request,
+  ctx: { params: Promise<{ id: string }> },
+) {
+  if (!isCloudMode()) {
+    return NextResponse.json(
+      { error: "Cloud mode is not configured." },
+      { status: 503 },
+    );
+  }
+
+  const { id } = await ctx.params;
+  const { uuidFromCloudId } = await import("@/lib/ids");
+  const uuid = uuidFromCloudId(id);
+  if (!uuid) {
+    return NextResponse.json({ error: "Not found." }, { status: 404 });
+  }
+
+  const { auth } = await import("@clerk/nextjs/server");
+  const { userId } = await auth();
+  if (!userId) {
+    return NextResponse.json({ error: "Sign in." }, { status: 401 });
+  }
+
+  const { canReadAnalysis } = await import("@/lib/access");
+  if (!(await canReadAnalysis(userId, uuid))) {
+    return NextResponse.json(
+      { error: "You do not have access to this analysis." },
+      { status: 403 },
+    );
+  }
+
+  const { resetTourProgress } = await import("@/lib/tour-progress");
+  await resetTourProgress(userId, uuid);
 
   return NextResponse.json({ ok: true });
 }
