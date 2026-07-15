@@ -13,6 +13,7 @@ import { CliError } from "../src/util.mjs";
 import { runInit } from "../src/init.mjs";
 import { runPrepass } from "../src/prepass.mjs";
 import { runValidate } from "../src/validate.mjs";
+import { runExport } from "../src/export.mjs";
 import { runUpload } from "../src/upload.mjs";
 
 const USAGE = `repo-onboarding <command> [options]
@@ -28,6 +29,8 @@ Commands:
                               [--out <file>] [--commits <n>] [--pretty]
   validate <file> [--json]    Validate an analysis.json against the schema and
                               dependency-graph edge integrity.
+  export [file] [options]     Render a committable ONBOARDING.md from an
+                              analysis.json. [--out <file>] [--force]
   upload <file> [options]     Publish a validated analysis.json to the viewer.
                               [--api <base>] [--token <token>]
 
@@ -53,6 +56,8 @@ async function dispatch(argv) {
       return runPrepass(rest);
     case "validate":
       return runValidate(rest);
+    case "export":
+      return runExport(rest);
     case "upload":
       return runUpload(rest);
     case "-v":

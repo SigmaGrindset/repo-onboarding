@@ -32,7 +32,7 @@ const USAGE =
  * understands, so the operator knows their tooling may be behind.
  * @param {unknown} doc
  */
-function warnIfNewerSchema(doc) {
+export function warnIfNewerSchema(doc) {
   const version = doc && typeof doc === "object" ? doc.schemaVersion : undefined;
   if (
     typeof version === "string" &&

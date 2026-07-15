@@ -28,7 +28,10 @@ npx repo-onboarding init
 # 3. Validate what it produced (schema + dependency-graph edge integrity).
 npx repo-onboarding validate analysis.json
 
-# 4. Publish it to the hosted viewer.
+# 4. Optionally, render a committable ONBOARDING.md for your repo.
+npx repo-onboarding export analysis.json
+
+# 5. Publish it to the hosted viewer.
 npx repo-onboarding upload analysis.json
 ```
 
@@ -39,6 +42,7 @@ npx repo-onboarding upload analysis.json
 | `repo-onboarding init [path]` | Prepare a repo for analysis (default path: `.`). Writes `.repo-onboarding/`. Also the default when run with no command. |
 | `repo-onboarding prepass <path> [--out <file>] [--commits <n>] [--pretty]` | Run only the deterministic facts pre-pass and print JSON. |
 | `repo-onboarding validate <file> [--json]` | Validate an `analysis.json` against the schema and edge integrity. `--json` prints `{ valid, issues }`. |
+| `repo-onboarding export [file] [--out <file>] [--force]` | Render a committable `ONBOARDING.md` from an `analysis.json` via pure templating (default file: `analysis.json`, default output: `ONBOARDING.md`). `--out -` writes to stdout. |
 | `repo-onboarding upload <file> [--api <base>] [--token <token>]` | Validate locally, then publish to the hosted viewer. |
 | `repo-onboarding --help` / `--version` | Usage / version. |
 

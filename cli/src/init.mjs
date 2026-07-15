@@ -157,7 +157,10 @@ export function runInit(args) {
   out.push("  2. Validate what it produced:");
   out.push("       npx repo-onboarding validate analysis.json");
   out.push("");
-  out.push(`  3. Get an upload token at ${SITE_URL}/account, then publish:`);
+  out.push("  3. (Optional) Render a committable ONBOARDING.md for your repo:");
+  out.push("       npx repo-onboarding export analysis.json");
+  out.push("");
+  out.push(`  4. Get an upload token at ${SITE_URL}/account, then publish:`);
   out.push(`       # set ${TOKEN_ENV} to your roa_... token, then:`);
   out.push("       npx repo-onboarding upload analysis.json");
   out.push("");

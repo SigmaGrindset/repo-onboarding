@@ -172,6 +172,29 @@ export default async function AnalysisLayout({
             ) : null}
           </div>
 
+          <a
+            href={`/api/analyses/${id}/markdown`}
+            download
+            className="mb-5 inline-flex items-center gap-1.5 text-[0.7rem] font-medium text-accent transition hover:underline"
+          >
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 16 16"
+              fill="none"
+              aria-hidden
+            >
+              <path
+                d="M8 2.5v7m0 0L5 6.5m3 3 3-3M3 12.5h10"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            Download ONBOARDING.md
+          </a>
+
           {canShare ? <ShareDialog analysisId={id} /> : null}
 
           <CommandPalette

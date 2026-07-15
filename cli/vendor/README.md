@@ -10,3 +10,4 @@ repo-onboarding monorepo. Do not edit them here. Edit the source and run
 | `edges-check.mjs` | `.claude/skills/onboard/edges-check.mjs` |
 | `analysis.schema.json` | `schema/analysis.schema.json` |
 | `validate-core.mjs` | `schema/validate-core.mjs` |
+| `export-markdown.mjs` | `schema/export-markdown.mjs` |

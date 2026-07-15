@@ -115,6 +115,21 @@ export default function GeneratePage() {
           />
         </ol>
 
+        {/* Optional: committable Markdown export */}
+        <Card className="mt-8 p-5">
+          <p className="text-sm font-semibold text-text">
+            Optional: commit an ONBOARDING.md
+          </p>
+          <p className="mt-1 mb-3 text-sm leading-relaxed text-muted">
+            Want the guide to live in the repo too? <Code>export</Code> renders
+            a validated <Code>analysis.json</Code> to a single committable{" "}
+            <Code>ONBOARDING.md</Code> — the same content the hosted viewer
+            shows, minus the interactivity. Purely optional; publishing below is
+            the main path.
+          </p>
+          <CommandBlock command="npx repo-onboarding export analysis.json > ONBOARDING.md" />
+        </Card>
+
         {/* Browser alternative */}
         <Card className="mt-8 p-5">
           <p className="text-sm font-semibold text-text">Prefer the browser?</p>

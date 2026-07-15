@@ -45,6 +45,10 @@ async function getCloudHandler(): Promise<ProxyFn> {
     // (see /api/v1/analyses), so Clerk must NOT 401/redirect it first.
     "/api/v1(.*)",
     /^\/analysis\/st_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\/.*)?$/i,
+    // Markdown download for unlisted-link visitors: the st_ token in the path
+    // is the capability (re-checked by the analysis fetch), so Clerk must not
+    // redirect it to sign-in.
+    /^\/api\/analyses\/st_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/markdown$/i,
   ]);
   cloudHandler = clerkMiddleware(async (auth, req) => {
     if (!isPublic(req)) {

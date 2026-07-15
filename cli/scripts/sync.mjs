@@ -30,6 +30,7 @@ export const VENDOR_MAP = [
   { source: ".claude/skills/onboard/edges-check.mjs", vendored: "edges-check.mjs" },
   { source: "schema/analysis.schema.json", vendored: "analysis.schema.json" },
   { source: "schema/validate-core.mjs", vendored: "validate-core.mjs" },
+  { source: "schema/export-markdown.mjs", vendored: "export-markdown.mjs" },
 ];
 
 function generateReadme() {
