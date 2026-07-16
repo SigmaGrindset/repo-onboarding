@@ -69,6 +69,7 @@ export function DependencyGraph({ data }: { data: DependencyGraphData }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [hoverKind, setHoverKind] = useState<GraphNodeKind | null>(null);
+  const [mobileGraphOpen, setMobileGraphOpen] = useState(false);
 
   // Adjacency for neighbourhood highlighting.
   const adjacency = useMemo(() => {
@@ -298,9 +299,38 @@ export function DependencyGraph({ data }: { data: DependencyGraphData }) {
 
   return (
     <div className="relative flex flex-col gap-3 lg:flex-row">
+      <button
+        type="button"
+        aria-label={mobileGraphOpen ? "Hide visual graph" : "Show visual graph"}
+        aria-expanded={mobileGraphOpen}
+        aria-controls="dependency-graph-visual"
+        onClick={() => setMobileGraphOpen((open) => !open)}
+        className="flex w-full items-center gap-3 rounded-xl border border-border bg-surface p-4 text-left transition hover:border-border-strong lg:hidden"
+      >
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent">
+          <GraphIcon />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-text">
+            Visual graph
+          </span>
+          <span className="mt-0.5 block text-xs text-muted">
+            {mobileGraphOpen
+              ? "Hide the interactive view"
+              : "Open the interactive force-directed view"}
+          </span>
+        </span>
+        <span
+          className={`text-faint transition-transform ${mobileGraphOpen ? "rotate-180" : ""}`}
+        >
+          <ChevronDownIcon />
+        </span>
+      </button>
+
       <div
+        id="dependency-graph-visual"
         ref={containerRef}
-        className="relative h-[560px] flex-1 overflow-hidden rounded-xl border border-border bg-surface"
+        className={`${mobileGraphOpen ? "block" : "hidden"} relative h-[70dvh] max-h-[560px] min-h-[420px] flex-none overflow-hidden rounded-xl border border-border bg-surface lg:block lg:h-[560px] lg:max-h-none lg:min-h-0 lg:flex-1`}
       >
         {/* Controls */}
         <div className="absolute right-3 top-3 z-10 flex flex-col gap-1">
@@ -448,8 +478,15 @@ export function DependencyGraph({ data }: { data: DependencyGraphData }) {
         </svg>
       </div>
 
+      <MobileNodeList
+        nodes={data.nodes}
+        adjacency={adjacency}
+        selectedId={selectedId}
+        onSelect={(id) => setSelectedId((current) => (current === id ? null : id))}
+      />
+
       {/* Side rail: details + legend */}
-      <div className="flex w-full shrink-0 flex-col gap-3 lg:w-72">
+      <div className="hidden w-full shrink-0 flex-col gap-3 lg:flex lg:w-72">
         {selectedNode ? (
           <NodeDetails node={selectedNode} onClose={() => setSelectedId(null)} />
         ) : null}
@@ -492,6 +529,100 @@ export function DependencyGraph({ data }: { data: DependencyGraphData }) {
   );
 }
 
+function MobileNodeList({
+  nodes,
+  adjacency,
+  selectedId,
+  onSelect,
+}: {
+  nodes: GraphNode[];
+  adjacency: Map<string, Set<string>>;
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <section
+      aria-labelledby="dependency-graph-node-list-title"
+      className="overflow-hidden rounded-xl border border-border bg-surface lg:hidden"
+    >
+      <div className="flex items-baseline justify-between gap-3 border-b border-border px-4 py-3.5">
+        <h2
+          id="dependency-graph-node-list-title"
+          className="text-sm font-semibold text-text"
+        >
+          Nodes
+        </h2>
+        <span className="text-xs tabular-nums text-faint">
+          {nodes.length} total
+        </span>
+      </div>
+      <ul className="divide-y divide-border">
+        {nodes.map((node, index) => {
+          const style = kindStyle(node.kind);
+          const selected = node.id === selectedId;
+          const detailsId = `dependency-node-details-${index}`;
+          const connections = adjacency.get(node.id)?.size ?? 0;
+          return (
+            <li key={node.id}>
+              <button
+                type="button"
+                aria-expanded={selected}
+                aria-controls={detailsId}
+                onClick={() => onSelect(node.id)}
+                className={`flex w-full items-start gap-3 px-4 py-3 text-left transition ${
+                  selected ? "bg-surface-2" : "hover:bg-surface-2"
+                }`}
+              >
+                <span
+                  className="mt-1.5 h-3 w-3 shrink-0 rounded-full"
+                  style={{ background: style.color }}
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-start justify-between gap-3">
+                    <span className="min-w-0 break-words text-sm font-medium text-text">
+                      {node.label}
+                    </span>
+                    <Badge className={`${style.className} shrink-0`}>
+                      {style.label}
+                    </Badge>
+                  </span>
+                  {node.path ? (
+                    <span className="mt-1 block break-all font-mono text-[0.7rem] leading-relaxed text-accent">
+                      {node.path}
+                    </span>
+                  ) : null}
+                </span>
+                <span
+                  className={`mt-1 shrink-0 text-faint transition-transform ${selected ? "rotate-180" : ""}`}
+                >
+                  <ChevronDownIcon />
+                </span>
+              </button>
+              {selected ? (
+                <div
+                  id={detailsId}
+                  className="border-t border-border bg-surface-2 px-10 py-3"
+                >
+                  {node.description ? (
+                    <p className="text-[0.82rem] leading-relaxed text-muted">
+                      {node.description}
+                    </p>
+                  ) : null}
+                  <p
+                    className={`${node.description ? "mt-2" : ""} text-xs text-faint`}
+                  >
+                    {connections} {connections === 1 ? "connection" : "connections"}
+                  </p>
+                </div>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 function GraphButton({
   children,
   label,
@@ -511,6 +642,35 @@ function GraphButton({
     >
       {children}
     </button>
+  );
+}
+
+function GraphIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+      <path
+        d="m5 5 8 2M5.5 13l7-4.5M4.5 6.5v5"
+        stroke="currentColor"
+        strokeWidth="1.3"
+      />
+      <circle cx="4" cy="4.5" r="2" stroke="currentColor" strokeWidth="1.3" />
+      <circle cx="14" cy="7.5" r="2" stroke="currentColor" strokeWidth="1.3" />
+      <circle cx="4.5" cy="13.5" r="2" stroke="currentColor" strokeWidth="1.3" />
+    </svg>
+  );
+}
+
+function ChevronDownIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden>
+      <path
+        d="m4 6 4 4 4-4"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 
