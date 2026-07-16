@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ANALYSIS_SECTIONS } from "@/lib/sections";
 
 const ICONS: Record<string, ReactNode> = {
@@ -20,39 +20,135 @@ const ICONS: Record<string, ReactNode> = {
 export function SectionNav({ id }: { id: string }) {
   const pathname = usePathname();
   const base = `/analysis/${id}`;
+  const navRef = useRef<HTMLElement>(null);
+  const activeLinkRef = useRef<HTMLAnchorElement>(null);
+  const [scrollEdges, setScrollEdges] = useState({ left: false, right: false });
+
+  const updateScrollEdges = useCallback(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+
+    const maxScrollLeft = Math.max(0, nav.scrollWidth - nav.clientWidth);
+    const next = {
+      left: nav.scrollLeft > 1,
+      right: nav.scrollLeft < maxScrollLeft - 1,
+    };
+    setScrollEdges((current) =>
+      current.left === next.left && current.right === next.right ? current : next,
+    );
+  }, []);
+
+  const scrollLinkIntoView = useCallback(
+    (link: HTMLAnchorElement, behavior: ScrollBehavior) => {
+      const nav = navRef.current;
+      if (!nav || nav.scrollWidth <= nav.clientWidth) {
+        updateScrollEdges();
+        return;
+      }
+
+      const maxScrollLeft = nav.scrollWidth - nav.clientWidth;
+      const centeredLeft = link.offsetLeft - (nav.clientWidth - link.offsetWidth) / 2;
+      nav.scrollTo({
+        left: Math.min(maxScrollLeft, Math.max(0, centeredLeft)),
+        behavior,
+      });
+    },
+    [updateScrollEdges],
+  );
+
+  const preferredScrollBehavior = useCallback((): ScrollBehavior => {
+    const reduceMotion =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    return reduceMotion ? "auto" : "smooth";
+  }, []);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      if (activeLinkRef.current) {
+        scrollLinkIntoView(activeLinkRef.current, preferredScrollBehavior());
+      }
+      updateScrollEdges();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [pathname, preferredScrollBehavior, scrollLinkIntoView, updateScrollEdges]);
+
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+
+    const handleResize = () => {
+      if (activeLinkRef.current) {
+        scrollLinkIntoView(activeLinkRef.current, "auto");
+      }
+      updateScrollEdges();
+    };
+    nav.addEventListener("scroll", updateScrollEdges, { passive: true });
+    window.addEventListener("resize", handleResize);
+    updateScrollEdges();
+
+    return () => {
+      nav.removeEventListener("scroll", updateScrollEdges);
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [scrollLinkIntoView, updateScrollEdges]);
 
   return (
-    <nav
-      aria-label="Analysis sections"
-      className="flex gap-1.5 overflow-x-auto pb-1 lg:flex-col lg:gap-0.5 lg:overflow-visible lg:pb-0"
-    >
-      {ANALYSIS_SECTIONS.map((s) => {
-        const href = s.slug ? `${base}/${s.slug}` : base;
-        const active =
-          s.slug === ""
-            ? pathname === base
-            : pathname === href || pathname.startsWith(`${href}/`);
-        return (
-          <Link
-            key={s.slug || "overview"}
-            href={href}
-            aria-current={active ? "page" : undefined}
-            className={`flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition ${
-              active
-                ? "bg-accent-soft text-accent"
-                : "text-muted hover:bg-surface-2 hover:text-text"
-            }`}
-          >
-            <span
-              className={`shrink-0 ${active ? "text-accent" : "text-faint"}`}
+    <div className="relative min-w-0">
+      <nav
+        ref={navRef}
+        aria-label="Analysis sections"
+        className="flex gap-1.5 overflow-x-auto px-1 pb-1 lg:flex-col lg:gap-0.5 lg:overflow-visible lg:px-0 lg:pb-0"
+      >
+        {ANALYSIS_SECTIONS.map((s) => {
+          const href = s.slug ? `${base}/${s.slug}` : base;
+          const active =
+            s.slug === ""
+              ? pathname === base
+              : pathname === href || pathname.startsWith(`${href}/`);
+          return (
+            <Link
+              ref={active ? activeLinkRef : undefined}
+              key={s.slug || "overview"}
+              href={href}
+              aria-current={active ? "page" : undefined}
+              onFocus={(event) =>
+                scrollLinkIntoView(event.currentTarget, preferredScrollBehavior())
+              }
+              className={`flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition ${
+                active
+                  ? "bg-accent-soft text-accent"
+                  : "text-muted hover:bg-surface-2 hover:text-text"
+              }`}
             >
-              {ICONS[s.slug]}
-            </span>
-            <span className="whitespace-nowrap">{s.label}</span>
-          </Link>
-        );
-      })}
-    </nav>
+              <span
+                className={`shrink-0 ${active ? "text-accent" : "text-faint"}`}
+              >
+                {ICONS[s.slug]}
+              </span>
+              <span className="whitespace-nowrap">{s.label}</span>
+            </Link>
+          );
+        })}
+      </nav>
+
+      <span
+        aria-hidden
+        data-scroll-edge="left"
+        data-visible={scrollEdges.left}
+        className={`pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-gradient-to-r from-bg to-transparent transition-opacity lg:hidden ${
+          scrollEdges.left ? "opacity-100" : "opacity-0"
+        }`}
+      />
+      <span
+        aria-hidden
+        data-scroll-edge="right"
+        data-visible={scrollEdges.right}
+        className={`pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-bg to-transparent transition-opacity lg:hidden ${
+          scrollEdges.right ? "opacity-100" : "opacity-0"
+        }`}
+      />
+    </div>
   );
 }
 

@@ -19,3 +19,31 @@ for (const route of CORE_ROUTES) {
     expect(errors).toEqual([]);
   });
 }
+
+test("mobile section nav reveals a late active tab", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile", "Mobile navigation behavior only");
+
+  const path = "/analysis/sample/tasks";
+  await page.goto(path);
+  await waitForPageReady(page, path);
+
+  const nav = page.getByRole("navigation", { name: "Analysis sections" });
+  const activeLink = nav.locator('[aria-current="page"]');
+  await expect(activeLink).toHaveText("First Tasks");
+  await expect
+    .poll(async () => {
+      const navBox = await nav.boundingBox();
+      const linkBox = await activeLink.boundingBox();
+      if (!navBox || !linkBox) return false;
+      return (
+        linkBox.x >= navBox.x &&
+        linkBox.x + linkBox.width <= navBox.x + navBox.width
+      );
+    })
+    .toBe(true);
+
+  await expect(page.locator('[data-scroll-edge="left"]')).toHaveAttribute(
+    "data-visible",
+    "true",
+  );
+});
