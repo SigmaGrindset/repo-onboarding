@@ -1,6 +1,6 @@
 {
   "name": "repo-onboarding",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Turn any codebase into an interactive onboarding site — your own AI coding agent does the deep reading, the hosted viewer renders it. BYO-model, $0.",
   "type": "module",
   "bin": {

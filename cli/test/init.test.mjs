@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import { join, basename } from "node:path";
 
 import { runCli } from "./helpers.mjs";
+import { ANALYZER_VERSION } from "../src/constants.mjs";
 
 test("init builds a working .repo-onboarding/ from a tiny fixture repo", async () => {
   const dir = mkdtempSync(join(tmpdir(), "roi-init-"));
@@ -52,7 +53,7 @@ test("init builds a working .repo-onboarding/ from a tiny fixture repo", async (
       "validate command rendered into PROMPT",
     );
     assert.ok(
-      prompt.includes("repo-onboarding/0.1.0"),
+      prompt.includes(ANALYZER_VERSION),
       "analyzerVersion rendered into PROMPT",
     );
 
