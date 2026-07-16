@@ -34,6 +34,7 @@ export function Mermaid({ source, title }: { source: string; title?: string }) {
   const [svg, setSvg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [renderAttempt, setRenderAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -73,6 +74,7 @@ export function Mermaid({ source, title }: { source: string; title?: string }) {
         }
       } catch (e) {
         if (cancelled) return;
+        setSvg(null);
         setError(e instanceof Error ? e.message : "Failed to render diagram");
       }
     }
@@ -98,15 +100,28 @@ export function Mermaid({ source, title }: { source: string; title?: string }) {
       cancelled = true;
       observer.disconnect();
     };
-  }, [source]);
+  }, [source, renderAttempt]);
 
   if (error) {
     return (
-      <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
-        <p className="mb-2 text-xs font-medium text-amber-600 dark:text-amber-400">
+      <div role="alert" className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs font-medium text-amber-800 dark:text-amber-300">
           Could not render this diagram — showing its source instead.
           <span className="ml-1 font-normal text-faint">({error})</span>
         </p>
+          <button
+            type="button"
+            onClick={() => {
+              setSvg(null);
+              setError(null);
+              setRenderAttempt((attempt) => attempt + 1);
+            }}
+            className="rounded-md border border-amber-500/30 px-2.5 py-1 text-xs font-medium text-amber-700 transition hover:border-amber-500/60 dark:text-amber-300"
+          >
+            Retry rendering
+          </button>
+        </div>
         <pre className="overflow-x-auto rounded-md bg-surface-2 p-3 font-mono text-xs leading-relaxed text-muted">
           <code>{source}</code>
         </pre>
@@ -132,10 +147,10 @@ export function Mermaid({ source, title }: { source: string; title?: string }) {
       >
         <div className="mermaid-host flex justify-center overflow-x-auto">
           {svg ? (
-            <div aria-label="diagram" dangerouslySetInnerHTML={{ __html: svg }} />
+            <div role="img" aria-label={title ?? "Diagram"} dangerouslySetInnerHTML={{ __html: svg }} />
           ) : (
-            <div className="flex items-center gap-2 py-8 text-sm text-faint">
-              <span className="h-3 w-3 animate-spin rounded-full border-2 border-border border-t-accent" />
+            <div role="status" className="flex items-center gap-2 py-8 text-sm text-faint">
+              <span aria-hidden className="h-3 w-3 motion-safe:animate-spin rounded-full border-2 border-border border-t-accent" />
               Rendering diagram…
             </div>
           )}

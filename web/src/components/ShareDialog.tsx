@@ -67,32 +67,38 @@ function ShareOverlay({
   const [email, setEmail] = useState("");
   const [addBusy, setAddBusy] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const base = `/api/analyses/${analysisId}`;
 
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const res = await fetch(`${base}/shares`);
-        const data = await res.json().catch(() => ({}));
-        if (!alive) return;
-        if (!res.ok) {
-          setLoadError(data.error ?? `Failed to load sharing (HTTP ${res.status}).`);
-        } else {
-          setViewers(Array.isArray(data.viewers) ? data.viewers : []);
-          setShareToken(data.shareToken ?? null);
-        }
-      } catch {
-        if (alive) setLoadError("Failed to load sharing.");
-      } finally {
-        if (alive) setLoading(false);
+  const loadShares = useCallback(async (signal?: AbortSignal) => {
+    try {
+      const res = await fetch(`${base}/shares`, { signal });
+      const data = await res.json().catch(() => ({}));
+      if (signal?.aborted) return;
+      if (!res.ok) {
+        setLoadError(data.error ?? `Failed to load sharing (HTTP ${res.status}).`);
+      } else {
+        setViewers(Array.isArray(data.viewers) ? data.viewers : []);
+        setShareToken(data.shareToken ?? null);
       }
-    })();
-    return () => {
-      alive = false;
-    };
+    } catch {
+      if (!signal?.aborted) {
+        setLoadError("Failed to load sharing. Check your connection and try again.");
+      }
+    } finally {
+      if (!signal?.aborted) setLoading(false);
+    }
   }, [base]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => void loadShares(controller.signal), 0);
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [loadShares]);
 
   // Close on Escape.
   useEffect(() => {
@@ -105,10 +111,14 @@ function ShareOverlay({
 
   const createLink = useCallback(async () => {
     setLinkBusy(true);
+    setActionError(null);
     try {
       const res = await fetch(`${base}/share-link`, { method: "POST" });
       const data = await res.json().catch(() => ({}));
-      if (res.ok) setShareToken(data.shareToken ?? null);
+      if (!res.ok) throw new Error(data.error ?? `Couldn't create a link (HTTP ${res.status}).`);
+      setShareToken(data.shareToken ?? null);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "Couldn't create a link. Try again.");
     } finally {
       setLinkBusy(false);
     }
@@ -116,12 +126,15 @@ function ShareOverlay({
 
   const revokeLink = useCallback(async () => {
     setLinkBusy(true);
+    setActionError(null);
     try {
       const res = await fetch(`${base}/share-link`, { method: "DELETE" });
-      if (res.ok) {
-        setShareToken(null);
-        setCopied(false);
-      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? `Couldn't revoke the link (HTTP ${res.status}).`);
+      setShareToken(null);
+      setCopied(false);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "Couldn't revoke the link. Try again.");
     } finally {
       setLinkBusy(false);
     }
@@ -137,9 +150,10 @@ function ShareOverlay({
     try {
       await navigator.clipboard.writeText(shareUrl);
       setCopied(true);
+      setActionError(null);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      /* clipboard unavailable — ignore */
+      setActionError("Couldn't copy the link. Select it and copy it manually.");
     }
   }, [shareUrl]);
 
@@ -178,9 +192,14 @@ function ShareOverlay({
 
   const removeViewer = useCallback(
     async (userId: string) => {
-      const res = await fetch(`${base}/shares/${userId}`, { method: "DELETE" });
-      if (res.ok) {
+      setActionError(null);
+      try {
+        const res = await fetch(`${base}/shares/${userId}`, { method: "DELETE" });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error ?? `Couldn't remove access (HTTP ${res.status}).`);
         setViewers((prev) => prev.filter((v) => v.userId !== userId));
+      } catch (error) {
+        setActionError(error instanceof Error ? error.message : "Couldn't remove access. Try again.");
       }
     },
     [base],
@@ -222,11 +241,31 @@ function ShareOverlay({
         </div>
 
         {loading ? (
-          <p className="text-sm text-muted">Loading…</p>
+          <p role="status" className="text-sm text-muted">
+            Loading sharing settings…
+          </p>
         ) : loadError ? (
-          <p className="text-sm text-red-500">{loadError}</p>
+          <div role="alert" className="rounded-lg border border-red-500/30 bg-red-500/5 p-3">
+            <p className="text-sm text-red-500">{loadError}</p>
+            <button
+              type="button"
+              onClick={() => {
+                setLoading(true);
+                setLoadError(null);
+                void loadShares();
+              }}
+              className="mt-3 rounded-md border border-red-500/30 px-3 py-1.5 text-xs font-medium text-red-500 transition hover:border-red-500/60"
+            >
+              Try again
+            </button>
+          </div>
         ) : (
           <div className="space-y-6">
+            {actionError ? (
+              <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2 text-xs text-red-500">
+                {actionError}
+              </p>
+            ) : null}
             {/* Unlisted link */}
             <section>
               <h3 className="text-sm font-semibold text-text">Unlisted link</h3>
@@ -295,7 +334,7 @@ function ShareOverlay({
                 </button>
               </form>
               {addError ? (
-                <p className="mt-2 text-xs text-red-500">{addError}</p>
+                <p role="alert" className="mt-2 text-xs text-red-500">{addError}</p>
               ) : null}
 
               {viewers.length > 0 ? (

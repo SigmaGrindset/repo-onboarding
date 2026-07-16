@@ -45,7 +45,7 @@ export default async function SetupPage({
                   viewBox="0 0 16 16"
                   fill="none"
                   aria-hidden
-                  className="mt-0.5 shrink-0 text-emerald-500"
+                  className="mt-0.5 shrink-0 text-emerald-700 dark:text-emerald-300"
                 >
                   <circle
                     cx="8"

@@ -2,6 +2,7 @@ node_modules/
 # Analyses of private repos stay local-only (viewer picks them up from data/ regardless)
 data/fer-mentor/
 .next/
+.next-local/
 out/
 dist/
 .env
@@ -9,3 +10,5 @@ dist/
 .vercel/
 *.tsbuildinfo
 .DS_Store
+web/playwright-report/
+web/test-results/

@@ -39,7 +39,7 @@ export function TourProgressBadge({
     <Badge
       className={
         complete
-          ? "border-emerald-500/25 bg-emerald-500/8 text-emerald-600 dark:text-emerald-400"
+      ? "border-emerald-500/25 bg-emerald-500/8 text-emerald-700 dark:text-emerald-300"
           : "border-border bg-surface-2 text-muted"
       }
     >

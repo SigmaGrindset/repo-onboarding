@@ -39,7 +39,16 @@ export function ChatSession({
   const listRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const { messages, sendMessage, status, error, stop, setMessages } = useChat({
+  const {
+    messages,
+    sendMessage,
+    status,
+    error,
+    stop,
+    setMessages,
+    clearError,
+    regenerate,
+  } = useChat({
     id: analysisId,
     transport: new DefaultChatTransport({
       api: `/api/analyses/${analysisId}/chat`,
@@ -166,8 +175,20 @@ export function ChatSession({
         ) : null}
 
         {errorMessage ? (
-          <div className="rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2 text-xs text-red-500">
-            {errorMessage}
+          <div role="alert" className="rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2 text-xs text-red-500">
+            <p>{errorMessage}</p>
+            {messages.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => {
+                  clearError();
+                  void regenerate();
+                }}
+                className="mt-2 rounded-md border border-red-500/30 px-2.5 py-1 font-medium transition hover:border-red-500/60"
+              >
+                Retry answer
+              </button>
+            ) : null}
           </div>
         ) : null}
       </div>

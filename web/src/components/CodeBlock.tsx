@@ -30,7 +30,11 @@ export function CodeBlock({
         </div>
       ) : null}
       <div className="flex items-start justify-between gap-3">
-        <pre className="min-w-0 flex-1 overflow-x-auto px-3.5 py-2.5 font-mono text-[0.82rem] leading-relaxed text-text">
+        <pre
+          tabIndex={0}
+          aria-label={label ?? "Command"}
+          className="min-w-0 flex-1 overflow-x-auto px-3.5 py-2.5 font-mono text-[0.82rem] leading-relaxed text-text"
+        >
           <code>{code}</code>
         </pre>
         <button

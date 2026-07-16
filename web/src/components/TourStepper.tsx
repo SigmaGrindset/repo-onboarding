@@ -251,7 +251,7 @@ export function TourStepper({
           <div className="tour-complete-pop mt-4 rounded-xl border border-emerald-500/25 bg-emerald-500/8 p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
-                <h3 className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+              <h3 className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">
                   🎉 Tour complete
                 </h3>
                 <p className="mt-1 text-[0.86rem] leading-relaxed text-text">
@@ -378,7 +378,7 @@ function Panel({
   const labelColor =
     tone === "accent"
       ? "text-accent"
-      : "text-emerald-600 dark:text-emerald-400";
+      : "text-emerald-700 dark:text-emerald-300";
   return (
     <div className={`rounded-lg border p-4 ${styles}`}>
       <h3

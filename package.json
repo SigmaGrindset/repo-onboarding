@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "validate:sample": "node schema/validate.mjs data/sample/analysis.json",
+    "validate:all": "node schema/validate-all.mjs",
     "validate": "node schema/validate.mjs"
   },
   "dependencies": {

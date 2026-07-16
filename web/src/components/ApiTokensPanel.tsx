@@ -138,7 +138,7 @@ export function ApiTokensPanel({
       {/* One-time reveal */}
       {justCreated ? (
         <section className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4">
-          <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-300">
+          <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">
             Token created — copy it now
           </p>
           <p className="mt-1 text-xs text-muted">

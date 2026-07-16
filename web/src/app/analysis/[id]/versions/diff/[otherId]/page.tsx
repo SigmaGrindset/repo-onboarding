@@ -33,9 +33,9 @@ function signed(n: number): string {
 /** Literal colour classes for a signed delta (emerald up, rose down, muted zero). */
 function deltaClass(n: number): string {
   return n > 0
-    ? "text-emerald-600 dark:text-emerald-300"
+    ? "text-emerald-700 dark:text-emerald-300"
     : n < 0
-      ? "text-rose-600 dark:text-rose-300"
+      ? "text-rose-700 dark:text-rose-300"
       : "text-muted";
 }
 

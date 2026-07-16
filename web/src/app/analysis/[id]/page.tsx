@@ -123,7 +123,7 @@ export default async function OverviewPage({
       {/* Discover the BYO-model flow — subtle, doesn't compete with the analysis. */}
       <div className="mt-10 border-t border-border pt-5 text-sm text-muted">
         Want one of these for your own codebase?{" "}
-        <Link href="/generate" className="text-accent hover:underline">
+          <Link href="/generate" className="text-accent underline underline-offset-2">
           Generate one for your repo →
         </Link>
       </div>

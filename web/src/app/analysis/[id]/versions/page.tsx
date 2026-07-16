@@ -92,7 +92,7 @@ export default async function VersionsPage({
                     v{v.version}
                   </Badge>
                   {v.isLatest ? (
-                    <Badge className="border-emerald-500/25 bg-emerald-500/12 text-emerald-600 dark:text-emerald-300">
+                    <Badge className="border-emerald-500/25 bg-emerald-500/12 text-emerald-700 dark:text-emerald-300">
                       Current
                     </Badge>
                   ) : null}
