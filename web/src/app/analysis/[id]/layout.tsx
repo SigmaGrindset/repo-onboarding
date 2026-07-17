@@ -16,6 +16,7 @@ import { isChatEnabled } from "@/lib/chat/config";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { OnboardingProgressProvider } from "@/components/OnboardingProgressProvider";
 import { OnboardingSidebarCard } from "@/components/OnboardingSidebarCard";
+import { AnalysisRefreshCommand } from "@/components/AnalysisRefreshCommand";
 import { EMPTY_ONBOARDING_PROGRESS, normalizeOnboardingProgress } from "@/lib/onboarding-progress-shared";
 
 export const dynamic = "force-dynamic";
@@ -101,6 +102,7 @@ export default async function AnalysisLayout({
   // In the same pass, resolve the version lineage so the info card can link to
   // history when more than one version is readable.
   let canShare = false;
+  let canRefresh = !isCloudMode();
   let versionOrdinal: number | null = null;
   let versionCount = 0;
   if (isCloudMode() && isCloudId(id)) {
@@ -111,6 +113,7 @@ export default async function AnalysisLayout({
       const { userId } = await auth();
       if (userId) {
         canShare = await isOwner(userId, uuid);
+        canRefresh = canShare;
         const versions = await listVersionsFor(userId, uuid);
         versionCount = versions.length;
         versionOrdinal = versions.find((v) => v.id === uuid)?.version ?? null;
@@ -199,6 +202,7 @@ export default async function AnalysisLayout({
                 {versionOrdinal ? `v${versionOrdinal} · ` : ""}View history
               </Link>
             ) : null}
+            {canRefresh ? <AnalysisRefreshCommand /> : null}
           </div>
 
           <a
