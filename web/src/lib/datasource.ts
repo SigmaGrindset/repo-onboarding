@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { cache } from "react";
 import type { Analysis } from "@schema/analysis";
+import type { OnboardingProgress } from "./onboarding-progress-shared";
 
 /**
  * Narrow data-source interface. WP4 will provide a Clerk/Neon/Blob-backed
@@ -30,12 +31,16 @@ export interface AnalysisSummary {
   summary: string;
   /** Guided-tour step count; 0 when the analysis has no tour. */
   tourSteps: number;
+  /** Number of selectable first tasks; used by local progress validation. */
+  firstTaskCount: number;
   /**
    * Furthest tour step the current user has reached, when the server knows it
    * (cloud rows). Undefined means the client should read localStorage instead
    * (local mode / fixtures), so no mode flag needs to travel with the card.
    */
   tourFurthest?: number;
+  /** Full server-known journey progress for cloud cards. */
+  onboardingProgress?: OnboardingProgress;
 }
 
 /**
@@ -71,6 +76,7 @@ function toSummary(id: string, a: Analysis): AnalysisSummary {
     analyzedAt: a.metadata.analyzedAt,
     summary: a.pitch.summary,
     tourSteps: a.tour.length,
+    firstTaskCount: a.firstTasks.length,
   };
 }
 

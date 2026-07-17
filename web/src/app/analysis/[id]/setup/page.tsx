@@ -3,6 +3,7 @@ import { resolveDataSource } from "@/lib/datasource";
 import { Card, EmptyState, SectionHeader } from "@/components/ui";
 import { CodeBlock } from "@/components/CodeBlock";
 import type { SetupStep } from "@schema/analysis";
+import { SetupCompletionButton } from "@/components/OnboardingMilestoneControls";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,8 @@ export default async function SetupPage({
         title="Get it running locally"
         description="Everything you need to go from a fresh clone to a running service and a green test suite."
       />
+
+      <SetupCompletionButton />
 
       {setup.prerequisites.length > 0 ? (
         <Card className="mb-6 p-5">

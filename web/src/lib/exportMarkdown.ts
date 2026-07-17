@@ -43,6 +43,7 @@ const SECTIONS = [
   "Architecture",
   "Dependency Graph",
   "Codebase Map",
+  "Contributor Guide",
   "Guided Tour",
   "Hotspots",
   "Setup",
@@ -405,6 +406,41 @@ function renderFirstTasks(analysis: Analysis): string[] {
   return lines;
 }
 
+function renderContributorGuide(analysis: Analysis): string[] {
+  const guide = analysis.contributorGuide;
+  const lines = ["## Contributor Guide"];
+  if (!guide) {
+    lines.push("", "This analysis predates the contributor guide.");
+    return lines;
+  }
+
+  lines.push("", "### Known risks and sharp edges");
+  for (const risk of guide.knownRisks ?? []) {
+    lines.push("", `#### ${risk.title ?? ""} (${risk.severity ?? ""})`, "");
+    lines.push(String(risk.impact ?? ""));
+    lines.push("", `**Mitigation:** ${String(risk.mitigation ?? "")}`);
+    const files = Array.isArray(risk.files) ? risk.files : [];
+    lines.push("", `Files: ${files.map((f) => `\`${f}\``).join(", ")}`);
+  }
+
+  lines.push("", "### Where should this kind of change go?");
+  for (const route of guide.changeRoutes ?? []) {
+    lines.push("", `#### ${route.changeType ?? ""}`, "");
+    lines.push(`Start in \`${route.primaryPath ?? ""}\`.`);
+    const related = Array.isArray(route.relatedPaths) ? route.relatedPaths : [];
+    if (related.length) {
+      lines.push("", `Related: ${related.map((p) => `\`${p}\``).join(", ")}`);
+    }
+    lines.push("", String(route.rationale ?? ""));
+    const checks = Array.isArray(route.verification) ? route.verification : [];
+    if (checks.length) {
+      lines.push("", "Verify:", "");
+      for (const check of checks) lines.push(`- ${String(check)}`);
+    }
+  }
+  return lines;
+}
+
 function renderFooter(
   analysis: Analysis,
   siteUrl: string,
@@ -442,6 +478,7 @@ export function renderOnboardingMarkdown(
     renderArchitecture(analysis),
     renderDependencyGraph(analysis),
     renderCodebaseMap(analysis),
+    renderContributorGuide(analysis),
     renderTour(analysis),
     renderHotspots(analysis),
     renderSetup(analysis),

@@ -19,7 +19,7 @@
   ],
   "properties": {
     "schemaVersion": {
-      "description": "Semantic version of this analysis contract, so consumers can detect/evolve. Current: 1.0.0",
+      "description": "Semantic version of this analysis contract, so consumers can detect/evolve. Current: 1.1.0",
       "type": "string",
       "pattern": "^\\d+\\.\\d+\\.\\d+$"
     },
@@ -52,6 +52,7 @@
     },
     "hotspots": { "$ref": "#/$defs/Hotspots" },
     "setup": { "$ref": "#/$defs/SetupGuide" },
+    "contributorGuide": { "$ref": "#/$defs/ContributorGuide" },
     "firstTasks": {
       "description": "Suggested first tasks for a new contributor.",
       "type": "array",
@@ -462,6 +463,59 @@
           "description": "Optional caveats, gotchas, or context for this step.",
           "type": "string",
           "minLength": 1
+        }
+      }
+    },
+    "ContributorGuide": {
+      "description": "Evidence-based risks and a routing guide for common contributor changes.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["knownRisks", "changeRoutes"],
+      "properties": {
+        "knownRisks": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/KnownRisk" }
+        },
+        "changeRoutes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/ChangeRoute" }
+        }
+      }
+    },
+    "KnownRisk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "severity", "impact", "mitigation", "files"],
+      "properties": {
+        "title": { "type": "string", "minLength": 1 },
+        "severity": { "type": "string", "enum": ["low", "medium", "high"] },
+        "impact": { "type": "string", "minLength": 30 },
+        "mitigation": { "type": "string", "minLength": 20 },
+        "files": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "ChangeRoute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["changeType", "primaryPath", "relatedPaths", "rationale", "verification"],
+      "properties": {
+        "changeType": { "type": "string", "minLength": 1 },
+        "primaryPath": { "type": "string", "minLength": 1 },
+        "relatedPaths": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "rationale": { "type": "string", "minLength": 30 },
+        "verification": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 3 }
         }
       }
     },

@@ -5,6 +5,7 @@ import { Markdown } from "@/lib/markdown";
 import { Badge, Card, EmptyState, SectionHeader } from "@/components/ui";
 import { Mermaid } from "@/components/Mermaid";
 import { JumpToParam } from "@/components/JumpToParam";
+import { ArchitectureReadTracker } from "@/components/OnboardingMilestoneControls";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,7 @@ export default async function ArchitecturePage({
 
   return (
     <div>
+      <ArchitectureReadTracker />
       <SectionHeader
         kicker="Architecture"
         title="How it is built"

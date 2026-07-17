@@ -38,6 +38,8 @@ import type {
   GraphEdge,
   GraphNode,
   Hotspot,
+  KnownRisk,
+  ChangeRoute,
   RecentActivity,
 } from "@schema/analysis";
 
@@ -119,6 +121,14 @@ export interface StatsDiff {
   languages: LanguageDelta[];
 }
 
+export interface ContributorGuideDelta {
+  key: string;
+  category: "risk" | "route";
+  kind: "added" | "removed" | "changed";
+  before?: KnownRisk | ChangeRoute;
+  after?: KnownRisk | ChangeRoute;
+}
+
 /** The complete comparison of two analysis documents. */
 export interface AnalysisDiff {
   /** The older run. */
@@ -132,6 +142,7 @@ export interface AnalysisDiff {
     edges: { deltas: GraphEdgeDelta[]; unchangedCount: number };
   };
   architecture: { deltas: ArchitectureDelta[]; unchangedCount: number };
+  contributorGuide: { deltas: ContributorGuideDelta[]; unchangedCount: number };
   /** True iff any delta array is non-empty or a stats delta is non-zero. */
   hasChanges: boolean;
 }
@@ -480,6 +491,46 @@ function diffArchitecture(base: Analysis, head: Analysis): {
   return { deltas, unchangedCount };
 }
 
+function diffContributorGuide(base: Analysis, head: Analysis): {
+  deltas: ContributorGuideDelta[];
+  unchangedCount: number;
+} {
+  const baseItems: Array<{ key: string; category: "risk" | "route"; value: KnownRisk | ChangeRoute }> = [
+    ...(base.contributorGuide?.knownRisks ?? []).map((value) => ({ key: value.title, category: "risk" as const, value })),
+    ...(base.contributorGuide?.changeRoutes ?? []).map((value) => ({ key: value.changeType, category: "route" as const, value })),
+  ];
+  const headItems: typeof baseItems = [
+    ...(head.contributorGuide?.knownRisks ?? []).map((value) => ({ key: value.title, category: "risk" as const, value })),
+    ...(head.contributorGuide?.changeRoutes ?? []).map((value) => ({ key: value.changeType, category: "route" as const, value })),
+  ];
+  const identity = (item: (typeof baseItems)[number]) => `${item.category}:${item.key.trim().toLowerCase()}`;
+  const baseMap = indexByFirst(baseItems, identity);
+  const headMap = indexByFirst(headItems, identity);
+  const deltas: ContributorGuideDelta[] = [];
+  let unchangedCount = 0;
+
+  for (const [id, after] of headMap) {
+    const before = baseMap.get(id);
+    if (!before) {
+      deltas.push({ key: after.key, category: after.category, kind: "added", after: after.value });
+    } else if (JSON.stringify(before.value) !== JSON.stringify(after.value)) {
+      deltas.push({ key: after.key, category: after.category, kind: "changed", before: before.value, after: after.value });
+    } else {
+      unchangedCount++;
+    }
+  }
+  for (const [id, before] of baseMap) {
+    if (!headMap.has(id)) {
+      deltas.push({ key: before.key, category: before.category, kind: "removed", before: before.value });
+    }
+  }
+  deltas.sort((a, b) => {
+    const byKind = KIND_RANK[a.kind] - KIND_RANK[b.kind];
+    return byKind !== 0 ? byKind : compareStrings(a.key, b.key);
+  });
+  return { deltas, unchangedCount };
+}
+
 // ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
@@ -497,12 +548,14 @@ export function diffAnalyses(base: Analysis, head: Analysis): AnalysisDiff {
   const nodes = diffNodes(base, head);
   const edges = diffEdges(base, head);
   const architecture = diffArchitecture(base, head);
+  const contributorGuide = diffContributorGuide(base, head);
 
   const hasChanges =
     hotspots.deltas.length > 0 ||
     nodes.deltas.length > 0 ||
     edges.deltas.length > 0 ||
     architecture.deltas.length > 0 ||
+    contributorGuide.deltas.length > 0 ||
     stats.filesDelta !== 0 ||
     stats.locDelta !== 0 ||
     stats.languages.length > 0;
@@ -514,6 +567,7 @@ export function diffAnalyses(base: Analysis, head: Analysis): AnalysisDiff {
     hotspots,
     graph: { nodes, edges },
     architecture,
+    contributorGuide,
     hasChanges,
   };
 }

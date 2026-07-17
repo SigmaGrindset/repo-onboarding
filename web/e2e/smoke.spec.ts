@@ -47,3 +47,51 @@ test("mobile section nav reveals a late active tab", async ({ page }, testInfo) 
     "true",
   );
 });
+
+test("onboarding journey resumes and persists milestones", async ({ page }) => {
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem("onboarding-progress-seeded")) return;
+    localStorage.setItem("onboarding-progress:v1:sample", JSON.stringify({
+      architectureRead: false,
+      setupCompleted: false,
+      tourFurthest: 4,
+      selectedTaskIndex: null,
+    }));
+    sessionStorage.setItem("onboarding-progress-seeded", "true");
+  });
+
+  await page.goto("/analysis/sample");
+  await expect(page.getByRole("link", { name: "Continue at step 4" }).first()).toBeVisible();
+  await expect(page.getByText("13%", { exact: true }).first()).toBeVisible();
+
+  await page.goto("/analysis/sample/architecture");
+  await expect(page.getByRole("heading", { name: "How it is built" })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => JSON.parse(
+    localStorage.getItem("onboarding-progress:v1:sample") ?? "{}",
+  ).architectureRead)).toBe(true);
+
+  await page.goto("/analysis/sample/setup");
+  await page.getByRole("button", { name: "Mark setup complete" }).click();
+  await expect(page.getByRole("button", { name: "Mark incomplete" })).toBeVisible();
+
+  await page.goto("/analysis/sample/tasks");
+  await page.getByRole("button", { name: "Select this task" }).first().click();
+  await expect(page.getByRole("button", { name: "✓ Selected — clear" })).toBeVisible();
+
+  await page.goto("/analysis/sample/tour?step=8");
+  await expect(page.getByText("Tour complete", { exact: false })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => JSON.parse(
+    localStorage.getItem("onboarding-progress:v1:sample") ?? "{}",
+  ).tourFurthest)).toBe(8);
+  await page.goto("/analysis/sample");
+  await expect(page.getByText("100%", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("You’re ready to contribute")).toBeVisible();
+});
+
+test("contributor guide renders risks and change routes", async ({ page }) => {
+  await page.goto("/analysis/sample/guide");
+  await expect(page.getByRole("heading", { name: "Known risks and sharp edges" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Where should this kind of change go?" })).toBeVisible();
+  await expect(page.getByText("Ledger writes and outbox delivery must stay atomic")).toBeVisible();
+  await expect(page.getByText("Add an HTTP endpoint")).toBeVisible();
+});

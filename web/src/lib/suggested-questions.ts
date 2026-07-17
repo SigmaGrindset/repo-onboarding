@@ -33,6 +33,7 @@ export function buildSuggestedQuestions(
     architecture: architectureQuestions(analysis),
     graph: graphQuestions(analysis),
     map: mapQuestions(analysis),
+    guide: guideQuestions(analysis),
     tour: tourQuestions(analysis),
     hotspots: hotspotsQuestions(analysis),
     setup: setupQuestions(analysis),
@@ -45,6 +46,16 @@ export function buildSuggestedQuestions(
     out[s.slug] = padQuestions(bySlug[s.slug] ?? []);
   }
   return out;
+}
+
+function guideQuestions(a: Analysis): string[] {
+  const risk = a.contributorGuide?.knownRisks[0];
+  const route = a.contributorGuide?.changeRoutes[0];
+  return [
+    risk ? `How do I avoid "${clip(risk.title)}"?` : "What are the sharp edges?",
+    route ? `Where should I make a ${clip(route.changeType)} change?` : "Where should a new change go?",
+    "What should I verify before opening a PR?",
+  ];
 }
 
 function overviewQuestions(a: Analysis): string[] {

@@ -29,6 +29,7 @@ import {
   primaryKey,
   index,
   integer,
+  boolean,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 
@@ -112,7 +113,10 @@ export const tourProgress = pgTable(
       .notNull()
       .references(() => analyses.id, { onDelete: "cascade" }),
     userId: text("user_id").notNull(),
-    furthestStep: integer("furthest_step").notNull(),
+    furthestStep: integer("furthest_step").notNull().default(0),
+    architectureRead: boolean("architecture_read").notNull().default(false),
+    setupCompleted: boolean("setup_completed").notNull().default(false),
+    selectedTaskIndex: integer("selected_task_index"),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

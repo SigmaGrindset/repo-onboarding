@@ -13,6 +13,7 @@ export const ANALYSIS_SECTIONS: AnalysisSection[] = [
   { slug: "architecture", label: "Architecture" },
   { slug: "graph", label: "Dependency Graph" },
   { slug: "map", label: "Codebase Map" },
+  { slug: "guide", label: "Contributor Guide" },
   { slug: "tour", label: "Guided Tour" },
   { slug: "hotspots", label: "Hotspots" },
   { slug: "setup", label: "Setup" },

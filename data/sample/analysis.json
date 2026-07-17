@@ -1,10 +1,10 @@
 {
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "1.1.0",
   "metadata": {
     "repoName": "ledgerline (DEMO SAMPLE)",
     "repoUrl": "https://github.com/acme-example/ledgerline-demo",
     "analyzedAt": "2026-07-11T14:22:05Z",
-    "analyzerVersion": "onboard/0.1.0",
+    "analyzerVersion": "onboard/0.2.0",
     "commitSha": "9f3c1ab7d0e4562b8c1f0a9d7e6b4c2a1f8e0d3c",
     "primaryLanguage": "TypeScript",
     "stats": {
@@ -334,6 +334,73 @@
         "title": "Full check (types, lint, all tests)",
         "commands": ["npm run check"],
         "notes": "What CI runs: tsc --noEmit, eslint, and the complete Vitest suite."
+      }
+    ]
+  },
+  "contributorGuide": {
+    "knownRisks": [
+      {
+        "title": "Ledger writes and outbox delivery must stay atomic",
+        "severity": "high",
+        "impact": "Committing a ledger entry without its matching outbox record can leave downstream projections permanently behind the source of truth.",
+        "mitigation": "Keep both writes inside the Postgres transaction and exercise the integration tests that simulate a publish failure.",
+        "files": [
+          "src/infrastructure/pg/PostgresLedgerRepository.ts",
+          "src/infrastructure/outbox/OutboxRelay.ts"
+        ]
+      },
+      {
+        "title": "Money values cannot cross the domain boundary as floats",
+        "severity": "high",
+        "impact": "Binary floating-point rounding can violate double-entry balance invariants and produce totals that cannot be reconciled later.",
+        "mitigation": "Construct Money from integer minor units and keep transport parsing at the HTTP adapter boundary.",
+        "files": [
+          "src/domain/Money.ts",
+          "src/interfaces/http/transferRoute.ts"
+        ]
+      },
+      {
+        "title": "Projection updates are deliberately eventually consistent",
+        "severity": "medium",
+        "impact": "A successful transfer may be visible in the journal before every read model catches up, which can look like a lost update in manual testing.",
+        "mitigation": "Assert on the ledger result first, then wait for the outbox relay when testing projection-facing behavior.",
+        "files": [
+          "src/infrastructure/outbox/OutboxRelay.ts",
+          "test/integration/transfer.test.ts"
+        ]
+      }
+    ],
+    "changeRoutes": [
+      {
+        "changeType": "Add or change a ledger business rule",
+        "primaryPath": "src/domain",
+        "relatedPaths": ["src/application", "test/unit"],
+        "rationale": "Ledger invariants belong in domain aggregates and value objects; application handlers should only coordinate those decisions.",
+        "verification": [
+          "Run npm test",
+          "Add invariant-focused unit cases before adapting transport behavior"
+        ]
+      },
+      {
+        "changeType": "Add an HTTP endpoint",
+        "primaryPath": "src/interfaces/http",
+        "relatedPaths": ["src/application", "test/integration"],
+        "rationale": "HTTP parsing and response mapping are inbound-adapter concerns, while reusable use-case behavior stays in the application layer.",
+        "verification": [
+          "Run npm run test:int",
+          "Cover invalid transport input and the successful response contract"
+        ]
+      },
+      {
+        "changeType": "Change persistence or transaction behavior",
+        "primaryPath": "src/infrastructure/pg",
+        "relatedPaths": ["migrations", "src/infrastructure/outbox", "test/integration"],
+        "rationale": "Repository adapters own SQL and transaction boundaries, with schema evolution captured separately in ordered migrations.",
+        "verification": [
+          "Run migrations against a clean database",
+          "Run npm run test:int with Docker available",
+          "Check rollback and outbox atomicity paths"
+        ]
       }
     ]
   },

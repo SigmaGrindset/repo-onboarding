@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import type {
   ArchitectureDelta,
+  ContributorGuideDelta,
   GraphEdgeDelta,
   GraphNodeDelta,
   HotspotDelta,
@@ -215,6 +216,7 @@ export default async function DiffPage({
           <HotspotsSection diff={diff} />
           <GraphSection diff={diff} />
           <ArchitectureSectionBlock diff={diff} />
+          <ContributorGuideDiffSection diff={diff} />
         </div>
       )}
     </div>
@@ -569,6 +571,37 @@ function ArchitectureSectionBlock({
       <div className="space-y-3">
         {deltas.map((d) => (
           <ArchitectureCard key={`${d.kind}:${d.title}`} d={d} />
+        ))}
+      </div>
+      <Unchanged count={unchangedCount} />
+    </section>
+  );
+}
+
+function ContributorGuideDeltaCard({ d }: { d: ContributorGuideDelta }) {
+  const style = diffKindStyle(d.kind);
+  return (
+    <Card className="p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge className={style.className}>{style.label}</Badge>
+        <Badge className="border-border bg-surface-2 text-muted">{d.category}</Badge>
+        <span className="text-sm font-semibold text-text">{d.key}</span>
+      </div>
+    </Card>
+  );
+}
+
+function ContributorGuideDiffSection({ diff }: { diff: ReturnType<typeof diffAnalyses> }) {
+  const { deltas, unchangedCount } = diff.contributorGuide;
+  if (deltas.length === 0 && unchangedCount === 0) return null;
+  return (
+    <section>
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">
+        Contributor Guide
+      </h2>
+      <div className="space-y-3">
+        {deltas.map((d) => (
+          <ContributorGuideDeltaCard key={`${d.category}:${d.kind}:${d.key}`} d={d} />
         ))}
       </div>
       <Unchanged count={unchangedCount} />

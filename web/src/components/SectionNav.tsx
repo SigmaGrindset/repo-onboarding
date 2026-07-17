@@ -10,6 +10,7 @@ const ICONS: Record<string, ReactNode> = {
   architecture: <IconArchitecture />,
   graph: <IconGraph />,
   map: <IconMap />,
+  guide: <IconGuide />,
   tour: <IconTour />,
   hotspots: <IconHotspots />,
   setup: <IconSetup />,
@@ -215,6 +216,14 @@ function IconTour() {
       <path d="M8 2v9" />
       <circle cx="8" cy="13" r="1.3" />
       <path d="M8 3.5h4.5v3H8" />
+    </>,
+  );
+}
+function IconGuide() {
+  return svg(
+    <>
+      <path d="M3 2.5h7.5A1.5 1.5 0 0 1 12 4v9.5H4.5A1.5 1.5 0 0 1 3 12z" />
+      <path d="M3 12a1.5 1.5 0 0 1 1.5-1.5H12M6 5h3M6 7.5h3" />
     </>,
   );
 }

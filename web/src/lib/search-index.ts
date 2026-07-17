@@ -9,7 +9,7 @@ import { ANALYSIS_SECTIONS } from "./sections";
  */
 export interface SearchItem {
   /** Display group, also used for ordering. */
-  group: "Sections" | "Architecture" | "Codebase Map" | "Guided Tour" | "Hotspots";
+  group: "Sections" | "Architecture" | "Codebase Map" | "Contributor Guide" | "Guided Tour" | "Hotspots";
   label: string;
   /** Secondary text shown right-aligned (role, step number, commit count). */
   hint?: string;
@@ -52,6 +52,25 @@ export function buildSearchIndex(analysis: Analysis, base: string): SearchItem[]
       hint: entry.role,
       href: `${base}/map?entry=${slugify(entry.path)}`,
       keywords: entry.keyFiles?.map((f) => f.path).join(" "),
+    });
+  }
+
+  for (const risk of analysis.contributorGuide?.knownRisks ?? []) {
+    items.push({
+      group: "Contributor Guide",
+      label: risk.title,
+      hint: `${risk.severity} risk`,
+      href: `${base}/guide#risk-${slugify(risk.title)}`,
+      keywords: risk.files.join(" "),
+    });
+  }
+  for (const route of analysis.contributorGuide?.changeRoutes ?? []) {
+    items.push({
+      group: "Contributor Guide",
+      label: route.changeType,
+      hint: route.primaryPath,
+      href: `${base}/guide#route-${slugify(route.changeType)}`,
+      keywords: [route.primaryPath, ...route.relatedPaths].join(" "),
     });
   }
 

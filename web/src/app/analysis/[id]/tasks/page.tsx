@@ -3,6 +3,7 @@ import { resolveDataSource } from "@/lib/datasource";
 import { githubBlobUrl } from "@/lib/github";
 import { difficultyStyle } from "@/lib/styles";
 import { Badge, Card, EmptyState, FileChip, SectionHeader } from "@/components/ui";
+import { TaskSelectionButton } from "@/components/OnboardingMilestoneControls";
 
 export const dynamic = "force-dynamic";
 
@@ -19,8 +20,8 @@ export default async function TasksPage({
   if (!analysis) notFound();
 
   const { repoUrl, commitSha } = analysis.metadata;
-  const tasks = [...analysis.firstTasks].sort(
-    (a, b) => DIFFICULTY_ORDER[a.difficulty] - DIFFICULTY_ORDER[b.difficulty],
+  const tasks = analysis.firstTasks.map((task, taskIndex) => ({ task, taskIndex })).sort(
+    (a, b) => DIFFICULTY_ORDER[a.task.difficulty] - DIFFICULTY_ORDER[b.task.difficulty],
   );
 
   return (
@@ -35,7 +36,7 @@ export default async function TasksPage({
         <EmptyState title="No suggested first tasks in this analysis." />
       ) : (
         <div className="space-y-4">
-          {tasks.map((task, i) => {
+          {tasks.map(({ task, taskIndex }, i) => {
             const diff = difficultyStyle(task.difficulty);
             return (
               <Card key={i} className="p-5">
@@ -77,6 +78,8 @@ export default async function TasksPage({
                     </div>
                   </div>
                 ) : null}
+
+                <TaskSelectionButton taskIndex={taskIndex} />
               </Card>
             );
           })}

@@ -78,6 +78,7 @@ for (const id of FIXTURE_IDS) {
     const md = renderOnboardingMarkdown(fixture(id));
     assert.ok(md.startsWith("# "), "starts with an h1");
     assert.ok(md.includes("## Architecture"), "has an Architecture section");
+    assert.ok(md.includes("## Contributor Guide"), "has a Contributor Guide section");
     assert.ok(md.includes("```mermaid"), "embeds a mermaid diagram");
     assert.ok(md.includes("- [ ] "), "has a First Tasks checklist item");
     assert.ok(md.endsWith("\n"), "ends with a trailing newline");

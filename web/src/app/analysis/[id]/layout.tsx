@@ -14,6 +14,9 @@ import { isCloudMode } from "@/lib/mode";
 import { isCloudId, uuidFromCloudId, isShareId } from "@/lib/ids";
 import { isChatEnabled } from "@/lib/chat/config";
 import { ChatPanel } from "@/components/chat/ChatPanel";
+import { OnboardingProgressProvider } from "@/components/OnboardingProgressProvider";
+import { OnboardingSidebarCard } from "@/components/OnboardingSidebarCard";
+import { EMPTY_ONBOARDING_PROGRESS, normalizeOnboardingProgress } from "@/lib/onboarding-progress-shared";
 
 export const dynamic = "force-dynamic";
 
@@ -68,6 +71,25 @@ export default async function AnalysisLayout({
   const { metadata } = analysis;
   const sha = shortSha(metadata.commitSha);
 
+  let onboardingStorage: "local" | "db" = "local";
+  let initialOnboardingProgress = { ...EMPTY_ONBOARDING_PROGRESS };
+  if (isCloudMode() && isCloudId(id)) {
+    const uuid = uuidFromCloudId(id);
+    if (uuid) {
+      const { auth } = await import("@clerk/nextjs/server");
+      const { userId } = await auth();
+      if (userId) {
+        onboardingStorage = "db";
+        const { getOnboardingProgress } = await import("@/lib/tour-progress");
+        initialOnboardingProgress = normalizeOnboardingProgress(
+          await getOnboardingProgress(userId, uuid),
+          analysis.tour.length,
+          analysis.firstTasks.length,
+        );
+      }
+    }
+  }
+
   // "Ask this repo" chat: available when the AI Gateway key is set, except for
   // anonymous share-link visitors in cloud mode (the API rejects them too, so
   // showing the launcher would only offer a guaranteed 403). Only booleans and
@@ -97,6 +119,13 @@ export default async function AnalysisLayout({
   }
 
   return (
+    <OnboardingProgressProvider
+      analysisId={id}
+      storage={onboardingStorage}
+      initialProgress={initialOnboardingProgress}
+      totalTourSteps={analysis.tour.length}
+      taskCount={analysis.firstTasks.length}
+    >
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:flex-row lg:gap-8 lg:py-8">
       {/* Sidebar */}
       <aside className="lg:w-64 lg:shrink-0">
@@ -201,6 +230,8 @@ export default async function AnalysisLayout({
             items={buildSearchIndex(analysis, `/analysis/${id}`)}
           />
 
+          <OnboardingSidebarCard analysisId={id} />
+
           <SectionNav id={id} />
         </div>
       </aside>
@@ -216,5 +247,6 @@ export default async function AnalysisLayout({
         />
       ) : null}
     </div>
+    </OnboardingProgressProvider>
   );
 }

@@ -1,76 +1,63 @@
-/**
- * Per-user guided-tour progress (cloud mode).
- *
- * Progress rows are self-scoped: every query here filters by `userId`, so a
- * user can only ever read or write their own rows. Whether the user may see
- * the *analysis* is the caller's job (`canReadAnalysis` in `@/lib/access`) —
- * same layering as the rest of the DB helpers.
- *
- * Server-only: imports the Neon client. Only reachable in cloud mode.
- */
-
+/** Server-only persistence for per-user onboarding progress in cloud mode. */
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/db/db";
 import { tourProgress } from "@/db/schema";
+import {
+  EMPTY_ONBOARDING_PROGRESS,
+  type OnboardingProgress,
+} from "./onboarding-progress-shared";
 
-/** The furthest tour step `userId` has reached in `analysisId`, or 0 if none. */
-export async function getTourProgress(
-  userId: string,
-  analysisId: string,
-): Promise<number> {
-  if (!userId || !analysisId) return 0;
-  const rows = await getDb()
-    .select({ furthestStep: tourProgress.furthestStep })
-    .from(tourProgress)
-    .where(
-      and(
-        eq(tourProgress.analysisId, analysisId),
-        eq(tourProgress.userId, userId),
-      ),
-    )
-    .limit(1);
-  return rows[0]?.furthestStep ?? 0;
+const selection = {
+  furthestStep: tourProgress.furthestStep,
+  architectureRead: tourProgress.architectureRead,
+  setupCompleted: tourProgress.setupCompleted,
+  selectedTaskIndex: tourProgress.selectedTaskIndex,
+};
+
+function fromRow(row: {
+  furthestStep: number;
+  architectureRead: boolean;
+  setupCompleted: boolean;
+  selectedTaskIndex: number | null;
+}): OnboardingProgress {
+  return {
+    architectureRead: row.architectureRead,
+    setupCompleted: row.setupCompleted,
+    tourFurthest: row.furthestStep,
+    selectedTaskIndex: row.selectedTaskIndex,
+  };
 }
 
-/**
- * `userId`'s progress across many analyses in one query — feeds the index
- * page's "4/9 steps" badges. Ids without a row are simply absent from the map.
- */
-export async function getTourProgressMap(
+export async function getOnboardingProgress(
+  userId: string,
+  analysisId: string,
+): Promise<OnboardingProgress> {
+  if (!userId || !analysisId) return { ...EMPTY_ONBOARDING_PROGRESS };
+  const rows = await getDb().select(selection).from(tourProgress).where(
+    and(eq(tourProgress.analysisId, analysisId), eq(tourProgress.userId, userId)),
+  ).limit(1);
+  return rows[0] ? fromRow(rows[0]) : { ...EMPTY_ONBOARDING_PROGRESS };
+}
+
+export async function getOnboardingProgressMap(
   userId: string,
   analysisIds: string[],
-): Promise<Map<string, number>> {
-  const map = new Map<string, number>();
+): Promise<Map<string, OnboardingProgress>> {
+  const map = new Map<string, OnboardingProgress>();
   if (!userId || analysisIds.length === 0) return map;
-  const rows = await getDb()
-    .select({
-      analysisId: tourProgress.analysisId,
-      furthestStep: tourProgress.furthestStep,
-    })
+  const rows = await getDb().select({ analysisId: tourProgress.analysisId, ...selection })
     .from(tourProgress)
-    .where(
-      and(
-        eq(tourProgress.userId, userId),
-        inArray(tourProgress.analysisId, analysisIds),
-      ),
-    );
-  for (const r of rows) map.set(r.analysisId, r.furthestStep);
+    .where(and(eq(tourProgress.userId, userId), inArray(tourProgress.analysisId, analysisIds)));
+  for (const row of rows) map.set(row.analysisId, fromRow(row));
   return map;
 }
 
-/**
- * Record that `userId` reached `furthestStep` in `analysisId`. Monotonic: the
- * GREATEST upsert means progress never decreases, so late or out-of-order
- * writes are harmless.
- */
 export async function setTourProgress(
   userId: string,
   analysisId: string,
   furthestStep: number,
 ): Promise<void> {
-  await getDb()
-    .insert(tourProgress)
-    .values({ analysisId, userId, furthestStep })
+  await getDb().insert(tourProgress).values({ analysisId, userId, furthestStep })
     .onConflictDoUpdate({
       target: [tourProgress.analysisId, tourProgress.userId],
       set: {
@@ -80,23 +67,55 @@ export async function setTourProgress(
     });
 }
 
-/**
- * Forget `userId`'s progress in `analysisId` (the "Reset progress" action).
- * Deleting the row — rather than zeroing it — is what lets the next
- * `setTourProgress` land below the old furthest despite the GREATEST upsert.
- * Idempotent: deleting a missing row is a no-op.
- */
-export async function resetTourProgress(
+export async function markArchitectureRead(userId: string, analysisId: string): Promise<void> {
+  await getDb().insert(tourProgress).values({ analysisId, userId, architectureRead: true })
+    .onConflictDoUpdate({
+      target: [tourProgress.analysisId, tourProgress.userId],
+      set: { architectureRead: true, updatedAt: sql`now()` },
+    });
+}
+
+export async function setSetupCompleted(
   userId: string,
   analysisId: string,
+  completed: boolean,
 ): Promise<void> {
+  await getDb().insert(tourProgress).values({ analysisId, userId, setupCompleted: completed })
+    .onConflictDoUpdate({
+      target: [tourProgress.analysisId, tourProgress.userId],
+      set: { setupCompleted: completed, updatedAt: sql`now()` },
+    });
+}
+
+export async function setSelectedTask(
+  userId: string,
+  analysisId: string,
+  taskIndex: number | null,
+): Promise<void> {
+  await getDb().insert(tourProgress).values({ analysisId, userId, selectedTaskIndex: taskIndex })
+    .onConflictDoUpdate({
+      target: [tourProgress.analysisId, tourProgress.userId],
+      set: { selectedTaskIndex: taskIndex, updatedAt: sql`now()` },
+    });
+}
+
+/** Reset only the tour milestone; preserve architecture/setup/task progress. */
+export async function resetTourProgress(userId: string, analysisId: string): Promise<void> {
   if (!userId || !analysisId) return;
-  await getDb()
-    .delete(tourProgress)
-    .where(
-      and(
-        eq(tourProgress.analysisId, analysisId),
-        eq(tourProgress.userId, userId),
-      ),
-    );
+  await getDb().update(tourProgress).set({ furthestStep: 0, updatedAt: sql`now()` }).where(
+    and(eq(tourProgress.analysisId, analysisId), eq(tourProgress.userId, userId)),
+  );
+}
+
+/** Compatibility helpers for older tour-only callers. */
+export async function getTourProgress(userId: string, analysisId: string): Promise<number> {
+  return (await getOnboardingProgress(userId, analysisId)).tourFurthest;
+}
+
+export async function getTourProgressMap(
+  userId: string,
+  analysisIds: string[],
+): Promise<Map<string, number>> {
+  const full = await getOnboardingProgressMap(userId, analysisIds);
+  return new Map([...full].map(([id, progress]) => [id, progress.tourFurthest]));
 }

@@ -30,6 +30,8 @@ export interface Analysis {
   tour: TourStep[];
   hotspots: Hotspots;
   setup: SetupGuide;
+  /** Contributor-specific risks and guidance for locating common changes. */
+  contributorGuide?: ContributorGuide;
   /** Suggested first tasks for a new contributor. */
   firstTasks: FirstTask[];
 }
@@ -248,6 +250,41 @@ export interface SetupStep {
   commands: string[];
   /** Optional caveats, gotchas, or context for this step. */
   notes?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Contributor guide
+// ---------------------------------------------------------------------------
+
+export type RiskSeverity = "low" | "medium" | "high";
+
+export interface KnownRisk {
+  title: string;
+  severity: RiskSeverity;
+  /** What can go wrong and why a contributor should care. */
+  impact: string;
+  /** Practical guardrail or recovery approach. */
+  mitigation: string;
+  /** Repo-relative files or directories where the risk is concentrated. */
+  files: string[];
+}
+
+export interface ChangeRoute {
+  /** A recognizable category of change, phrased in contributor language. */
+  changeType: string;
+  /** The first repo-relative file or directory to inspect. */
+  primaryPath: string;
+  /** Other repo-relative locations commonly involved in the change. */
+  relatedPaths: string[];
+  /** Why this is the correct ownership boundary for this kind of change. */
+  rationale: string;
+  /** Checks to run or evidence to gather before considering the change done. */
+  verification: string[];
+}
+
+export interface ContributorGuide {
+  knownRisks: KnownRisk[];
+  changeRoutes: ChangeRoute[];
 }
 
 // ---------------------------------------------------------------------------

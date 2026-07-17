@@ -9,6 +9,7 @@ import {
 import { Badge, Card, SectionHeader } from "@/components/ui";
 import { notFound } from "next/navigation";
 import type { TechStackCategory } from "@schema/analysis";
+import { OnboardingJourney } from "@/components/OnboardingJourney";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +38,11 @@ export default async function OverviewPage({
         kicker="Overview"
         title={metadata.repoName}
         description={pitch.summary}
+      />
+
+      <OnboardingJourney
+        analysisId={id}
+        taskTitles={analysis.firstTasks.map((task) => task.title)}
       />
 
       {/* Key stats */}
@@ -93,31 +99,6 @@ export default async function OverviewPage({
             <TechCategory key={g.cat} category={g.cat} items={g.items} />
           ))}
         </div>
-      </div>
-
-      {/* CTA */}
-      <div className="flex flex-wrap gap-3">
-        <Link
-          href={`/analysis/${id}/tour`}
-          className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg transition hover:bg-accent-hover"
-        >
-          Start the guided tour
-          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden>
-            <path
-              d="M6 3.5 10.5 8 6 12.5"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </Link>
-        <Link
-          href={`/analysis/${id}/architecture`}
-          className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-text transition hover:border-border-strong"
-        >
-          Read the architecture
-        </Link>
       </div>
 
       {/* Discover the BYO-model flow — subtle, doesn't compete with the analysis. */}

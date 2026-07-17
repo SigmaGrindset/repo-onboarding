@@ -36,7 +36,7 @@ import {
   listAnalysesFor,
 } from "./access";
 import { getAnalysisPayload } from "./blob";
-import { getTourProgressMap } from "./tour-progress";
+import { getOnboardingProgressMap } from "./tour-progress";
 
 async function currentUserId(): Promise<string | null> {
   const { userId } = await auth();
@@ -50,7 +50,7 @@ export const cloudDataSource: DataSource = {
     const rows = await listAnalysesFor(userId);
     // One batched read of this user's tour progress across all listed rows,
     // so the index cards render "4/9 steps" server-side.
-    const progress = await getTourProgressMap(
+    const progress = await getOnboardingProgressMap(
       userId,
       rows.map((r) => r.id),
     );
@@ -67,7 +67,9 @@ export const cloudDataSource: DataSource = {
       analyzedAt: r.createdAt.toISOString(),
       summary: r.summary,
       tourSteps: r.tourSteps,
-      tourFurthest: Math.min(progress.get(r.id) ?? 0, r.tourSteps),
+      firstTaskCount: 0,
+      tourFurthest: Math.min(progress.get(r.id)?.tourFurthest ?? 0, r.tourSteps),
+      onboardingProgress: progress.get(r.id),
     }));
   },
 

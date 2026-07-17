@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { AnalysisSummary } from "@/lib/datasource";
 import { compactNumber, formatDate, snippet } from "@/lib/format";
 import { Badge } from "@/components/ui";
-import { TourProgressBadge } from "@/components/TourProgressBadge";
+import { OnboardingProgressBadge } from "@/components/OnboardingProgressBadge";
 
 /** One index card: the newest version of a repo plus its version count. */
 export interface AnalysisCard {
@@ -424,10 +424,11 @@ function AnalysisCardItem({ card: { newest: a, count } }: { card: AnalysisCard }
             </>
           ) : null}
           {a.tourSteps > 0 ? (
-            <TourProgressBadge
+            <OnboardingProgressBadge
               analysisId={a.id}
-              totalSteps={a.tourSteps}
-              furthest={a.tourFurthest}
+              totalTourSteps={a.tourSteps}
+              taskCount={a.firstTaskCount}
+              progress={a.onboardingProgress}
             />
           ) : null}
           {count > 1 ? (

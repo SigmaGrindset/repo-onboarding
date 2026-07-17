@@ -5,6 +5,7 @@ export const CORE_ROUTES = [
   { slug: "architecture", path: "/analysis/sample/architecture" },
   { slug: "graph", path: "/analysis/sample/graph" },
   { slug: "map", path: "/analysis/sample/map" },
+  { slug: "guide", path: "/analysis/sample/guide" },
   { slug: "tour", path: "/analysis/sample/tour" },
   { slug: "hotspots", path: "/analysis/sample/hotspots" },
   { slug: "setup", path: "/analysis/sample/setup" },
@@ -17,7 +18,7 @@ export async function waitForPageReady(page: Page, path: string) {
     await expect(page.locator(".mermaid-host svg").first()).toBeVisible();
   }
   if (path.endsWith("/graph")) {
-    await expect(page.locator("main svg").first()).toBeVisible();
+    await expect(page.locator("main svg.touch-none")).toBeVisible();
   }
   await page.evaluate(() => document.fonts.ready);
 }

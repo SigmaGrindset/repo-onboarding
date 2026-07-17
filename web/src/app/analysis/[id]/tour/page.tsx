@@ -1,8 +1,5 @@
 import { notFound } from "next/navigation";
 import { resolveDataSource } from "@/lib/datasource";
-import { isCloudMode } from "@/lib/mode";
-import { isCloudId, uuidFromCloudId } from "@/lib/ids";
-import { normalizeFurthest } from "@/lib/tour-progress-local";
 import { EmptyState, SectionHeader } from "@/components/ui";
 import { TourStepper } from "@/components/TourStepper";
 
@@ -25,31 +22,7 @@ export default async function TourPage({
   const explicitStep = Number.parseInt(step ?? "", 10);
   const hasExplicitStep = Number.isFinite(explicitStep);
 
-  // Furthest-step persistence: signed-in reads of `db_` analyses use the
-  // per-user DB table (so the server already knows where to resume); every
-  // other case — local mode, fixtures, `st_` share links, signed out — uses
-  // localStorage, and the stepper resumes client-side after mount.
-  let storage: "local" | "db" = "local";
-  let initialFurthest = 0;
-  if (isCloudMode() && isCloudId(id)) {
-    const { auth } = await import("@clerk/nextjs/server");
-    const { userId } = await auth();
-    const uuid = uuidFromCloudId(id);
-    if (userId && uuid) {
-      storage = "db";
-      const { getTourProgress } = await import("@/lib/tour-progress");
-      initialFurthest = normalizeFurthest(
-        await getTourProgress(userId, uuid),
-        steps.length,
-      );
-    }
-  }
-
-  // An explicit ?step= deep link always wins; otherwise resume at the furthest
-  // step ("db" resumes here, "local" resumes in the stepper after mount).
-  const initialStep = hasExplicitStep
-    ? explicitStep
-    : Math.max(initialFurthest, 1);
+  const initialStep = hasExplicitStep ? explicitStep : 1;
 
   return (
     <div>
@@ -65,9 +38,7 @@ export default async function TourPage({
           steps={steps}
           initialStep={initialStep}
           analysisId={id}
-          storage={storage}
-          initialFurthest={initialFurthest}
-          resumeFromLocal={storage === "local" && !hasExplicitStep}
+          hasExplicitStep={hasExplicitStep}
           repoUrl={analysis.metadata.repoUrl}
           commitSha={analysis.metadata.commitSha}
         />
