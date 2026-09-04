@@ -234,6 +234,158 @@ function edgeIntegrityIssues(doc) {
 }
 
 // ---------------------------------------------------------------------------
+// Learning-resource checks (optional; same spirit as the edge-integrity checks)
+// ---------------------------------------------------------------------------
+
+/**
+ * Lowercase a URL host and drop a leading `www.`.
+ * @param {string} host
+ * @returns {string}
+ */
+function normalizeHost(host) {
+  const h = host.toLowerCase();
+  return h.startsWith("www.") ? h.slice(4) : h;
+}
+
+/**
+ * The last two labels of a host, as an approximation of the registrable domain:
+ * `docs.python.org` -> `python.org`. Deliberately not public-suffix-aware — the
+ * rule exists to stop a generator wandering off a technology's documentation
+ * site onto an invented blog, not to be a security boundary. Erring permissive
+ * beats rejecting `docs.python.org` under `python.org`.
+ * @param {string} host
+ * @returns {string}
+ */
+function documentationDomain(host) {
+  const labels = normalizeHost(host).split(".");
+  return labels.length <= 2 ? labels.join(".") : labels.slice(-2).join(".");
+}
+
+/**
+ * Parse an http(s) URL, returning null for anything unparseable or non-web.
+ * @param {unknown} value
+ * @returns {URL | null}
+ */
+function parseWebUrl(value) {
+  if (typeof value !== "string") return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:" ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The JSON Schema validates each learning-resource entry in isolation. It cannot
+ * express the two rules that make the section trustworthy, both of which are
+ * cross-references:
+ *
+ *   - `"resource-coverage"` — exactly one entry per `pitch.techStack[]` entry,
+ *     joined by name. No gaps, no orphans, no duplicates.
+ *   - `"resource-origin"` — every `resources[].url` sits on the same
+ *     documentation domain as that entry's `official` URL, so a generator cannot
+ *     invent links to pages that were never part of the technology's own docs.
+ *
+ * `learningResources` is optional (documents before schema 1.2.0 omit it), so an
+ * absent key produces no issues. Structural problems are left to the schema.
+ * @returns {ValidationIssue[]}
+ */
+function learningResourceIssues(doc) {
+  /** @type {ValidationIssue[]} */
+  const issues = [];
+  const entries = doc?.learningResources;
+  if (!Array.isArray(entries)) return issues;
+
+  const stack = doc?.pitch?.techStack;
+  const stackNames = Array.isArray(stack)
+    ? stack.map((t) => t?.name).filter((n) => typeof n === "string")
+    : [];
+
+  // --- Coverage: the join between techStack and learningResources ----------
+  const seen = new Map();
+  entries.forEach((entry, i) => {
+    const tech = entry?.tech;
+    if (typeof tech !== "string") return;
+    if (seen.has(tech)) {
+      issues.push({
+        path: `/learningResources/${i}/tech`,
+        message: `duplicate learning-resource entry for ${renderValue(tech)}`,
+        keyword: "resource-coverage",
+        expected: "exactly one entry per techStack entry",
+        got: renderValue(tech),
+      });
+      return;
+    }
+    seen.set(tech, i);
+    if (!stackNames.includes(tech)) {
+      issues.push({
+        path: `/learningResources/${i}/tech`,
+        message: "learning resources for a technology that is not in the tech stack",
+        keyword: "resource-coverage",
+        expected: "an existing pitch.techStack[].name",
+        got: renderValue(tech),
+      });
+    }
+  });
+
+  for (const name of stackNames) {
+    if (!seen.has(name)) {
+      issues.push({
+        path: "/learningResources",
+        message: `no learning resources for tech stack entry ${renderValue(name)}`,
+        keyword: "resource-coverage",
+        expected: "one entry per techStack entry",
+        got: "undefined",
+      });
+    }
+  }
+
+  // --- Origin: resources must stay on the official documentation domain ----
+  entries.forEach((entry, i) => {
+    if (entry?.official === null || entry?.official === undefined) return;
+    const official = parseWebUrl(entry.official);
+    if (!official) {
+      issues.push({
+        path: `/learningResources/${i}/official`,
+        message: "official entry point is not a usable http(s) URL",
+        keyword: "resource-origin",
+        expected: "an absolute http(s) URL, or null",
+        got: renderValue(entry.official),
+      });
+      return;
+    }
+
+    const domain = documentationDomain(official.host);
+    const resources = Array.isArray(entry?.resources) ? entry.resources : [];
+    resources.forEach((resource, j) => {
+      const url = parseWebUrl(resource?.url);
+      if (!url) {
+        issues.push({
+          path: `/learningResources/${i}/resources/${j}/url`,
+          message: "resource is not a usable http(s) URL",
+          keyword: "resource-origin",
+          expected: "an absolute http(s) URL",
+          got: renderValue(resource?.url),
+        });
+        return;
+      }
+      if (documentationDomain(url.host) !== domain) {
+        issues.push({
+          path: `/learningResources/${i}/resources/${j}/url`,
+          message: "resource is not on the technology's own documentation domain",
+          keyword: "resource-origin",
+          expected: `a URL on ${domain}`,
+          got: renderValue(url.host),
+        });
+      }
+    });
+  });
+
+  return issues;
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -241,16 +393,20 @@ function edgeIntegrityIssues(doc) {
  * Validate an already-parsed analysis document against the schema.
  *
  * @param {unknown} doc  The parsed JSON value to validate.
- * @param {{ checkEdges?: boolean }} [opts]  When `checkEdges` is true, also run
- *   the dependency-graph cross-reference checks and fold them into `issues`.
+ * @param {{ crossRefs?: boolean, checkEdges?: boolean }} [opts]  When
+ *   `crossRefs` is true, also run every cross-reference check the schema cannot
+ *   express — dependency-graph edge integrity, plus learning-resource coverage
+ *   and origin — and fold them into `issues`. `checkEdges` is the original name
+ *   for the same switch, still honoured so vendored copies keep working.
  * @returns {ValidationResult}
  */
 export function validateAnalysisDocument(doc, opts = {}) {
   const validate = getValidator();
   const ok = validate(doc);
   const issues = ok ? [] : (validate.errors ?? []).map((err) => toIssue(err, doc));
-  if (opts.checkEdges) {
+  if (opts.crossRefs ?? opts.checkEdges) {
     for (const extra of edgeIntegrityIssues(doc)) issues.push(extra);
+    for (const extra of learningResourceIssues(doc)) issues.push(extra);
   }
   return { valid: issues.length === 0, issues };
 }

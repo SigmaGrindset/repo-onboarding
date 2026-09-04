@@ -33,6 +33,7 @@ const SECTIONS = [
   "Guided Tour",
   "Hotspots",
   "Setup",
+  "Learn",
   "First Tasks",
 ];
 
@@ -451,6 +452,41 @@ function renderFooter(analysis, siteUrl, generatorVersion) {
 // Entry point
 // ---------------------------------------------------------------------------
 
+function renderLearn(analysis) {
+  const entries = Array.isArray(analysis.learningResources)
+    ? analysis.learningResources
+    : [];
+  const lines = ["## Learn"];
+  if (entries.length === 0) {
+    lines.push("", "This analysis predates learning-resource data.");
+    return lines;
+  }
+
+  const byTech = new Map(entries.map((e) => [e.tech, e]));
+  for (const tech of analysis.pitch?.techStack ?? []) {
+    const entry = byTech.get(tech.name);
+    if (!entry) continue;
+    lines.push("", `### ${tech.name}`, "");
+    lines.push(String(tech.role ?? ""));
+    lines.push(
+      "",
+      entry.official
+        ? `**Start here:** <${entry.official}>`
+        : "**Start here:** no public documentation exists for this technology.",
+    );
+    const resources = Array.isArray(entry.resources) ? entry.resources : [];
+    for (const resource of resources) {
+      lines.push("", `- [${resource.title ?? ""}](${resource.url ?? ""}) (${resource.kind ?? ""}) — ${String(resource.why ?? "")}`);
+    }
+    const files = Array.isArray(entry.inRepo?.files) ? entry.inRepo.files : [];
+    lines.push("", `**In this repo:** ${String(entry.inRepo?.note ?? "")}`);
+    if (files.length) {
+      lines.push("", `Files: ${files.map((f) => `\`${f.path}\``).join(", ")}`);
+    }
+  }
+  return lines;
+}
+
 /**
  * Render a validated analysis document as an ONBOARDING.md Markdown string.
  * @param {import("./analysis.ts").Analysis} analysis a validated document
@@ -473,6 +509,7 @@ export function renderOnboardingMarkdown(analysis, options = {}) {
     renderTour(analysis),
     renderHotspots(analysis),
     renderSetup(analysis),
+    renderLearn(analysis),
     renderFirstTasks(analysis),
     renderFooter(analysis, siteUrl, generatorVersion),
   ];

@@ -9,7 +9,14 @@ import { ANALYSIS_SECTIONS } from "./sections";
  */
 export interface SearchItem {
   /** Display group, also used for ordering. */
-  group: "Sections" | "Architecture" | "Codebase Map" | "Contributor Guide" | "Guided Tour" | "Hotspots";
+  group:
+    | "Sections"
+    | "Architecture"
+    | "Codebase Map"
+    | "Contributor Guide"
+    | "Guided Tour"
+    | "Hotspots"
+    | "Learn";
   label: string;
   /** Secondary text shown right-aligned (role, step number, commit count). */
   hint?: string;
@@ -82,6 +89,19 @@ export function buildSearchIndex(analysis: Analysis, base: string): SearchItem[]
       hint: `Step ${step.order}`,
       href: `${base}/tour?step=${step.order}`,
       keywords: step.files.map((f) => f.path).join(" "),
+    });
+  }
+
+  for (const entry of analysis.learningResources ?? []) {
+    items.push({
+      group: "Learn",
+      label: entry.tech,
+      hint: entry.official ? "docs + repo pointers" : "repo pointers",
+      href: `${base}/learn?tech=${slugify(entry.tech)}`,
+      keywords: [
+        ...entry.resources.map((r) => r.title),
+        ...entry.inRepo.files.map((f) => f.path),
+      ].join(" "),
     });
   }
 

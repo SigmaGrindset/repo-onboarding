@@ -2,7 +2,8 @@
  * `repo-onboarding validate <file> [--json]`
  *
  * Validates an analysis document against the vendored schema AND the
- * dependency-graph edge-integrity rules (folded in via checkEdges). Human
+ * cross-reference rules the schema cannot express — dependency-graph edge
+ * integrity, plus learning-resource coverage and origin. Human
  * output mirrors schema/validate.mjs; `--json` emits `{ valid, issues }`.
  *
  * Exit codes: 0 valid · 1 invalid · 2 usage / IO / parse error.
@@ -73,7 +74,7 @@ export function runValidate(args) {
 
   warnIfNewerSchema(doc);
 
-  const result = validateAnalysisDocument(doc, { checkEdges: true });
+  const result = validateAnalysisDocument(doc, { crossRefs: true });
 
   if (asJson) {
     // Machine-readable: only JSON on stdout; exit code still signals validity.

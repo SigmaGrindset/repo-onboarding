@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.1.0",
+  "schemaVersion": "1.2.0",
   "metadata": {
     "repoName": "ledgerline (DEMO SAMPLE)",
     "repoUrl": "https://github.com/acme-example/ledgerline-demo",
@@ -404,6 +404,259 @@
       }
     ]
   },
+  "learningResources": [
+    {
+      "tech": "TypeScript",
+      "official": "https://www.typescriptlang.org/",
+      "resources": [
+        {
+          "title": "Everyday Types",
+          "url": "https://www.typescriptlang.org/docs/handbook/2/everyday-types.html",
+          "kind": "guide",
+          "why": "The domain layer leans on precise types to keep invalid states unrepresentable, so fluency here is what makes src/domain readable rather than noisy."
+        },
+        {
+          "title": "Utility Types",
+          "url": "https://www.typescriptlang.org/docs/handbook/utility-types.html",
+          "kind": "reference",
+          "why": "The port interfaces derive request and response shapes from domain types instead of restating them, which is why edits stay in one place."
+        }
+      ],
+      "inRepo": {
+        "note": "Types are the architectural boundary here: application code depends on interfaces in ports.ts, and infrastructure supplies implementations of them.",
+        "files": [
+          {
+            "path": "src/application/ports.ts"
+          },
+          {
+            "path": "src/domain/money.ts"
+          }
+        ]
+      }
+    },
+    {
+      "tech": "Node.js",
+      "official": "https://nodejs.org/en",
+      "resources": [
+        {
+          "title": "Modules: ECMAScript modules",
+          "url": "https://nodejs.org/api/esm.html",
+          "kind": "reference",
+          "why": "The project is ESM throughout, so import resolution and file extensions behave differently from the CommonJS examples found in older tutorials."
+        }
+      ],
+      "inRepo": {
+        "note": "The server is a plain Node process with no framework-managed lifecycle; startup, shutdown and signal handling are explicit in the HTTP server module.",
+        "files": [
+          {
+            "path": "src/interfaces/http/server.ts"
+          }
+        ]
+      }
+    },
+    {
+      "tech": "Fastify",
+      "official": "https://fastify.dev/",
+      "resources": [
+        {
+          "title": "Getting Started",
+          "url": "https://fastify.dev/docs/latest/Guides/Getting-Started/",
+          "kind": "guide",
+          "why": "Route registration and the plugin model are the two things to understand before adding an endpoint alongside the existing transfer routes."
+        },
+        {
+          "title": "Hooks",
+          "url": "https://fastify.dev/docs/latest/Reference/Hooks/",
+          "kind": "reference",
+          "why": "Error translation is wired as a hook rather than per-route try/catch, so this explains where an unhandled domain error actually becomes a response."
+        }
+      ],
+      "inRepo": {
+        "note": "The HTTP layer is intentionally thin: routes parse input, call an application command, and map failures through a single error mapper.",
+        "files": [
+          {
+            "path": "src/interfaces/http/server.ts"
+          },
+          {
+            "path": "src/interfaces/http/routes/transfers.ts"
+          },
+          {
+            "path": "src/interfaces/http/error-mapper.ts"
+          }
+        ]
+      }
+    },
+    {
+      "tech": "PostgreSQL",
+      "official": "https://www.postgresql.org/docs/",
+      "resources": [
+        {
+          "title": "Transaction Isolation",
+          "url": "https://www.postgresql.org/docs/current/transaction-iso.html",
+          "kind": "reference",
+          "why": "Double-entry transfers depend on isolation guarantees, so this is required background before changing anything in the ledger repository."
+        }
+      ],
+      "inRepo": {
+        "note": "Schema changes are plain SQL migrations checked into the repo, so the database shape is reviewable in the same pull request as the code that needs it.",
+        "files": [
+          {
+            "path": "migrations/0001_init.sql"
+          },
+          {
+            "path": "src/infrastructure/pg/ledger-repository.ts"
+          }
+        ]
+      }
+    },
+    {
+      "tech": "Drizzle ORM",
+      "official": "https://orm.drizzle.team/",
+      "resources": [
+        {
+          "title": "Overview",
+          "url": "https://orm.drizzle.team/docs/overview",
+          "kind": "guide",
+          "why": "Drizzle keeps queries close to SQL rather than hiding them, which is why the repository code reads like the statements it actually issues."
+        },
+        {
+          "title": "Migrations",
+          "url": "https://orm.drizzle.team/docs/migrations",
+          "kind": "guide",
+          "why": "Explains how the checked-in schema definition and the SQL migration files are meant to stay in step when you add a column."
+        }
+      ],
+      "inRepo": {
+        "note": "The schema module is the single description of the tables, and only the repository implementations import it; the domain layer never sees Drizzle types.",
+        "files": [
+          {
+            "path": "src/infrastructure/pg/schema.ts"
+          },
+          {
+            "path": "src/infrastructure/pg/ledger-repository.ts"
+          }
+        ]
+      }
+    },
+    {
+      "tech": "Zod",
+      "official": "https://zod.dev/",
+      "resources": [
+        {
+          "title": "API",
+          "url": "https://zod.dev/api",
+          "kind": "reference",
+          "why": "Request bodies are parsed rather than cast, so schema definitions are the real boundary between untrusted input and typed domain values."
+        }
+      ],
+      "inRepo": {
+        "note": "Validation happens once at the HTTP edge; anything that reaches an application command has already been parsed into a trusted shape.",
+        "files": [
+          {
+            "path": "src/interfaces/http/routes/transfers.ts"
+          }
+        ]
+      }
+    },
+    {
+      "tech": "Vitest",
+      "official": "https://vitest.dev/",
+      "resources": [
+        {
+          "title": "Getting Started",
+          "url": "https://vitest.dev/guide/",
+          "kind": "guide",
+          "why": "Covers running a single file or a focused test, which is the loop you will use constantly while changing domain rules."
+        },
+        {
+          "title": "API Reference",
+          "url": "https://vitest.dev/api/",
+          "kind": "reference",
+          "why": "The integration tests lean on setup and teardown hooks to manage database state, so knowing the exact ordering guarantees matters."
+        }
+      ],
+      "inRepo": {
+        "note": "Two tiers of tests: fast pure domain tests, and integration tests that touch a real database, which are the slower ones to run.",
+        "files": [
+          {
+            "path": "test/domain/ledger.test.ts"
+          },
+          {
+            "path": "test/integration/transfer.int.test.ts"
+          }
+        ]
+      }
+    },
+    {
+      "tech": "Pino",
+      "official": "https://getpino.io/",
+      "resources": [
+        {
+          "title": "API",
+          "url": "https://getpino.io/#/docs/api",
+          "kind": "reference",
+          "why": "Logs are structured JSON with bound context rather than formatted strings, so child loggers and serializers are the parts worth knowing."
+        }
+      ],
+      "inRepo": {
+        "note": "Request-scoped loggers carry correlation identifiers, which is what makes a single transfer traceable across the HTTP, application and outbox layers.",
+        "files": [
+          {
+            "path": "src/observability/telemetry.ts"
+          }
+        ]
+      }
+    },
+    {
+      "tech": "Docker Compose",
+      "official": "https://docs.docker.com/compose/",
+      "resources": [
+        {
+          "title": "Compose file reference",
+          "url": "https://docs.docker.com/reference/compose-file/",
+          "kind": "reference",
+          "why": "Local Postgres comes from Compose, so this is the file to read when the integration tests cannot reach a database."
+        }
+      ],
+      "inRepo": {
+        "note": "Compose exists to provide dependencies for local development and tests, not to run the application itself, which is started directly from the shell.",
+        "files": [
+          {
+            "path": "src/interfaces/http/server.ts"
+          }
+        ]
+      }
+    },
+    {
+      "tech": "OpenTelemetry",
+      "official": "https://opentelemetry.io/",
+      "resources": [
+        {
+          "title": "JavaScript",
+          "url": "https://opentelemetry.io/docs/languages/js/",
+          "kind": "guide",
+          "why": "Instrumentation is initialised before anything else at startup; this explains why import order in the telemetry module is load-bearing."
+        },
+        {
+          "title": "Traces",
+          "url": "https://opentelemetry.io/docs/concepts/signals/traces/",
+          "kind": "reference",
+          "why": "Spans cross the outbox boundary, so understanding context propagation is what makes an asynchronous publish traceable back to its request."
+        }
+      ],
+      "inRepo": {
+        "note": "Tracing is set up in one module and left alone; application code creates no spans directly, relying on automatic instrumentation instead.",
+        "files": [
+          {
+            "path": "src/observability/telemetry.ts"
+          },
+          {
+            "path": "src/infrastructure/outbox/publisher.ts"
+          }
+        ]
+      }
+    }
+  ],
   "firstTasks": [
     {
       "title": "Add a GET /accounts/:id/history endpoint",

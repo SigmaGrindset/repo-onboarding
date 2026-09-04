@@ -14,6 +14,7 @@ const ICONS: Record<string, ReactNode> = {
   tour: <IconTour />,
   hotspots: <IconHotspots />,
   setup: <IconSetup />,
+  learn: <IconLearn />,
   tasks: <IconTasks />,
   versions: <IconVersions />,
 };
@@ -247,6 +248,14 @@ function IconSetup() {
     <>
       <circle cx="8" cy="8" r="2" />
       <path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4" />
+    </>,
+  );
+}
+function IconLearn() {
+  return svg(
+    <>
+      <path d="M8 4.2 2.5 2.6v9.2L8 13.4l5.5-1.6V2.6z" />
+      <path d="M8 4.2v9.2" />
     </>,
   );
 }

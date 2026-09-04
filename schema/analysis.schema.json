@@ -19,7 +19,7 @@
   ],
   "properties": {
     "schemaVersion": {
-      "description": "Semantic version of this analysis contract, so consumers can detect/evolve. Current: 1.1.0",
+      "description": "Semantic version of this analysis contract, so consumers can detect/evolve. Current: 1.2.0",
       "type": "string",
       "pattern": "^\\d+\\.\\d+\\.\\d+$"
     },
@@ -53,6 +53,12 @@
     "hotspots": { "$ref": "#/$defs/Hotspots" },
     "setup": { "$ref": "#/$defs/SetupGuide" },
     "contributorGuide": { "$ref": "#/$defs/ContributorGuide" },
+    "learningResources": {
+      "description": "How a reader comes up to speed on each technology. Exactly one entry per pitch.techStack[] entry, joined by name. Optional: documents produced before schema 1.2.0 omit it.",
+      "type": "array",
+      "minItems": 3,
+      "items": { "$ref": "#/$defs/LearningResourceEntry" }
+    },
     "firstTasks": {
       "description": "Suggested first tasks for a new contributor.",
       "type": "array",
@@ -544,6 +550,87 @@
           "description": "Why this is a good first task for a newcomer.",
           "type": "string",
           "minLength": 30
+        }
+      }
+    },
+    "LearningResourceEntry": {
+      "description": "Learning resources for one technology: one canonical door out to its documentation, plus pointers back into this repo.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tech", "official", "resources", "inRepo"],
+      "properties": {
+        "tech": {
+          "description": "Technology name. MUST exactly match a pitch.techStack[].name.",
+          "type": "string",
+          "minLength": 1
+        },
+        "official": {
+          "description": "Canonical documentation entry point for this technology, or null when no public documentation exists (internal / proprietary technology in a private repo).",
+          "type": ["string", "null"],
+          "format": "uri"
+        },
+        "resources": {
+          "description": "Curated pages beneath `official`, on the same host. Empty when `official` is null.",
+          "type": "array",
+          "maxItems": 4,
+          "items": { "$ref": "#/$defs/LearningResource" }
+        },
+        "inRepo": { "$ref": "#/$defs/InRepoPointer" }
+      },
+      "if": {
+        "required": ["official"],
+        "properties": { "official": { "type": "null" } }
+      },
+      "then": {
+        "properties": { "resources": { "type": "array", "maxItems": 0 } }
+      },
+      "else": {
+        "properties": { "resources": { "type": "array", "minItems": 1 } }
+      }
+    },
+    "LearningResource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "url", "kind", "why"],
+      "properties": {
+        "title": {
+          "description": "The page's own title, as it appears on the documentation site.",
+          "type": "string",
+          "minLength": 1
+        },
+        "url": {
+          "description": "MUST share a host with this entry's `official` URL.",
+          "type": "string",
+          "format": "uri"
+        },
+        "kind": {
+          "description": "tutorial = build something step by step; guide = read start to finish; reference = look things up.",
+          "type": "string",
+          "enum": ["tutorial", "guide", "reference"]
+        },
+        "why": {
+          "description": "Why THIS repo's reader should open this page and what it unlocks for working in THIS codebase. Forced to be substantive.",
+          "type": "string",
+          "minLength": 40
+        }
+      }
+    },
+    "InRepoPointer": {
+      "description": "Grounds a technology in this repository: what to notice, and where it actually shows up.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["note", "files"],
+      "properties": {
+        "note": {
+          "description": "What a reader should notice about how THIS repo uses the technology — the pattern it leans on, not a generic description. Forced to be substantive.",
+          "type": "string",
+          "minLength": 40
+        },
+        "files": {
+          "description": "Files where this technology actually shows up in this repo.",
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/FileRef" }
         }
       }
     }

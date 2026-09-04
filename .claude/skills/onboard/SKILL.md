@@ -143,6 +143,28 @@ Extract, per schema section, as you read:
   the manifests/scripts/README/CI (`notable.ciConfigs`), each step titled, `notes` for
   gotchas. Do not invent scripts that don't exist — check `manifests[].scripts`.
 - **hotspots** — see Step 2.
+- **learningResources[]** — how a newcomer comes up to speed on the stack. **Exactly one
+  entry per `pitch.techStack[]` entry**, joined by `tech`, which MUST match that entry's
+  `name` character for character. No gaps, no extras — this is checked at validation time.
+  - `official` — that technology's own documentation entry point (its docs home, or its
+    repository when that is genuinely where the docs live). Use the homepage you can
+    justify from the manifests, never a guess. Set it to `null` when the technology has no
+    public documentation at all — internal services, in-house protocols, proprietary
+    tooling — and then `resources` MUST be empty.
+  - `resources[]` (1–4, empty only when `official` is null) — specific pages **on the same
+    documentation domain as `official`**. Subdomains are fine (`docs.python.org` under
+    `python.org`); anything else is not. **No blog posts, no course platforms, no videos,
+    no third-party tutorials** — this is enforced at validation time and a stray host
+    fails the document. Prefer a page you are confident exists: linking two pages you are
+    sure of beats four you half-remember. Never invent a deep link to pad the list.
+  - Each resource needs a `kind` (`tutorial` = build something step by step, `guide` =
+    read start to finish, `reference` = look things up) and a `why` (≥ 40 chars) saying
+    why **this repo's** reader opens it — tie it to the role this technology plays here.
+    "The official documentation" is a failure; "the routing engine moved into this package
+    in v5, so route questions are answered here, not in lib/" is the bar.
+  - `inRepo` — the half only you can write: `note` (≥ 40 chars) on what to notice about
+    how THIS repo uses the technology (the pattern it leans on, not a definition), plus
+    `files[]` (≥ 1) pointing at real repo-relative paths where it actually shows up.
 - **firstTasks[]** (≥ 2, aim for 3–4) — concrete, real tasks referencing real files, with a
   `difficulty` and a `rationale` for why it's a good newcomer task. Range easy→hard.
 
@@ -165,15 +187,17 @@ Fill `metadata.stats`, `commitSha`, `repoUrl` from the pre-pass per Step 2. Crea
 
 ## Step 6 — Validate (both gates must pass)
 
-1. **Schema:**
+1. **Schema + cross-references:**
    ```
-   node schema/validate.mjs data/<repo-name>/analysis.json
+   node schema/validate.mjs data/<repo-name>/analysis.json --cross-refs
    ```
    Exit 0 = valid. On exit 1, read the printed errors, fix the JSON, and re-run until it
    passes. Common failures: missing required field, `additionalProperties` (a stray key),
    a string under its `minLength`, `enum` mismatch (`recentActivity` must be
    `active|moderate|dormant`; `difficulty` `easy|medium|hard`; check `category`/`kind`/
-   diagram `type` enums), or a bad `commitSha`/`repoUrl` format.
+   diagram `type` enums), a bad `commitSha`/`repoUrl` format, a `learningResources` entry
+   missing for a tech-stack entry (or naming one that isn't there), or a resource URL that
+   is not on the same documentation domain as its `official`.
 
 2. **Edge integrity** (the schema does NOT enforce this — you must):
    ```

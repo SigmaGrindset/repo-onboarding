@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "1.2.0",
   "metadata": {
     "repoName": "express",
     "repoUrl": "https://github.com/expressjs/express",
@@ -330,6 +330,247 @@
       }
     ]
   },
+  "learningResources": [
+    {
+      "tech": "JavaScript",
+      "official": "https://developer.mozilla.org/en-US/docs/Web/JavaScript",
+      "resources": [
+        {
+          "title": "Object.create()",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/create",
+          "kind": "reference",
+          "why": "Express builds its app, request and response objects with Object.create rather than classes; this page is the whole trick behind lib/express.js."
+        },
+        {
+          "title": "Object.setPrototypeOf()",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/setPrototypeOf",
+          "kind": "reference",
+          "why": "Every incoming req/res is re-prototyped on the fly with this call, so understanding it explains how Express decorates Node's native objects."
+        }
+      ],
+      "inRepo": {
+        "note": "Deliberately plain ES5-flavoured CommonJS with strict mode and var, no build step, so it runs on Node 18+ as-is. Composition over inheritance throughout.",
+        "files": [
+          {
+            "path": "lib/express.js"
+          },
+          {
+            "path": "lib/utils.js"
+          }
+        ]
+      }
+    },
+    {
+      "tech": "Node.js",
+      "official": "https://nodejs.org/en",
+      "resources": [
+        {
+          "title": "HTTP",
+          "url": "https://nodejs.org/api/http.html",
+          "kind": "reference",
+          "why": "IncomingMessage and ServerResponse are the objects Express decorates; read this before lib/request.js and lib/response.js or they will look like magic."
+        },
+        {
+          "title": "Modules: CommonJS modules",
+          "url": "https://nodejs.org/api/modules.html",
+          "kind": "reference",
+          "why": "The framework is CommonJS end to end, and its lazy require calls are load-order sensitive in a way ES modules would not be."
+        }
+      ],
+      "inRepo": {
+        "note": "Express never subclasses Node's http objects. It creates prototype objects and swaps them onto each req/res, then hands the app function to http.createServer.",
+        "files": [
+          {
+            "path": "lib/request.js"
+          },
+          {
+            "path": "lib/response.js"
+          }
+        ]
+      }
+    },
+    {
+      "tech": "router",
+      "official": "https://github.com/pillarjs/router",
+      "resources": [
+        {
+          "title": "router README",
+          "url": "https://github.com/pillarjs/router#readme",
+          "kind": "reference",
+          "why": "In v5 the routing engine lives in this package, not in this repo, so route-matching questions are answered here rather than in lib/application.js."
+        }
+      ],
+      "inRepo": {
+        "note": "express.js and application.js require the router package for Router and Route instead of shipping their own; app.use and app.METHOD delegate onto it.",
+        "files": [
+          {
+            "path": "lib/express.js"
+          },
+          {
+            "path": "lib/application.js"
+          }
+        ]
+      }
+    },
+    {
+      "tech": "body-parser",
+      "official": "https://expressjs.com/en/resources/middleware/body-parser.html",
+      "resources": [
+        {
+          "title": "express.json()",
+          "url": "https://expressjs.com/en/api.html#express.json",
+          "kind": "reference",
+          "why": "The built-in parsers are literally re-exports of this package, so the API page documents behaviour this repository does not implement itself."
+        }
+      ],
+      "inRepo": {
+        "note": "lib/express.js re-exports json, raw, text and urlencoded straight from body-parser as the framework's built-in body middleware.",
+        "files": [
+          {
+            "path": "lib/express.js"
+          }
+        ]
+      }
+    },
+    {
+      "tech": "serve-static",
+      "official": "https://expressjs.com/en/resources/middleware/serve-static.html",
+      "resources": [
+        {
+          "title": "Serving static files in Express",
+          "url": "https://expressjs.com/en/starter/static-files.html",
+          "kind": "guide",
+          "why": "Explains the mounting and caching behaviour a reader expects from express.static, all of which comes from the package rather than from this repo."
+        }
+      ],
+      "inRepo": {
+        "note": "express.static is re-exported unchanged from lib/express.js; there is no static-file serving code in this repository to read.",
+        "files": [
+          {
+            "path": "lib/express.js"
+          }
+        ]
+      }
+    },
+    {
+      "tech": "send",
+      "official": "https://github.com/pillarjs/send",
+      "resources": [
+        {
+          "title": "send README",
+          "url": "https://github.com/pillarjs/send#readme",
+          "kind": "reference",
+          "why": "Range requests, ETags and cache headers on res.sendFile are decided here, so this is where to look when file-download behaviour surprises you."
+        }
+      ],
+      "inRepo": {
+        "note": "res.sendFile and res.download in response.js are thin wrappers that build options and delegate the actual streaming to this package.",
+        "files": [
+          {
+            "path": "lib/response.js"
+          }
+        ]
+      }
+    },
+    {
+      "tech": "finalhandler",
+      "official": "https://github.com/pillarjs/finalhandler",
+      "resources": [
+        {
+          "title": "finalhandler README",
+          "url": "https://github.com/pillarjs/finalhandler#readme",
+          "kind": "reference",
+          "why": "Documents the fallback that produces 404s and error responses when no route replies, which is why unmatched requests still return sensible output."
+        }
+      ],
+      "inRepo": {
+        "note": "application.js installs it as the last link in the chain, so the default 404 and error output a newcomer sees comes from this package, not from here.",
+        "files": [
+          {
+            "path": "lib/application.js"
+          }
+        ]
+      }
+    },
+    {
+      "tech": "Mocha",
+      "official": "https://mochajs.org/",
+      "resources": [
+        {
+          "title": "Getting started",
+          "url": "https://mochajs.org/#getting-started",
+          "kind": "guide",
+          "why": "The whole suite is describe/it in this style; ten minutes here makes the several thousand assertions under test/ readable at a glance."
+        },
+        {
+          "title": "Command-line usage",
+          "url": "https://mochajs.org/#command-line-usage",
+          "kind": "reference",
+          "why": "Needed to run a single file or grep one case instead of the full suite, which is the normal loop when changing one behaviour."
+        }
+      ],
+      "inRepo": {
+        "note": "Tests live under test/ with shared helpers in test/support; the suite is the real specification for request and response behaviour.",
+        "files": [
+          {
+            "path": "test/app.router.js"
+          },
+          {
+            "path": "test/support/env.js"
+          }
+        ]
+      }
+    },
+    {
+      "tech": "SuperTest",
+      "official": "https://github.com/ladjs/supertest",
+      "resources": [
+        {
+          "title": "supertest README",
+          "url": "https://github.com/ladjs/supertest#readme",
+          "kind": "reference",
+          "why": "Every HTTP-level test drives a real server through this API, so its request and expect chain is the vocabulary of most of the test suite."
+        }
+      ],
+      "inRepo": {
+        "note": "Tests build a small app, hand it to request(app) and assert against real responses rather than mocking out the http layer.",
+        "files": [
+          {
+            "path": "test/res.send.js"
+          },
+          {
+            "path": "test/acceptance/web-service.js"
+          }
+        ]
+      }
+    },
+    {
+      "tech": "ESLint",
+      "official": "https://eslint.org/",
+      "resources": [
+        {
+          "title": "Getting started",
+          "url": "https://eslint.org/docs/latest/use/getting-started",
+          "kind": "guide",
+          "why": "Lint runs in CI, so knowing how to run it locally saves a round trip on a pull request that is otherwise ready to merge."
+        },
+        {
+          "title": "Configuration files",
+          "url": "https://eslint.org/docs/latest/use/configure/configuration-files",
+          "kind": "reference",
+          "why": "Explains how the repository's config resolves, which matters when a rule fires on code that looks consistent with its neighbours."
+        }
+      ],
+      "inRepo": {
+        "note": "Linting is enforced by the GitHub Actions workflow rather than a commit hook, so failures surface on the pull request instead of locally.",
+        "files": [
+          {
+            "path": ".github/workflows/ci.yml"
+          }
+        ]
+      }
+    }
+  ],
   "firstTasks": [
     {
       "title": "Add or extend a res.* unit test",

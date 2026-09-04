@@ -27,7 +27,7 @@ const pkg = JSON.parse(readFileSync(resolve(PKG_ROOT, "package.json"), "utf8"));
 export const PKG_VERSION = pkg.version;
 
 /** The analysis contract version this CLI is built against. */
-export const SUPPORTED_SCHEMA_VERSION = "1.0.0";
+export const SUPPORTED_SCHEMA_VERSION = "1.2.0";
 
 /** Value written to metadata.analyzerVersion by the generated PROMPT. */
 export const ANALYZER_VERSION = `repo-onboarding/${PKG_VERSION}`;

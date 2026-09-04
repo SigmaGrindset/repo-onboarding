@@ -29,9 +29,11 @@ const SECTIONS = [
   "Architecture",
   "Dependency Graph",
   "Codebase Map",
+  "Contributor Guide",
   "Guided Tour",
   "Hotspots",
   "Setup",
+  "Learn",
   "First Tasks",
 ];
 
@@ -401,6 +403,41 @@ function renderFirstTasks(analysis) {
   return lines;
 }
 
+function renderContributorGuide(analysis) {
+  const guide = analysis.contributorGuide;
+  const lines = ["## Contributor Guide"];
+  if (!guide) {
+    lines.push("", "This analysis predates the contributor guide.");
+    return lines;
+  }
+
+  lines.push("", "### Known risks and sharp edges");
+  for (const risk of guide.knownRisks ?? []) {
+    lines.push("", `#### ${risk.title ?? ""} (${risk.severity ?? ""})`, "");
+    lines.push(String(risk.impact ?? ""));
+    lines.push("", `**Mitigation:** ${String(risk.mitigation ?? "")}`);
+    const files = Array.isArray(risk.files) ? risk.files : [];
+    lines.push("", `Files: ${files.map((f) => `\`${f}\``).join(", ")}`);
+  }
+
+  lines.push("", "### Where should this kind of change go?");
+  for (const route of guide.changeRoutes ?? []) {
+    lines.push("", `#### ${route.changeType ?? ""}`, "");
+    lines.push(`Start in \`${route.primaryPath ?? ""}\`.`);
+    const related = Array.isArray(route.relatedPaths) ? route.relatedPaths : [];
+    if (related.length) {
+      lines.push("", `Related: ${related.map((p) => `\`${p}\``).join(", ")}`);
+    }
+    lines.push("", String(route.rationale ?? ""));
+    const checks = Array.isArray(route.verification) ? route.verification : [];
+    if (checks.length) {
+      lines.push("", "Verify:", "");
+      for (const check of checks) lines.push(`- ${String(check)}`);
+    }
+  }
+  return lines;
+}
+
 function renderFooter(analysis, siteUrl, generatorVersion) {
   const version =
     generatorVersion || analysis.metadata?.analyzerVersion || "0.0.0";
@@ -414,6 +451,41 @@ function renderFooter(analysis, siteUrl, generatorVersion) {
 // ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
+
+function renderLearn(analysis) {
+  const entries = Array.isArray(analysis.learningResources)
+    ? analysis.learningResources
+    : [];
+  const lines = ["## Learn"];
+  if (entries.length === 0) {
+    lines.push("", "This analysis predates learning-resource data.");
+    return lines;
+  }
+
+  const byTech = new Map(entries.map((e) => [e.tech, e]));
+  for (const tech of analysis.pitch?.techStack ?? []) {
+    const entry = byTech.get(tech.name);
+    if (!entry) continue;
+    lines.push("", `### ${tech.name}`, "");
+    lines.push(String(tech.role ?? ""));
+    lines.push(
+      "",
+      entry.official
+        ? `**Start here:** <${entry.official}>`
+        : "**Start here:** no public documentation exists for this technology.",
+    );
+    const resources = Array.isArray(entry.resources) ? entry.resources : [];
+    for (const resource of resources) {
+      lines.push("", `- [${resource.title ?? ""}](${resource.url ?? ""}) (${resource.kind ?? ""}) — ${String(resource.why ?? "")}`);
+    }
+    const files = Array.isArray(entry.inRepo?.files) ? entry.inRepo.files : [];
+    lines.push("", `**In this repo:** ${String(entry.inRepo?.note ?? "")}`);
+    if (files.length) {
+      lines.push("", `Files: ${files.map((f) => `\`${f.path}\``).join(", ")}`);
+    }
+  }
+  return lines;
+}
 
 /**
  * Render a validated analysis document as an ONBOARDING.md Markdown string.
@@ -433,9 +505,11 @@ export function renderOnboardingMarkdown(analysis, options = {}) {
     renderArchitecture(analysis),
     renderDependencyGraph(analysis),
     renderCodebaseMap(analysis),
+    renderContributorGuide(analysis),
     renderTour(analysis),
     renderHotspots(analysis),
     renderSetup(analysis),
+    renderLearn(analysis),
     renderFirstTasks(analysis),
     renderFooter(analysis, siteUrl, generatorVersion),
   ];

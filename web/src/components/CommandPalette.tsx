@@ -9,8 +9,10 @@ const GROUP_ORDER: SearchItem["group"][] = [
   "Sections",
   "Architecture",
   "Codebase Map",
+  "Contributor Guide",
   "Guided Tour",
   "Hotspots",
+  "Learn",
 ];
 
 /**

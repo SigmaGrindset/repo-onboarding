@@ -47,6 +47,7 @@ const SECTIONS = [
   "Guided Tour",
   "Hotspots",
   "Setup",
+  "Learn",
   "First Tasks",
 ];
 
@@ -354,6 +355,43 @@ function renderHotspots(analysis: Analysis): string[] {
   return lines;
 }
 
+function renderLearn(analysis: Analysis): string[] {
+  const entries = analysis.learningResources ?? [];
+  const lines = ["## Learn"];
+  if (entries.length === 0) {
+    lines.push("", "This analysis predates learning-resource data.");
+    return lines;
+  }
+
+  const byTech = new Map(entries.map((e) => [e.tech, e]));
+  for (const tech of analysis.pitch.techStack) {
+    const entry = byTech.get(tech.name);
+    if (!entry) continue;
+    lines.push("", `### ${tech.name}`, "");
+    lines.push(tech.role);
+    lines.push(
+      "",
+      entry.official
+        ? `**Start here:** <${entry.official}>`
+        : "**Start here:** no public documentation exists for this technology.",
+    );
+    for (const resource of entry.resources) {
+      lines.push(
+        "",
+        `- [${resource.title}](${resource.url}) (${resource.kind}) — ${resource.why}`,
+      );
+    }
+    lines.push("", `**In this repo:** ${entry.inRepo.note}`);
+    if (entry.inRepo.files.length) {
+      lines.push(
+        "",
+        `Files: ${entry.inRepo.files.map((f) => `\`${f.path}\``).join(", ")}`,
+      );
+    }
+  }
+  return lines;
+}
+
 /** Render one titled setup phase (Prerequisites/Setup/Run/Test share layout). */
 function renderSetupSteps(steps: SetupStep[]): string[] {
   const lines: string[] = [];
@@ -482,6 +520,7 @@ export function renderOnboardingMarkdown(
     renderTour(analysis),
     renderHotspots(analysis),
     renderSetup(analysis),
+    renderLearn(analysis),
     renderFirstTasks(analysis),
     renderFooter(analysis, siteUrl, generatorVersion),
   ];

@@ -67,7 +67,7 @@ export async function runExport(rest) {
   warnIfNewerSchema(doc);
 
   // ---- Validate (schema + edge integrity). ----------------------------------
-  const result = validateAnalysisDocument(doc, { checkEdges: true });
+  const result = validateAnalysisDocument(doc, { crossRefs: true });
   if (!result.valid) {
     if (force) {
       console.error(

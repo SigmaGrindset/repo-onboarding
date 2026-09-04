@@ -37,6 +37,7 @@ export function buildSuggestedQuestions(
     tour: tourQuestions(analysis),
     hotspots: hotspotsQuestions(analysis),
     setup: setupQuestions(analysis),
+    learn: learnQuestions(analysis),
     tasks: tasksQuestions(analysis),
     versions: [],
   };
@@ -46,6 +47,17 @@ export function buildSuggestedQuestions(
     out[s.slug] = padQuestions(bySlug[s.slug] ?? []);
   }
   return out;
+}
+
+function learnQuestions(a: Analysis): string[] {
+  const entry = a.learningResources?.[0];
+  const tech = entry?.tech ?? a.pitch.techStack[0]?.name;
+  const second = a.learningResources?.[1]?.tech ?? a.pitch.techStack[1]?.name;
+  return [
+    tech ? `What do I need to know about ${clip(tech)} to work here?` : "Which technology should I learn first?",
+    second ? `How does this repo use ${clip(second)}?` : "How much of this stack do I need to know?",
+    "Which parts of this stack can I safely ignore at first?",
+  ];
 }
 
 function guideQuestions(a: Analysis): string[] {

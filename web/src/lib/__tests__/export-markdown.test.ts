@@ -79,6 +79,9 @@ for (const id of FIXTURE_IDS) {
     assert.ok(md.startsWith("# "), "starts with an h1");
     assert.ok(md.includes("## Architecture"), "has an Architecture section");
     assert.ok(md.includes("## Contributor Guide"), "has a Contributor Guide section");
+    assert.ok(md.includes("## Learn"), "has a Learn section");
+    assert.ok(md.includes("**Start here:**"), "each technology has an entry point");
+    assert.ok(md.includes("**In this repo:**"), "each technology is grounded in the repo");
     assert.ok(md.includes("```mermaid"), "embeds a mermaid diagram");
     assert.ok(md.includes("- [ ] "), "has a First Tasks checklist item");
     assert.ok(md.endsWith("\n"), "ends with a trailing newline");

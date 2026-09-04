@@ -140,6 +140,28 @@ Reading order:
   step titled, `notes` for gotchas. Do not invent scripts that don't exist —
   check `manifests[].scripts`.
 - **`hotspots`** — see the Hard rules in Step 1.
+- **`learningResources[]`** — how a newcomer comes up to speed on the stack. **Exactly one
+  entry per `pitch.techStack[]` entry**, joined by `tech`, which MUST match that entry's
+  `name` character for character. No gaps, no extras — this is checked at validation time.
+  - `official` — that technology's own documentation entry point (its docs home, or its
+    repository when that is genuinely where the docs live). Use the homepage you can
+    justify from the manifests, never a guess. Set it to `null` when the technology has no
+    public documentation at all — internal services, in-house protocols, proprietary
+    tooling — and then `resources` MUST be empty.
+  - `resources[]` (1–4, empty only when `official` is null) — specific pages **on the same
+    documentation domain as `official`**. Subdomains are fine (`docs.python.org` under
+    `python.org`); anything else is not. **No blog posts, no course platforms, no videos,
+    no third-party tutorials** — this is enforced at validation time and a stray host
+    fails the document. Prefer a page you are confident exists: linking two pages you are
+    sure of beats four you half-remember. Never invent a deep link to pad the list.
+  - Each resource needs a `kind` (`tutorial` = build something step by step, `guide` =
+    read start to finish, `reference` = look things up) and a `why` (≥ 40 chars) saying
+    why **this repo's** reader opens it — tie it to the role this technology plays here.
+    "The official documentation" is a failure; "the routing engine moved into this package
+    in v5, so route questions are answered here, not in lib/" is the bar.
+  - `inRepo` — the half only you can write: `note` (≥ 40 chars) on what to notice about
+    how THIS repo uses the technology (the pattern it leans on, not a definition), plus
+    `files[]` (≥ 1) pointing at real repo-relative paths where it actually shows up.
 - **`firstTasks[]`** (≥ 2, aim for 3–4) — concrete, real tasks referencing real
   files, each with a `difficulty` (`easy` / `medium` / `hard`) and a `rationale`
   for why it's a good newcomer task. Range easy → hard.
@@ -168,13 +190,16 @@ Run:
 {{VALIDATE_COMMAND}}
 ```
 
-This checks the JSON Schema **and** dependency-graph edge integrity in one pass.
+This checks the JSON Schema **and** the cross-reference rules — dependency-graph
+edge integrity, plus learning-resource coverage and origin — in one pass.
 Exit `0` means both pass. On failure it prints each issue with its JSON path,
 what was expected, and what it got. Common failures: a missing required field, a
 stray key (`additionalProperties`), a string under its `minLength`, an `enum`
 mismatch (`recentActivity` must be `active` / `moderate` / `dormant`;
 `difficulty` `easy` / `medium` / `hard`), a bad `commitSha` / `repoUrl` format,
-or a dangling edge that references a non-existent node id.
+a dangling edge that references a non-existent node id, a `learningResources`
+entry missing for a tech-stack entry (or naming one that does not exist), or a
+resource URL that is not on the same documentation domain as its `official`.
 
 **Fix every issue and re-run until it exits `0`.** Do not stop early.
 
@@ -189,6 +214,8 @@ When it passes, publish with a token from `{{SITE_URL}}/account`:
 ## Quality checklist (self-review before you finish)
 
 - [ ] `stats` numbers are verbatim from the pre-pass; `commitSha` / `repoUrl` correct.
+- [ ] Every tech-stack entry has learning resources, every resource URL is one you
+      are confident exists, and every `inRepo` file path is real.
 - [ ] Every architecture claim, tour step, and codebase-map note is traceable to
       a file you actually read; all cited paths and tour line ranges are real.
 - [ ] At least one architecture diagram, and diagrams mirror real imports / boundaries.

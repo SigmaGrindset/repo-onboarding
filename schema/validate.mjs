@@ -50,6 +50,7 @@ async function loadJson(path, label) {
 async function main() {
   const args = process.argv.slice(2);
   const json = args.includes("--json");
+  const crossRefs = args.includes("--cross-refs");
   const target = args.find((a) => !a.startsWith("--"));
   if (!target) {
     fail(
@@ -63,7 +64,7 @@ async function main() {
 
   let result;
   try {
-    result = validateAnalysisDocument(data);
+    result = validateAnalysisDocument(data, { crossRefs });
   } catch (err) {
     fail(`Failed to compile/load schema: ${err.message}`);
   }

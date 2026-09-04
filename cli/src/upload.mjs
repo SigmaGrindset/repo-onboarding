@@ -87,7 +87,7 @@ export async function runUpload(args, deps = {}) {
   const text = readTextFileOrThrow(targetPath, "analysis document");
   const doc = parseJsonOrThrow(text, `analysis document at ${targetPath}`);
 
-  const result = validateAnalysisDocument(doc, { checkEdges: true });
+  const result = validateAnalysisDocument(doc, { crossRefs: true });
   if (!result.valid) {
     console.error(
       `Refusing to upload: ${targetPath} is INVALID (${result.issues.length} ` +

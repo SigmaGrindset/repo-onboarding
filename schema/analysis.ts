@@ -6,7 +6,7 @@
  * The schema is the source of truth for validation; these types are the source
  * of truth for compile-time safety in the skill and the web viewer.
  *
- * Contract version: schemaVersion "1.0.0".
+ * Contract version: schemaVersion "1.2.0".
  */
 
 /** Semantic version string, e.g. "1.0.0". */
@@ -32,6 +32,12 @@ export interface Analysis {
   setup: SetupGuide;
   /** Contributor-specific risks and guidance for locating common changes. */
   contributorGuide?: ContributorGuide;
+  /**
+   * How a reader comes up to speed on each technology. Exactly one entry per
+   * `pitch.techStack` entry, joined by name. Absent in documents produced
+   * before schema 1.2.0.
+   */
+  learningResources?: LearningResourceEntry[];
   /** Suggested first tasks for a new contributor. */
   firstTasks: FirstTask[];
 }
@@ -288,6 +294,42 @@ export interface ContributorGuide {
 }
 
 // ---------------------------------------------------------------------------
+// Learning resources
+// ---------------------------------------------------------------------------
+
+/** tutorial = build step by step · guide = read through · reference = look up. */
+export type LearningResourceKind = "tutorial" | "guide" | "reference";
+
+export interface LearningResource {
+  title: string;
+  /** Shares a host with the entry's `official` URL. */
+  url: string;
+  kind: LearningResourceKind;
+  /** Why THIS repo's reader should open this page. */
+  why: string;
+}
+
+/** Grounds a technology in this repository. */
+export interface InRepoPointer {
+  /** What to notice about how THIS repo uses the technology. */
+  note: string;
+  files: FileRef[];
+}
+
+export interface LearningResourceEntry {
+  /** Exactly matches a `pitch.techStack[].name`. */
+  tech: string;
+  /**
+   * Canonical documentation entry point, or `null` when the technology has no
+   * public documentation (internal / proprietary). `resources` is then empty.
+   */
+  official: string | null;
+  /** 1-4 pages beneath `official` on the same host; empty when `official` is null. */
+  resources: LearningResource[];
+  inRepo: InRepoPointer;
+}
+
+// ---------------------------------------------------------------------------
 // Suggested first tasks
 // ---------------------------------------------------------------------------
 
@@ -338,8 +380,9 @@ export interface ValidationIssue {
   /**
    * The failing rule: an Ajv keyword (`required`, `enum`, `type`,
    * `additionalProperties`, `minItems`, `minLength`, `minimum`, `maximum`,
-   * `pattern`, `format`, `contains`, …) or `"edge-integrity"` for the optional
-   * dependency-graph cross-reference checks.
+   * `pattern`, `format`, `contains`, …) or one of the optional cross-reference
+   * keywords: `"edge-integrity"` (dependency-graph nodes/edges),
+   * `"resource-coverage"` and `"resource-origin"` (learning resources).
    */
   keyword: string;
   /**
