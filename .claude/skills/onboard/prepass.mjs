@@ -43,6 +43,7 @@ const TOP_CHURN = 25;
 // .gitignore. Matched by exact directory name at any level.
 const DEFAULT_IGNORE_DIRS = new Set([
   ".git", ".hg", ".svn", "node_modules", "bower_components", "vendor",
+  ".repo-onboarding",
   "dist", "build", "out", ".next", ".nuxt", ".svelte-kit", ".turbo",
   "target", "bin", "obj", ".gradle", ".idea", ".vscode", ".vs",
   "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".tox",
@@ -203,11 +204,33 @@ function classifyLanguage(name) {
 }
 
 // ---------------------------------------------------------------------------
-// .gitignore (cheap, top-level, non-glob patterns only)
+// .gitignore (cheap, non-glob patterns only)
 // ---------------------------------------------------------------------------
 
+// Ask git what it ignores. This is exact where hand-rolled matching is not:
+// globs, negations, nested .gitignore files and the global excludes all come
+// out right. --directory collapses a wholly-ignored tree (node_modules/) to a
+// single entry, so the output stays small even on large repos.
+function gitIgnoredEntries(repoPath) {
+  const paths = new Set();
+  try {
+    const raw = git(repoPath, [
+      "ls-files", "--others", "--ignored", "--exclude-standard",
+      "--directory", "--no-empty-directory", "-z",
+    ]);
+    for (const entry of raw.split("\0")) {
+      const trimmed = entry.replace(/\/+$/, "");
+      if (trimmed) paths.add(trimmed);
+    }
+  } catch {
+    /* git missing, not a repo, or the command failed — fall back to the parser */
+  }
+  return paths;
+}
+
 function parseGitignore(repoPath) {
-  const names = new Set();
+  const names = new Set(); // bare names, matched at any level
+  const paths = new Set(); // repo-relative paths, matched at that exact node
   try {
     const raw = readFileSync(join(repoPath, ".gitignore"), "utf8");
     for (let line of raw.split(/\r?\n/)) {
@@ -215,26 +238,28 @@ function parseGitignore(repoPath) {
       if (!line || line.startsWith("#") || line.startsWith("!")) continue;
       // Skip anything with glob metacharacters — keep this cheap and safe.
       if (/[*?\[\]]/.test(line)) continue;
-      // Normalize: drop leading and trailing slashes, take last path segment.
+      // Normalize: drop leading and trailing slashes.
       line = line.replace(/^\/+/, "").replace(/\/+$/, "");
-      if (!line || line.includes("/")) {
-        // nested path pattern: store the whole relative form too
-        if (line) names.add(line);
-        continue;
-      }
-      names.add(line);
+      if (!line) continue;
+      // A pattern containing a slash ("data/raw/") is anchored to the repo
+      // root, so it can only ever match a repo-relative path, never a bare
+      // basename. Keeping the two apart is what makes it actually prune.
+      if (line.includes("/")) paths.add(line);
+      else names.add(line);
     }
   } catch {
     /* no .gitignore — fine */
   }
-  return names;
+  return { names, paths };
 }
 
 // ---------------------------------------------------------------------------
 // File tree walk + LOC/language aggregation
 // ---------------------------------------------------------------------------
 
-function buildWalk(repoPath, extraIgnoreNames) {
+function buildWalk(repoPath, extraIgnore) {
+  const extraIgnoreNames = extraIgnore.names;
+  const extraIgnorePaths = extraIgnore.paths;
   const langAgg = new Map(); // language -> { files, loc }
   let totalFiles = 0;
   let totalLoc = 0;
@@ -244,10 +269,13 @@ function buildWalk(repoPath, extraIgnoreNames) {
   let nodeBudget = MAX_TREE_NODES;
   const largestFiles = []; // {path, loc}
 
-  function ignored(name, isDir) {
+  // relPath is the entry's repo-relative posix path. The walk is top-down,
+  // so pruning at the matching node drops its whole subtree.
+  function ignored(name, isDir, relPath) {
     if (isDir && DEFAULT_IGNORE_DIRS.has(name)) return true;
     if (!isDir && IGNORE_FILE_BASENAMES.has(name)) return true;
     if (extraIgnoreNames.has(name)) return true;
+    if (extraIgnorePaths.has(relPath)) return true;
     return false;
   }
 
@@ -278,10 +306,10 @@ function buildWalk(repoPath, extraIgnoreNames) {
         continue;
       }
 
-      if (ignored(name, isDir)) continue;
-
       const abs = join(absDir, name);
       const relPath = toPosix(relative(repoPath, abs));
+
+      if (ignored(name, isDir, relPath)) continue;
 
       if (isDir) {
         if (depth >= MAX_DEPTH) {
@@ -750,6 +778,9 @@ function main() {
 
   const started = Date.now();
   const extraIgnore = parseGitignore(repoPath);
+  // git is authoritative when it is available; the parsed .gitignore stays as
+  // the fallback for a plain directory that is not a repository.
+  for (const ignoredPath of gitIgnoredEntries(repoPath)) extraIgnore.paths.add(ignoredPath);
   const walk = buildWalk(repoPath, extraIgnore);
   const paths = collectPaths(walk.tree);
   const manifests = parseManifests(repoPath, walk.tree);
