@@ -452,15 +452,11 @@ p {
   }
 }
 
-/* Mermaid diagrams should scale to their container */
-.mermaid-host svg {
-  max-width: 100%;
-  height: auto;
-}
-
-/* In the diagram lightbox the wrapper div carries the diagram's natural
-   (viewBox) size; the SVG fills it. !important beats Mermaid's inline
-   max-width so the diagram renders at full size and pan/zoom stays crisp. */
+/* Inline and fullscreen alike, the wrapper div carries the diagram's natural
+   (viewBox) size and the SVG fills it, so the transform is the only thing that
+   scales it. !important beats Mermaid's inline max-width, which would otherwise
+   shrink the diagram inside its own wrapper. */
+.diagram-canvas svg,
 .diagram-lightbox svg {
   width: 100% !important;
   height: 100% !important;

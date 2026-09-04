@@ -62,3 +62,24 @@ _Avoid_: example, usage, local docs
 The property that every tech stack entry has exactly one learning-resources entry —
 no gaps, no orphans. A partially covered document is not valid.
 _Avoid_: completeness, parity
+
+## Diagrams
+
+**Diagram canvas**:
+The interactive surface presenting one architecture diagram. A reader selects things in
+it and inspects them, but can never change it — the analysis document is the only source
+of what a diagram contains.
+_Avoid_: viewer, lightbox, image, editor — "editor" is actively misleading, since nothing
+here edits
+
+**Addressable element**:
+A part of a rendered diagram that carries identity and can therefore be selected: a node,
+a cluster, an edge, a participant, a message. Everything else in the drawing is
+decoration, which cannot be selected.
+_Avoid_: shape, box, item
+
+**Neighbourhood**:
+A selected addressable element together with everything exactly one connection away — the
+part that stays lit while the rest of the diagram dims. The same concept governs the
+dependency graph and every diagram canvas.
+_Avoid_: cluster (that is a diagram's own subgraph), related nodes, context

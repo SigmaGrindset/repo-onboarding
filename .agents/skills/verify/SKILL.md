@@ -17,7 +17,7 @@ The Next.js app is in `web/` (repo root package.json is only the schema validato
 ## Driving it
 
 - Playwright 1.60 is installed globally: `require("C:/Users/user/AppData/Roaming/npm/node_modules/playwright")` from a `.cjs` script (no local install).
-- Good surfaces: `/analysis/<id>/architecture` (Mermaid diagrams, `.mermaid-host svg`; each render gets a fresh `mmd-*` id — wait for the id to change to detect a re-render), `/analysis/<id>` (tech-stack badges), `/analysis/<id>/graph` (d3 SVG).
+- Good surfaces: `/analysis/<id>/architecture` (Mermaid diagrams, `.diagram-canvas svg`; each render gets a fresh `mmd-*` id — wait for the id to change to detect a re-render), `/analysis/<id>` (tech-stack badges), `/analysis/<id>/graph` (d3 SVG).
 - Theme: resolved theme lives on `<html data-theme>`, stamped pre-paint by an inline script in `web/src/app/layout.tsx`; toggle button is in the header (`aria-label*="Switch to"`).
 
 ## Gotchas

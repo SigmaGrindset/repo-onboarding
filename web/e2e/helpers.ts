@@ -12,10 +12,24 @@ export const CORE_ROUTES = [
   { slug: "tasks", path: "/analysis/sample/tasks" },
 ] as const;
 
+/** Mermaid lays every diagram out in the browser, and this page stacks several. */
+const DIAGRAM_TIMEOUT = 20_000;
+
 export async function waitForPageReady(page: Page, path: string) {
   await expect(page.locator("main h1").first()).toBeVisible();
   if (path.endsWith("/architecture")) {
-    await expect(page.locator(".mermaid-host svg").first()).toBeVisible();
+    // This page stacks several diagram canvases and Mermaid lays every one of
+    // them out in the browser, so waiting for the first to appear leaves the
+    // last ones still spinning. Wait until none is still rendering, and allow
+    // longer than the default assertion timeout: a parallel run has several of
+    // these pages laying out at once, and the suite should go red on a defect
+    // rather than on load.
+    await expect(page.locator(".diagram-canvas svg").first()).toBeVisible({
+      timeout: DIAGRAM_TIMEOUT,
+    });
+    await expect(
+      page.getByRole("status").filter({ hasText: /Rendering diagram/ }),
+    ).toHaveCount(0, { timeout: DIAGRAM_TIMEOUT });
   }
   if (path.endsWith("/graph")) {
     // Below `lg` the force-directed canvas starts collapsed behind a

@@ -13,7 +13,8 @@
     "test:unit": "tsx --test src/lib/__tests__/*.test.ts",
     "test:ui": "vitest run",
     "test:e2e": "npm run build:local && playwright test",
-    "test:e2e:update": "npm run build:local && playwright test visual.spec.ts --update-snapshots"
+    "test:e2e:update": "npm run build:local && playwright test visual.spec.ts --update-snapshots",
+    "fixtures:diagrams": "tsx scripts/generate-diagram-fixtures.ts"
   },
   "dependencies": {
     "@ai-sdk/react": "^4.0.23",

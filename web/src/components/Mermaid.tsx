@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { DiagramCanvas } from "@/components/DiagramCanvas";
 import {
   ViewportButton,
   ViewportControls,
+  svgContentSize,
   useViewport,
 } from "@/components/viewport";
 
@@ -24,9 +26,9 @@ function isDarkTheme(): boolean {
  * never runs during SSR. Render failures degrade gracefully to the raw source
  * inside a <pre> with an error note, rather than crashing the page.
  *
- * The inline diagram is clickable: it opens a fullscreen lightbox with
- * cursor-anchored wheel zoom, drag panning, and zoom controls, so large
- * flowcharts stay readable without touching the browser zoom.
+ * What comes back is handed to a diagram canvas — a live pan-and-zoom surface in
+ * the section itself — which can still be promoted to the fullscreen view from
+ * its own toolbar.
  */
 export function Mermaid({ source, title }: { source: string; title?: string }) {
   const [svg, setSvg] = useState<string | null>(null);
@@ -127,41 +129,29 @@ export function Mermaid({ source, title }: { source: string; title?: string }) {
     );
   }
 
+  if (!svg) {
+    return (
+      <div
+        role="status"
+        className="flex items-center justify-center gap-2 py-8 text-sm text-faint"
+      >
+        <span
+          aria-hidden
+          className="h-3 w-3 motion-safe:animate-spin rounded-full border-2 border-border border-t-accent"
+        />
+        Rendering diagram…
+      </div>
+    );
+  }
+
   return (
     <>
-      <div
-        role="button"
-        tabIndex={svg ? 0 : -1}
-        aria-label={`Expand diagram${title ? `: ${title}` : ""}`}
-        title="Click to expand and zoom"
-        onClick={() => svg && setExpanded(true)}
-        onKeyDown={(e) => {
-          if (svg && (e.key === "Enter" || e.key === " ")) {
-            e.preventDefault();
-            setExpanded(true);
-          }
-        }}
-        className="group relative cursor-zoom-in rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
-      >
-        <div className="mermaid-host flex justify-center overflow-x-auto">
-          {svg ? (
-            <div role="img" aria-label={title ?? "Diagram"} dangerouslySetInnerHTML={{ __html: svg }} />
-          ) : (
-            <div role="status" className="flex items-center gap-2 py-8 text-sm text-faint">
-              <span aria-hidden className="h-3 w-3 motion-safe:animate-spin rounded-full border-2 border-border border-t-accent" />
-              Rendering diagram…
-            </div>
-          )}
-        </div>
-        {svg ? (
-          <span className="pointer-events-none absolute right-2 top-2 flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1 text-[0.7rem] font-medium text-muted opacity-0 shadow-sm transition group-hover:opacity-100 group-focus-visible:opacity-100">
-            <ExpandIcon />
-            Expand
-          </span>
-        ) : null}
-      </div>
-
-      {expanded && svg ? (
+      <DiagramCanvas
+        svg={svg}
+        title={title}
+        onExpand={() => setExpanded(true)}
+      />
+      {expanded ? (
         <DiagramLightbox
           svg={svg}
           title={title}
@@ -194,9 +184,10 @@ function DiagramLightbox({
 }) {
   const contentRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
-  const [natural, setNatural] = useState<{ w: number; h: number } | null>(
-    null,
-  );
+  const [natural, setNatural] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
   // Fullscreen and modal: nothing is behind it, so a plain wheel zooms.
   const {
     ref: viewportRef,
@@ -211,26 +202,22 @@ function DiagramLightbox({
     endPan,
   } = useViewport<HTMLDivElement>({ minScale: 0.2, maxScale: 8 });
 
-  // Read the diagram's natural size from its viewBox. The wrapper div is then
-  // sized declaratively from this state and CSS makes the SVG fill it (see
-  // .diagram-lightbox in globals.css) — no imperative styling of Mermaid's SVG.
+  // Read the diagram's natural size, the same way the inline canvas does. The
+  // wrapper div is then sized declaratively from this state and CSS makes the
+  // SVG fill it — no imperative styling of Mermaid's SVG.
   useLayoutEffect(() => {
     const svgEl = contentRef.current?.querySelector("svg");
-    if (!svgEl) return;
-    const vb = svgEl.viewBox?.baseVal;
-    setNatural({
-      w: vb?.width || svgEl.clientWidth || 800,
-      h: vb?.height || svgEl.clientHeight || 600,
-    });
+    if (svgEl) setNatural(svgContentSize(svgEl));
   }, [svg]);
 
   // Scale to fit the viewport and centre the diagram.
   const fit = useCallback(() => {
     if (!natural) return;
-    fitToContent(natural.w + CONTENT_PAD * 2, natural.h + CONTENT_PAD * 2, {
-      margin: FIT_MARGIN,
-      maxScale: MAX_FIT_SCALE,
-    });
+    fitToContent(
+      natural.width + CONTENT_PAD * 2,
+      natural.height + CONTENT_PAD * 2,
+      { margin: FIT_MARGIN, maxScale: MAX_FIT_SCALE },
+    );
   }, [natural, fitToContent]);
 
   useLayoutEffect(() => {
@@ -318,8 +305,8 @@ function DiagramLightbox({
           className="diagram-lightbox absolute left-0 top-0 origin-top-left rounded-lg bg-surface p-4 shadow-2xl"
           style={{
             transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.k})`,
-            width: natural ? natural.w + CONTENT_PAD * 2 : undefined,
-            height: natural ? natural.h + CONTENT_PAD * 2 : undefined,
+            width: natural ? natural.width + CONTENT_PAD * 2 : undefined,
+            height: natural ? natural.height + CONTENT_PAD * 2 : undefined,
             visibility: natural ? "visible" : "hidden",
           }}
           dangerouslySetInnerHTML={{ __html: svg }}
@@ -330,19 +317,5 @@ function DiagramLightbox({
       </div>
     </div>,
     document.body,
-  );
-}
-
-function ExpandIcon() {
-  return (
-    <svg width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden>
-      <path
-        d="M9 2h5v5M7 14H2V9M14 2 9.5 6.5M2 14l4.5-4.5"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
   );
 }

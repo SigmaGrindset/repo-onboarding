@@ -57,6 +57,27 @@ export interface FitOptions {
   maxScale?: number;
 }
 
+/** A diagram with no usable viewBox still has to be given a size. */
+const FALLBACK_CONTENT = { width: 800, height: 600 };
+
+/**
+ * The size a rendered SVG was laid out in, which is what `fitToContent` wants.
+ * Read off the `viewBox` attribute rather than `viewBox.baseVal`, so it works
+ * the same in a browser and in the jsdom the component tests run in.
+ */
+export function svgContentSize(svg: SVGSVGElement): {
+  width: number;
+  height: number;
+} {
+  const [, , width, height] = (svg.getAttribute("viewBox") ?? "")
+    .split(/[\s,]+/)
+    .map(Number);
+  return {
+    width: width > 0 ? width : svg.clientWidth || FALLBACK_CONTENT.width,
+    height: height > 0 ? height : svg.clientHeight || FALLBACK_CONTENT.height,
+  };
+}
+
 export interface Viewport<T extends Element> {
   /**
    * Attach to the element that both defines the viewport rectangle and receives
