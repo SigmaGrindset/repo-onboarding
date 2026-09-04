@@ -129,19 +129,20 @@ export default async function AnalysisLayout({
       totalTourSteps={analysis.tour.length}
       taskCount={analysis.firstTasks.length}
     >
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:flex-row lg:gap-8 lg:py-8">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-7 sm:px-6 lg:flex-row lg:gap-10 lg:py-10">
       {/* Sidebar */}
       <aside className="lg:w-64 lg:shrink-0">
         <div className="lg:sticky lg:top-6">
           <Link
             href="/"
-            className="mb-4 inline-flex items-center gap-1.5 text-xs font-medium text-muted transition hover:text-text"
+            className="press group mb-5 inline-flex items-center gap-1.5 text-xs font-medium text-muted hover:text-accent"
           >
             <svg
               width="14"
               height="14"
               viewBox="0 0 16 16"
               fill="none"
+              className="transition-transform duration-200 group-hover:-translate-x-0.5"
               aria-hidden
             >
               <path
@@ -155,8 +156,8 @@ export default async function AnalysisLayout({
             All analyses
           </Link>
 
-          <div className="mb-5 rounded-xl border border-border bg-surface p-4">
-            <h2 className="text-sm font-semibold leading-tight text-text">
+          <div className="mb-5 rounded-xl border border-border bg-surface p-4 shadow-soft">
+            <h2 className="text-[0.95rem] font-semibold leading-tight tracking-[-0.015em] text-text">
               {metadata.repoName}
             </h2>
             <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.7rem] text-faint">
@@ -176,7 +177,7 @@ export default async function AnalysisLayout({
                 href={metadata.repoUrl}
                 target="_blank"
                 rel="noreferrer noopener"
-                className="mt-2 block truncate text-[0.7rem] text-accent hover:underline"
+                className="mt-2.5 block truncate font-mono text-[0.7rem] text-accent decoration-accent/40 underline-offset-2 transition hover:underline"
               >
                 {metadata.repoUrl.replace(/^https?:\/\//, "")}
               </a>
@@ -197,7 +198,7 @@ export default async function AnalysisLayout({
             {versionCount > 1 ? (
               <Link
                 href={`/analysis/${id}/versions`}
-                className="mt-2 block text-[0.7rem] font-medium text-accent hover:underline"
+                className="mt-2.5 block text-[0.7rem] font-medium text-accent decoration-accent/40 underline-offset-2 transition hover:underline"
               >
                 {versionOrdinal ? `v${versionOrdinal} · ` : ""}View history
               </Link>
@@ -208,7 +209,7 @@ export default async function AnalysisLayout({
           <a
             href={`/api/analyses/${id}/markdown`}
             download
-            className="mb-5 inline-flex items-center gap-1.5 text-[0.7rem] font-medium text-accent transition hover:underline"
+            className="press mb-5 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-surface-2 px-3 py-2 text-[0.75rem] font-medium text-muted hover:border-border-strong hover:text-accent"
           >
             <svg
               width="13"

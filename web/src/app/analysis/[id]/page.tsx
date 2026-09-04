@@ -45,17 +45,18 @@ export default async function OverviewPage({
         taskTitles={analysis.firstTasks.map((task) => task.title)}
       />
 
-      {/* Key stats */}
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {/* Key stats — one hairline-separated instrument strip rather than four
+          identical floating boxes. */}
+      <dl className="mb-8 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border shadow-soft sm:grid-cols-4">
         <Stat label="Total files" value={formatNumber(stats.totalFiles)} />
         <Stat label="Lines of code" value={formatNumber(stats.totalLoc)} />
         <Stat label="Languages" value={String(stats.languages.length)} />
         <Stat label="Primary" value={metadata.primaryLanguage} />
-      </div>
+      </dl>
 
       {/* Language breakdown */}
-      <Card className="mb-6 p-5">
-        <h3 className="mb-3 text-sm font-semibold text-text">
+      <Card className="mb-8 p-5 sm:p-6">
+        <h3 className="mb-4 text-[0.95rem] font-semibold tracking-[-0.01em] text-text">
           Language breakdown
         </h3>
         <LanguageBar languages={stats.languages} />
@@ -73,7 +74,7 @@ export default async function OverviewPage({
                 }}
               />
               <span className="text-text">{l.language}</span>
-              <span className="ml-auto tabular-nums text-faint">
+              <span className="ml-auto font-mono text-[0.8rem] tabular-nums text-faint">
                 {l.percentage}%
               </span>
             </li>
@@ -81,20 +82,21 @@ export default async function OverviewPage({
         </ul>
       </Card>
 
-      {/* Audience */}
-      <Card className="mb-6 p-5">
-        <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-text">
-          <span className="text-accent">Who this is for</span>
-        </h3>
-        <p className="text-[0.95rem] leading-relaxed text-muted">
+      {/* Audience — a pull-quote on an accent rule, not another card in the
+          stack. It is a statement about the reader, so it should read like one. */}
+      <section className="mb-10 border-l-2 border-accent py-1 pl-5 sm:pl-6">
+        <h3 className="kicker mb-2 text-accent">Who this is for</h3>
+        <p className="max-w-[44ch] text-[1.05rem] leading-[1.6] text-text">
           {pitch.audience}
         </p>
-      </Card>
+      </section>
 
       {/* Tech stack grouped by category */}
       <div className="mb-6">
-        <h3 className="mb-4 text-sm font-semibold text-text">Tech stack</h3>
-        <div className="space-y-5">
+        <h3 className="mb-5 text-[0.95rem] font-semibold tracking-[-0.01em] text-text">
+          Tech stack
+        </h3>
+        <div className="space-y-6">
           {grouped.map((g) => (
             <TechCategory key={g.cat} category={g.cat} items={g.items} />
           ))}
@@ -102,10 +104,19 @@ export default async function OverviewPage({
       </div>
 
       {/* Discover the BYO-model flow — subtle, doesn't compete with the analysis. */}
-      <div className="mt-10 border-t border-border pt-5 text-sm text-muted">
-        Want one of these for your own codebase?{" "}
-          <Link href="/generate" className="text-accent underline underline-offset-2">
-          Generate one for your repo →
+      <div className="mt-12 flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-border pt-6 text-sm text-muted">
+        Want one of these for your own codebase?
+        <Link
+          href="/generate"
+          className="press group inline-flex items-center gap-1.5 font-medium text-accent underline decoration-accent/35 underline-offset-[3px] hover:decoration-accent"
+        >
+          Generate one for your repo
+          <span
+            aria-hidden
+            className="transition-transform duration-200 group-hover:translate-x-0.5"
+          >
+            &rarr;
+          </span>
         </Link>
       </div>
     </div>
@@ -114,12 +125,14 @@ export default async function OverviewPage({
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <Card className="p-4">
-      <div className="truncate text-lg font-semibold tabular-nums text-text">
+    // Flex + order so the figure reads above its label while <dt> keeps its
+    // required document order before <dd>.
+    <div className="flex flex-col bg-surface px-4 py-4">
+      <dt className="order-2 mt-1.5 text-[0.7rem] text-faint">{label}</dt>
+      <dd className="truncate font-mono text-[1.25rem] font-semibold leading-none tracking-[-0.02em] tabular-nums text-text">
         {value}
-      </div>
-      <div className="mt-0.5 text-xs text-faint">{label}</div>
-    </Card>
+      </dd>
+    </div>
   );
 }
 
@@ -154,15 +167,28 @@ function TechCategory({
   const style = categoryStyle(category);
   return (
     <div>
-      <div className="mb-2 flex items-center gap-2">
+      <div className="mb-3 flex items-center gap-2.5">
         <Badge className={style.className}>{style.label}</Badge>
-        <span className="text-xs text-faint">{items.length}</span>
+        <span className="font-mono text-[0.7rem] tabular-nums text-faint">
+          {items.length}
+        </span>
+        <span aria-hidden className="h-px flex-1 bg-border" />
       </div>
-      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+      {/* A lone item runs the full width rather than sitting in a half column
+          beside dead space. */}
+      <div
+        className={`grid gap-2.5 ${
+          items.length === 1 ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-2"
+        }`}
+      >
         {items.map((t) => (
-          <Card key={t.name} className="p-3.5">
-            <div className="text-sm font-semibold text-text">{t.name}</div>
-            <p className="mt-1 text-[0.83rem] leading-relaxed text-muted">
+          // `quiet` — these sit inside the stack, so they should not read as
+          // another top-level card with its own frame and shadow.
+          <Card key={t.name} tone="quiet" radius="lg" className="p-4">
+            <div className="text-[0.9rem] font-semibold tracking-[-0.01em] text-text">
+              {t.name}
+            </div>
+            <p className="mt-1.5 text-[0.85rem] leading-[1.6] text-muted">
               {t.role}
             </p>
           </Card>

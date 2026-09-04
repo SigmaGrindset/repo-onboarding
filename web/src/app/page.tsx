@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { resolveDataSource } from "@/lib/datasource";
 import { isCloudMode } from "@/lib/mode";
+import { compactNumber } from "@/lib/format";
 import { EmptyState } from "@/components/ui";
 import { AnalysisGrid, type AnalysisCard } from "@/components/AnalysisGrid";
 
@@ -27,66 +28,158 @@ export default async function IndexPage() {
   }
   const cards = [...groups.values()];
 
-  return (
-    <div className="mx-auto w-full max-w-6xl px-5 py-10 sm:px-8 sm:py-16">
-      <header className="mb-12">
-        <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1 text-xs font-medium text-muted">
-          <span className="inline-block h-1.5 w-1.5 rounded-full bg-accent" />
-          {cloud ? "Presentation engine · your workspace" : "Presentation engine · dev mode"}
-        </div>
-        <h1 className="text-3xl font-semibold tracking-tight text-text sm:text-4xl">
-          {cloud ? "Your analyses" : "Repo Onboarding"}
-        </h1>
-        <p className="mt-3 max-w-2xl text-[1.02rem] leading-relaxed text-muted">
-          {cloud ? (
-            <>
-              Analyses you have uploaded or that have been shared with you. Each
-              is rendered entirely from its{" "}
-              <code className="rounded bg-surface-2 px-1.5 py-0.5 font-mono text-[0.85em]">
-                analysis.json
-              </code>
-              . Use{" "}
-              <Link href="/upload" className="text-accent hover:underline">
-                Upload
-              </Link>{" "}
-              to add another, or{" "}
-              <Link href="/generate" className="text-accent hover:underline">
-                generate one
-              </Link>{" "}
-              for your own repo.
-            </>
-          ) : (
-            <>
-              Every analysis below is rendered entirely from its{" "}
-              <code className="rounded bg-surface-2 px-1.5 py-0.5 font-mono text-[0.85em]">
-                analysis.json
-              </code>{" "}
-              — architecture narrative, an interactive dependency graph, a guided
-              reading tour, churn hotspots and a setup guide. Pick a codebase to
-              explore, or{" "}
-              <Link href="/generate" className="text-accent hover:underline">
-                generate one
-              </Link>{" "}
-              for your own repo.
-            </>
-          )}
-        </p>
-      </header>
+  // Masthead figures, derived from what is actually loaded — no rounded-off
+  // marketing numbers.
+  const totalLoc = cards.reduce((sum, c) => sum + c.newest.totalLoc, 0);
+  const languages = new Set(
+    cards.map((c) => c.newest.primaryLanguage).filter(Boolean),
+  );
+  const tourSteps = cards.reduce((sum, c) => sum + c.newest.tourSteps, 0);
 
-      {analyses.length === 0 ? (
-        <EmptyState
-          title={cloud ? "No analyses yet" : "No analyses found"}
-          hint={
-            cloud
-              ? "Upload an analysis.json to get started, or sign in if you haven't."
-              : "Drop an analysis.json into data/<name>/ at the repo root and refresh."
-          }
-        />
-      ) : (
-        // Default sort mirrors the server order per mode: cloud rows arrive
-        // newest-first, the fs source sorts fixtures by name.
-        <AnalysisGrid cards={cards} defaultSort={cloud ? "newest" : "name"} />
-      )}
+  return (
+    // `overflow-x-clip` (not hidden) contains the wash's negative inset without
+    // turning this into a scroll container, which would break `position:sticky`
+    // on the header.
+    <div className="relative overflow-x-clip">
+      <span aria-hidden className="hero-wash" />
+
+      <div className="relative mx-auto w-full max-w-6xl px-5 py-14 sm:px-8 sm:py-20">
+        {/* Masthead: title block left, figures rail right — deliberately
+            off-balance rather than a centred stack. */}
+        <header className="mb-14 grid gap-10 lg:grid-cols-12 lg:items-end lg:gap-12">
+          <div className="lg:col-span-7">
+            <div className="mb-5 inline-flex items-center gap-2 rounded-md border border-border bg-surface px-2.5 py-1 shadow-soft">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="absolute inline-flex h-full w-full rounded-full bg-accent opacity-60 motion-safe:animate-ping" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent" />
+              </span>
+              <span className="kicker text-muted">
+                {cloud ? "Your workspace" : "Presentation engine · dev mode"}
+              </span>
+            </div>
+
+            <h1 className="text-[2.6rem] font-semibold leading-[1.03] tracking-[-0.04em] text-text sm:text-[3.4rem]">
+              {cloud ? "Your analyses" : "Repo Onboarding"}
+            </h1>
+
+            <p className="mt-5 max-w-[46ch] text-[1.05rem] leading-[1.6] text-muted">
+              {cloud ? (
+                <>
+                  Analyses you have uploaded or that have been shared with you.
+                  Each is rendered entirely from its{" "}
+                  <Mono>analysis.json</Mono>. Use{" "}
+                  <Inline href="/upload">Upload</Inline> to add another, or{" "}
+                  <Inline href="/generate">generate one</Inline> for your own
+                  repo.
+                </>
+              ) : (
+                <>
+                  Every analysis below is rendered entirely from its{" "}
+                  <Mono>analysis.json</Mono> — architecture narrative, an
+                  interactive dependency graph, a guided reading tour, churn
+                  hotspots and a setup guide. Pick a codebase to explore, or{" "}
+                  <Inline href="/generate">generate one</Inline> for your own
+                  repo.
+                </>
+              )}
+            </p>
+          </div>
+
+          {cards.length > 0 ? (
+            <dl className="lg:col-span-5 lg:justify-self-end">
+              <div className="grid grid-cols-3 gap-px overflow-hidden rounded-xl border border-border bg-border shadow-soft lg:min-w-[22rem]">
+                <Figure
+                  value={String(cards.length)}
+                  label={cards.length === 1 ? "codebase" : "codebases"}
+                />
+                <Figure value={compactNumber(totalLoc)} label="lines analyzed" />
+                <Figure
+                  value={
+                    tourSteps > 0
+                      ? String(tourSteps)
+                      : String(languages.size)
+                  }
+                  label={tourSteps > 0 ? "tour steps" : "languages"}
+                />
+              </div>
+            </dl>
+          ) : null}
+        </header>
+
+        {analyses.length === 0 ? (
+          <EmptyState
+            title={cloud ? "No analyses yet" : "No analyses found"}
+            hint={
+              cloud
+                ? "Upload an analysis.json to get started, or sign in if you haven't."
+                : "Drop an analysis.json into data/<name>/ at the repo root and refresh."
+            }
+            action={
+              cloud ? (
+                <Link
+                  href="/upload"
+                  className="press inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-accent-fg shadow-raised hover:bg-accent-hover"
+                >
+                  Upload an analysis
+                </Link>
+              ) : (
+                <Link
+                  href="/generate"
+                  className="press inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-accent-fg shadow-raised hover:bg-accent-hover"
+                >
+                  Generate one for your repo
+                </Link>
+              )
+            }
+          />
+        ) : (
+          // Default sort mirrors the server order per mode: cloud rows arrive
+          // newest-first, the fs source sorts fixtures by name.
+          <AnalysisGrid cards={cards} defaultSort={cloud ? "newest" : "name"} />
+        )}
+      </div>
     </div>
+  );
+}
+
+/** One masthead figure. Hairline-separated cells, not four floating boxes. */
+function Figure({ value, label }: { value: string; label: string }) {
+  return (
+    <div className="bg-surface px-4 py-5">
+      <dt className="sr-only">{label}</dt>
+      <dd>
+        <span className="block font-mono text-[1.45rem] font-semibold leading-none tracking-[-0.02em] tabular-nums text-text">
+          {value}
+        </span>
+        <span className="mt-2 block text-[0.7rem] leading-none text-faint">
+          {label}
+        </span>
+      </dd>
+    </div>
+  );
+}
+
+function Mono({ children }: { children: React.ReactNode }) {
+  return (
+    <code className="rounded border border-border bg-surface-2 px-1.5 py-0.5 font-mono text-[0.85em] text-text">
+      {children}
+    </code>
+  );
+}
+
+function Inline({
+  href,
+  children,
+}: {
+  href: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      className="font-medium text-accent underline decoration-accent/35 underline-offset-[3px] transition hover:decoration-accent"
+    >
+      {children}
+    </Link>
   );
 }

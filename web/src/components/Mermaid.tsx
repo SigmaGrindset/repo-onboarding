@@ -332,11 +332,11 @@ function DiagramLightbox({
       role="dialog"
       aria-modal="true"
       aria-label={title ? `Diagram: ${title}` : "Diagram"}
-      className="fixed inset-0 z-50 flex flex-col bg-black/75 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex flex-col bg-[#0f1216]/80 backdrop-blur-sm"
     >
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-3 px-4 py-3">
-        <span className="min-w-0 truncate text-sm font-medium text-white/90">
+        <span className="min-w-0 truncate text-sm font-medium text-[#e9edf2]/90">
           {title ?? "Diagram"}
         </span>
         <div className="flex shrink-0 items-center gap-1">
@@ -351,7 +351,7 @@ function DiagramLightbox({
               <path
                 d="M6 2H2v4M10 2h4v4M6 14H2v-4M10 14h4v-4"
                 stroke="currentColor"
-                strokeWidth="1.4"
+                strokeWidth="1.5"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
@@ -393,7 +393,7 @@ function DiagramLightbox({
           }}
           dangerouslySetInnerHTML={{ __html: svg }}
         />
-        <p className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/50 px-3 py-1 text-[0.7rem] text-white/70">
+        <p className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-[#0f1216]/70 px-3 py-1 text-[0.7rem] text-[#e9edf2]/75">
           Scroll to zoom · drag to pan · double-click to zoom in · Esc to close
         </p>
       </div>
@@ -417,7 +417,7 @@ const LightboxButton = forwardRef<
       aria-label={label}
       title={label}
       onClick={onClick}
-      className="flex h-8 w-8 items-center justify-center rounded-md bg-white/10 text-base font-medium text-white transition hover:bg-white/20"
+      className="press flex h-8 w-8 items-center justify-center rounded-md bg-[#e9edf2]/10 text-base font-medium text-[#e9edf2] hover:bg-[#e9edf2]/20"
     >
       {children}
     </button>

@@ -269,7 +269,7 @@ export function TourStepper({
               <path
                 d="M10 3.5 5.5 8 10 12.5"
                 stroke="currentColor"
-                strokeWidth="1.6"
+                strokeWidth="1.5"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
@@ -289,7 +289,7 @@ export function TourStepper({
                 <path
                   d="M6 3.5 10.5 8 6 12.5"
                   stroke="currentColor"
-                  strokeWidth="1.6"
+                  strokeWidth="1.5"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
@@ -306,7 +306,7 @@ export function TourStepper({
                 <path
                   d="M6 3.5 10.5 8 6 12.5"
                   stroke="currentColor"
-                  strokeWidth="1.6"
+                  strokeWidth="1.5"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />

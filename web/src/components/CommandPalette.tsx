@@ -153,7 +153,7 @@ export function CommandPalette({ items }: { items: SearchItem[] }) {
       {open ? (
         createPortal(
         <div
-          className="fixed inset-0 z-50 bg-black/40 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 bg-[#0f1216]/45 p-4 backdrop-blur-sm"
           onClick={close}
         >
           <div
@@ -161,7 +161,7 @@ export function CommandPalette({ items }: { items: SearchItem[] }) {
             aria-modal="true"
             aria-label="Search this analysis"
             onClick={(e) => e.stopPropagation()}
-            className="mx-auto mt-[10vh] w-full max-w-lg overflow-hidden rounded-xl border border-border bg-surface shadow-2xl"
+            className="mx-auto mt-[10dvh] w-full max-w-lg overflow-hidden rounded-2xl border border-border bg-surface shadow-float"
           >
             <div className="flex items-center gap-2.5 border-b border-border px-4 transition-colors focus-within:border-accent/35">
               <span className="text-faint">
@@ -184,7 +184,7 @@ export function CommandPalette({ items }: { items: SearchItem[] }) {
               </kbd>
             </div>
 
-            <div ref={listRef} className="max-h-[55vh] overflow-y-auto p-2">
+            <div ref={listRef} className="max-h-[55dvh] overflow-y-auto p-2">
               {flat.length === 0 ? (
                 <p className="px-3 py-8 text-center text-sm text-faint">
                   No matches for “{query}”.

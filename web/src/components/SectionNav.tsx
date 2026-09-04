@@ -116,12 +116,20 @@ export function SectionNav({ id }: { id: string }) {
               onFocus={(event) =>
                 scrollLinkIntoView(event.currentTarget, preferredScrollBehavior())
               }
-              className={`flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition ${
+              className={`press relative flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2 text-[0.83rem] font-medium ${
                 active
                   ? "bg-accent-soft text-accent"
                   : "text-muted hover:bg-surface-2 hover:text-text"
               }`}
             >
+              {/* Left rail on the active row (desktop rail only — the mobile
+                  nav scrolls horizontally, where a vertical bar reads wrong). */}
+              <span
+                aria-hidden
+                className={`absolute left-0 top-1/2 hidden h-4 w-[2px] -translate-y-1/2 rounded-full bg-accent lg:block ${
+                  active ? "opacity-100" : "opacity-0"
+                }`}
+              />
               <span
                 className={`shrink-0 ${active ? "text-accent" : "text-faint"}`}
               >
@@ -153,7 +161,7 @@ export function SectionNav({ id }: { id: string }) {
   );
 }
 
-/* -- inline icons (16px, currentColor) --------------------------------- */
+/* -- inline icons (16px, currentColor, uniform 1.5 stroke) ------------- */
 
 function svg(children: ReactNode) {
   return (
@@ -163,7 +171,7 @@ function svg(children: ReactNode) {
       viewBox="0 0 16 16"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.4"
+      strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden

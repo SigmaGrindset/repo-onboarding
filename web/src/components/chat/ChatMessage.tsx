@@ -134,10 +134,10 @@ function FileIcon() {
       <path
         d="M4 1.5h5L13 5.5v9H4z"
         stroke="currentColor"
-        strokeWidth="1.2"
+        strokeWidth="1.5"
         strokeLinejoin="round"
       />
-      <path d="M9 1.5v4h4" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M9 1.5v4h4" stroke="currentColor" strokeWidth="1.5" />
     </svg>
   );
 }

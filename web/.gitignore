@@ -42,3 +42,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+/.next-redesign/
+
+# Cygwin/MSYS crash dumps. Load-bearing: Tailwind v4's automatic source
+# detection honours .gitignore, and without this it tries to scan a dump that
+# is still locked by the crashing process — which panics Turbopack and makes
+# every route 500 until the file is deleted.
+*.stackdump

@@ -345,7 +345,7 @@ export function DependencyGraph({ data }: { data: DependencyGraphData }) {
               <path
                 d="M13 8a5 5 0 1 1-1.5-3.5M13 2v3h-3"
                 stroke="currentColor"
-                strokeWidth="1.4"
+                strokeWidth="1.5"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
@@ -651,11 +651,11 @@ function GraphIcon() {
       <path
         d="m5 5 8 2M5.5 13l7-4.5M4.5 6.5v5"
         stroke="currentColor"
-        strokeWidth="1.3"
+        strokeWidth="1.5"
       />
-      <circle cx="4" cy="4.5" r="2" stroke="currentColor" strokeWidth="1.3" />
-      <circle cx="14" cy="7.5" r="2" stroke="currentColor" strokeWidth="1.3" />
-      <circle cx="4.5" cy="13.5" r="2" stroke="currentColor" strokeWidth="1.3" />
+      <circle cx="4" cy="4.5" r="2" stroke="currentColor" strokeWidth="1.5" />
+      <circle cx="14" cy="7.5" r="2" stroke="currentColor" strokeWidth="1.5" />
+      <circle cx="4.5" cy="13.5" r="2" stroke="currentColor" strokeWidth="1.5" />
     </svg>
   );
 }

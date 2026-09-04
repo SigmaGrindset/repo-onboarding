@@ -182,7 +182,7 @@ export default async function DiffPage({
             <path
               d="M6 3h7v7M13 3 4 12"
               stroke="currentColor"
-              strokeWidth="1.4"
+              strokeWidth="1.5"
               strokeLinecap="round"
               strokeLinejoin="round"
             />

@@ -28,16 +28,17 @@ export default function GeneratePage() {
     <div className="mx-auto w-full max-w-3xl px-5 py-10 sm:px-8 sm:py-16">
       {/* Hero */}
       <header className="mb-12">
-        <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1 text-xs font-medium text-muted">
-          <span className="inline-block h-1.5 w-1.5 rounded-full bg-accent" />
-          Bring your own model · $0
+        <div className="mb-4 inline-flex items-center gap-2 rounded-md border border-border bg-surface px-2.5 py-1 shadow-soft">
+          <span aria-hidden className="inline-block h-1.5 w-1.5 rounded-full bg-accent" />
+          <span className="kicker text-muted">Bring your own model · $0</span>
         </div>
-        <h1 className="text-3xl font-semibold tracking-tight text-text sm:text-4xl">
+        <h1 className="text-[2.1rem] font-semibold leading-[1.08] tracking-[-0.035em] text-text sm:text-[2.7rem]">
           Your agent reads the code. We render the onboarding.
         </h1>
-        <p className="mt-4 max-w-2xl text-[1.02rem] leading-relaxed text-muted">
-          An analysis is produced by <strong className="text-text">your own AI
-          coding agent</strong> running a frontier model against your actual
+        <p className="mt-5 max-w-[54ch] text-[1.02rem] leading-[1.65] text-muted">
+          An analysis is produced by{" "}
+          <strong className="text-text">your own AI coding agent</strong>{" "}
+          running a frontier model against your actual
           repository — real files, real line numbers, real churn data, read with
           full agentic depth. It targets a strict schema, gets validated until
           it&apos;s clean, and only then is published here as an interactive
@@ -48,9 +49,10 @@ export default function GeneratePage() {
 
       {/* Steps */}
       <section className="mb-14">
-        <h2 className="mb-6 text-xs font-semibold uppercase tracking-wider text-accent">
-          The flow
-        </h2>
+        <div className="mb-6 flex items-center gap-3">
+          <h2 className="kicker text-accent">The flow</h2>
+          <span aria-hidden className="h-px flex-1 bg-border" />
+        </div>
         <ol className="space-y-6">
           <Step
             n={1}
@@ -103,7 +105,7 @@ export default function GeneratePage() {
             body={
               <>
                 Create a personal token at{" "}
-                <Link href="/account" className="text-accent hover:underline">
+                <Link href="/account" className="text-accent underline-offset-2 hover:underline">
                   /account
                 </Link>{" "}
                 and set it as <Code>REPO_ONBOARDING_TOKEN</Code> (or pass{" "}
@@ -131,11 +133,11 @@ export default function GeneratePage() {
         </Card>
 
         {/* Browser alternative */}
-        <Card className="mt-8 p-5">
+        <Card tone="quiet" className="mt-4 p-5">
           <p className="text-sm font-semibold text-text">Prefer the browser?</p>
           <p className="mt-1 text-sm leading-relaxed text-muted">
             Validate locally with step 3, then drag the file onto{" "}
-            <Link href="/upload" className="text-accent hover:underline">
+            <Link href="/upload" className="text-accent underline-offset-2 hover:underline">
               /upload
             </Link>{" "}
             to publish without the CLI. Same validation, same result.
@@ -145,10 +147,13 @@ export default function GeneratePage() {
 
       {/* FAQ strip */}
       <section>
-        <h2 className="mb-6 text-xs font-semibold uppercase tracking-wider text-accent">
-          Straight answers
-        </h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="mb-6 flex items-center gap-3">
+          <h2 className="kicker text-accent">Straight answers</h2>
+          <span aria-hidden className="h-px flex-1 bg-border" />
+        </div>
+        {/* A definition list, not three equal cards: the answers differ in
+            length, and a Q/A rail reads better than padded columns. */}
+        <dl className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface shadow-soft">
           <Faq q="Why no hosted generation?">
             Because the reading is the whole game. A frontier model with agentic
             access to your code beats any free model we could afford to host, and
@@ -164,7 +169,7 @@ export default function GeneratePage() {
             Nothing here. You bring your own model, so generation runs on tooling
             you already pay for (or a free tier), and the hosted viewer is free.
           </Faq>
-        </div>
+        </dl>
       </section>
     </div>
   );
@@ -183,7 +188,7 @@ function Step({
 }) {
   return (
     <li className="flex gap-4">
-      <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-accent/25 bg-accent-soft text-sm font-semibold text-accent">
+      <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-accent/25 bg-accent-soft font-mono text-[0.82rem] font-semibold tabular-nums text-accent">
         {n}
       </span>
       <div className="min-w-0 flex-1">
@@ -197,12 +202,12 @@ function Step({
 
 function Faq({ q, children }: { q: string; children: ReactNode }) {
   return (
-    <Card className="p-4">
-      <p className="text-sm font-semibold text-text">{q}</p>
-      <p className="mt-1.5 text-[0.83rem] leading-relaxed text-muted">
+    <div className="grid gap-1.5 px-5 py-5 sm:grid-cols-[14rem_1fr] sm:gap-6 sm:px-6">
+      <dt className="text-[0.92rem] font-medium text-text">{q}</dt>
+      <dd className="max-w-[58ch] min-w-0 text-[0.86rem] leading-relaxed text-muted">
         {children}
-      </p>
-    </Card>
+      </dd>
+    </div>
   );
 }
 

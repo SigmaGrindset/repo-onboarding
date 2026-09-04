@@ -9,63 +9,153 @@
 
 /* ------------------------------------------------------------------ */
 /* Design tokens — theme-aware via html[data-theme], which the         */
-/* pre-paint script resolves from the stored choice or the OS.         */
-/* Exposed to Tailwind as utilities (bg-surface, text-muted, …) below. */
+/* pre-paint script in layout.tsx resolves from the stored choice or   */
+/* the OS. Exposed to Tailwind as utilities (bg-surface, text-muted,   */
+/* …) below.                                                           */
+/*                                                                     */
+/* Palette: cool slate neutrals with a single cobalt accent. The       */
+/* accent deliberately avoids the warm green→amber→red ramp, which     */
+/* lib/styles.ts reserves for meaning (difficulty, churn, activity,    */
+/* diff deltas) — so warm reads as data, cobalt as interactive, and    */
+/* the two never blur together.                                        */
+/*                                                                     */
+/* HOW THIS IS STRUCTURED: every literal colour is declared exactly    */
+/* once, in the --light-* / --dark-* scales below. The rules after     */
+/* them only re-point the semantic tokens at one scale or the other,   */
+/* so the two themes cannot drift apart. To change a colour, edit the  */
+/* scale — never a value inside a theme rule.                          */
+/*                                                                     */
+/* Every foreground token clears WCAG AA (4.5:1) on bg and surface in  */
+/* both themes; the semantic data tints live in lib/styles.ts.         */
 /* ------------------------------------------------------------------ */
 
 :root {
-  color-scheme: light;
-  --bg: #f6f7f9;
-  --surface: #ffffff;
-  --surface-2: #f0f2f5;
-  --surface-3: #e7eaef;
-  --border: #e2e6ec;
-  --border-strong: #cfd5df;
-  --text: #10151f;
-  --muted: #55617a;
-  --faint: #5f6b7f;
-  --accent: #4f5bd5;
-  --accent-hover: #4048b8;
-  --accent-fg: #ffffff;
-  --accent-soft: rgba(79, 91, 213, 0.1);
+  /* ---- Light scale ---- */
+  --light-bg: #f4f6f8;
+  --light-surface: #ffffff;
+  --light-surface-2: #eaeef2;
+  --light-surface-3: #dfe5eb;
+  --light-border: #e0e6ec;
+  --light-border-strong: #c3ccd6;
+  --light-text: #131820;
+  --light-muted: #565f6c;
+  --light-faint: #616a78;
+  --light-accent: #1f57a8;
+  --light-accent-hover: #17417f;
+  --light-accent-fg: #ffffff;
+  --light-accent-soft: rgba(31, 87, 168, 0.1);
+
+  /* Shadows carry the background's hue rather than neutral black, and all
+     share one light source (above, slightly front). */
+  --light-shadow-sm: 0 1px 2px rgba(24, 36, 54, 0.05);
+  --light-shadow-md: 0 6px 20px -8px rgba(24, 36, 54, 0.16);
+  --light-shadow-lg: 0 20px 44px -16px rgba(24, 36, 54, 0.24);
+
+  /* Fine film grain over the page background — keeps flat surfaces from
+     reading as sterile vector fills. Baked per theme (light vs ink speckle). */
+  --light-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.05'/%3E%3C/svg%3E");
+
+  /* ---- Dark scale ---- */
+  --dark-bg: #0f1216;
+  --dark-surface: #171b21;
+  --dark-surface-2: #1f242b;
+  --dark-surface-3: #282e37;
+  --dark-border: #272d35;
+  --dark-border-strong: #3c4552;
+  --dark-text: #e9edf2;
+  --dark-muted: #98a3b1;
+  --dark-faint: #8894a3;
+  --dark-accent: #7aa7ee;
+  --dark-accent-hover: #9abcf3;
+  --dark-accent-fg: #0f1216;
+  --dark-accent-soft: rgba(122, 167, 238, 0.14);
+
+  --dark-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --dark-shadow-md: 0 6px 20px -8px rgba(0, 0, 0, 0.6);
+  --dark-shadow-lg: 0 20px 44px -16px rgba(0, 0, 0, 0.72);
+
+  --dark-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E");
 }
 
+/* Light is the default mapping. */
+:root {
+  color-scheme: light;
+  --bg: var(--light-bg);
+  --surface: var(--light-surface);
+  --surface-2: var(--light-surface-2);
+  --surface-3: var(--light-surface-3);
+  --border: var(--light-border);
+  --border-strong: var(--light-border-strong);
+  --text: var(--light-text);
+  --muted: var(--light-muted);
+  --faint: var(--light-faint);
+  --accent: var(--light-accent);
+  --accent-hover: var(--light-accent-hover);
+  --accent-fg: var(--light-accent-fg);
+  --accent-soft: var(--light-accent-soft);
+  --shadow-sm: var(--light-shadow-sm);
+  --shadow-md: var(--light-shadow-md);
+  --shadow-lg: var(--light-shadow-lg);
+  --grain: var(--light-grain);
+}
+
+/* The resolved choice the pre-paint script stamps. */
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0a0e16;
-  --surface: #111725;
-  --surface-2: #172032;
-  --surface-3: #1f2a40;
-  --border: #232f47;
-  --border-strong: #31405e;
-  --text: #e7edf7;
-  --muted: #9aa7bd;
-  --faint: #8998b0;
-  --accent: #7b8cff;
-  --accent-hover: #93a1ff;
-  --accent-fg: #0a0e16;
-  --accent-soft: rgba(123, 140, 255, 0.14);
+  --bg: var(--dark-bg);
+  --surface: var(--dark-surface);
+  --surface-2: var(--dark-surface-2);
+  --surface-3: var(--dark-surface-3);
+  --border: var(--dark-border);
+  --border-strong: var(--dark-border-strong);
+  --text: var(--dark-text);
+  --muted: var(--dark-muted);
+  --faint: var(--dark-faint);
+  --accent: var(--dark-accent);
+  --accent-hover: var(--dark-accent-hover);
+  --accent-fg: var(--dark-accent-fg);
+  --accent-soft: var(--dark-accent-soft);
+  --shadow-sm: var(--dark-shadow-sm);
+  --shadow-md: var(--dark-shadow-md);
+  --shadow-lg: var(--dark-shadow-lg);
+  --grain: var(--dark-grain);
 }
 
-/* No-JS fallback: without the pre-paint script the attribute is never set,
-   so keep following the OS preference. Same values as the block above. */
+/* No-JS fallback. The script always stamps data-theme when it runs, so this
+   is scoped to the attribute being absent entirely — that keeps it mutually
+   exclusive with the rule above rather than overriding it. (Both selectors
+   score 0,2,0, so a broader :not([data-theme="light"]) here would win on
+   source order for every OS-dark visitor and silently mask that rule.) */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
+  :root:not([data-theme]) {
     color-scheme: dark;
-    --bg: #0a0e16;
-    --surface: #111725;
-    --surface-2: #172032;
-    --surface-3: #1f2a40;
-    --border: #232f47;
-    --border-strong: #31405e;
-    --text: #e7edf7;
-    --muted: #9aa7bd;
-    --faint: #8998b0;
-    --accent: #7b8cff;
-    --accent-hover: #93a1ff;
-    --accent-fg: #0a0e16;
-    --accent-soft: rgba(123, 140, 255, 0.14);
+    --bg: var(--dark-bg);
+    --surface: var(--dark-surface);
+    --surface-2: var(--dark-surface-2);
+    --surface-3: var(--dark-surface-3);
+    --border: var(--dark-border);
+    --border-strong: var(--dark-border-strong);
+    --text: var(--dark-text);
+    --muted: var(--dark-muted);
+    --faint: var(--dark-faint);
+    --accent: var(--dark-accent);
+    --accent-hover: var(--dark-accent-hover);
+    --accent-fg: var(--dark-accent-fg);
+    --accent-soft: var(--dark-accent-soft);
+    --shadow-sm: var(--dark-shadow-sm);
+    --shadow-md: var(--dark-shadow-md);
+    --shadow-lg: var(--dark-shadow-lg);
+    --grain: var(--dark-grain);
   }
+}
+
+/* Layering scale. Declared once so nothing has to guess a magic number:
+   grain sits under all content; overlays climb from the sticky header up. */
+:root {
+  --z-base: 0;
+  --z-sticky: 20;
+  --z-float: 40;
+  --z-overlay: 50;
 }
 
 @theme inline {
@@ -82,26 +172,51 @@
   --color-accent-hover: var(--accent-hover);
   --color-accent-fg: var(--accent-fg);
 
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-    Helvetica, Arial, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code",
-    Menlo, Consolas, monospace;
+  --shadow-soft: var(--shadow-sm);
+  --shadow-raised: var(--shadow-md);
+  --shadow-float: var(--shadow-lg);
+
+  /* Geist for UI prose, Geist Mono for anything the reader is meant to parse
+     as data — paths, counts, shas, section kickers. Both are variable faces,
+     so weights 400/500/600/700 are all real rather than synthesised. */
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", "JetBrains Mono",
+    "Cascadia Code", Menlo, Consolas, monospace;
 }
 
 * {
   border-color: var(--border);
 }
 
-html {
-  scroll-behavior: smooth;
+/* Anchor jumps glide, but honour a vestibular-safety preference. */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
 }
 
 body {
-  background: var(--bg);
+  background-color: var(--bg);
+  background-image: var(--grain);
+  background-attachment: fixed;
   color: var(--text);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+/* Headings set their own optical rhythm: no orphaned last words, tighter
+   tracking as the type gets larger. */
+h1,
+h2,
+h3,
+h4 {
+  text-wrap: balance;
+}
+
+p {
+  text-wrap: pretty;
 }
 
 ::selection {
@@ -140,10 +255,109 @@ body {
   outline: none;
 }
 
+/* Keyboard-only escape hatch past the header and sidebar. */
+.skip-link {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: var(--z-overlay);
+  transform: translateY(-200%);
+  transition: transform 180ms ease-out;
+}
+.skip-link:focus-visible {
+  transform: none;
+}
+
+/* Small-caps kicker used above section titles — mono, widely tracked, paired
+   with a short rule instead of shouting in all-caps sans. */
+.kicker {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* Ambient wash behind the index hero — a soft off-centre radial rather than a
+   flat fill, so the page has a light source instead of a paint bucket. */
+.hero-wash {
+  position: absolute;
+  inset: -6rem -12rem auto;
+  height: 30rem;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      42rem 22rem at 22% 0%,
+      var(--accent-soft),
+      transparent 70%
+    ),
+    radial-gradient(
+      36rem 18rem at 82% 12%,
+      color-mix(in oklab, var(--border-strong) 45%, transparent),
+      transparent 72%
+    );
+  mask-image: linear-gradient(to bottom, #000 35%, transparent);
+}
+
+/* Physical press feedback on anything clickable that opts in. */
+.press {
+  transition:
+    transform 180ms cubic-bezier(0.2, 0.8, 0.3, 1),
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease,
+    box-shadow 180ms ease;
+}
+.press:active {
+  transform: translateY(1px) scale(0.985);
+}
+@media (prefers-reduced-motion: reduce) {
+  .press:active {
+    transform: none;
+  }
+}
+
+/* Cards lift toward the cursor rather than just changing border colour. */
+.lift {
+  transition:
+    transform 220ms cubic-bezier(0.2, 0.8, 0.3, 1),
+    box-shadow 220ms ease,
+    border-color 220ms ease;
+}
+.lift:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .lift:hover {
+    transform: none;
+  }
+}
+
+/* Staggered entry for the index grid — cascade in rather than mounting all at
+   once. Indices come from an inline --i on each item. */
+@media (prefers-reduced-motion: no-preference) {
+  .stagger > * {
+    animation: rise-in 480ms cubic-bezier(0.2, 0.8, 0.3, 1) backwards;
+    animation-delay: calc(var(--i, 0) * 60ms);
+  }
+}
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /* Rendered-markdown prose */
 .prose {
   color: var(--text);
   line-height: 1.7;
+  max-width: 52ch;
 }
 .prose p {
   margin: 0 0 1rem;
@@ -155,15 +369,16 @@ body {
 .prose h3,
 .prose h4 {
   font-weight: 650;
-  line-height: 1.3;
-  margin: 1.5rem 0 0.75rem;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  margin: 1.75rem 0 0.75rem;
   color: var(--text);
 }
 .prose h2 {
-  font-size: 1.15rem;
+  font-size: 1.2rem;
 }
 .prose h3 {
-  font-size: 1.02rem;
+  font-size: 1.04rem;
 }
 .prose ul,
 .prose ol {
@@ -197,7 +412,7 @@ body {
   border-radius: 5px;
 }
 .prose blockquote {
-  border-left: 3px solid var(--border-strong);
+  border-left: 3px solid var(--accent);
   padding-left: 1rem;
   margin: 0 0 1rem;
   color: var(--muted);

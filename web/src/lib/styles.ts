@@ -30,7 +30,7 @@ const CATEGORY_STYLES: Record<TechStackCategory, BadgeStyle> = {
   library: {
     label: "Library",
     className:
-      "bg-indigo-500/12 text-indigo-700 dark:text-indigo-300 border-indigo-500/25",
+      "bg-sky-500/12 text-sky-700 dark:text-sky-300 border-sky-500/25",
   },
   database: {
     label: "Database",
@@ -60,7 +60,7 @@ const CATEGORY_STYLES: Record<TechStackCategory, BadgeStyle> = {
   other: {
     label: "Other",
     className:
-      "bg-slate-500/12 text-slate-700 dark:text-slate-300 border-slate-500/25",
+      "bg-stone-500/12 text-stone-700 dark:text-stone-300 border-stone-500/25",
   },
 };
 
@@ -117,7 +117,7 @@ const ACTIVITY_STYLES: Record<RecentActivity, BadgeStyle> = {
   dormant: {
     label: "Dormant",
     className:
-      "bg-slate-500/12 text-slate-700 dark:text-slate-300 border-slate-500/25",
+      "bg-stone-500/12 text-stone-700 dark:text-stone-300 border-stone-500/25",
   },
 };
 
@@ -125,11 +125,14 @@ export function activityStyle(a: RecentActivity): BadgeStyle {
   return ACTIVITY_STYLES[a] ?? ACTIVITY_STYLES.moderate;
 }
 
-/** Bar fill (hex) for the churn chart, keyed by recent activity. */
+/**
+ * Bar fill (hex) for the churn chart, keyed by recent activity. Hot-to-cold,
+ * pitched to the warm neutral palette rather than the default neon ramp.
+ */
 export const ACTIVITY_BAR_COLOR: Record<RecentActivity, string> = {
-  active: "#f43f5e",
-  moderate: "#f59e0b",
-  dormant: "#64748b",
+  active: "#c2452f",
+  moderate: "#c08a2c",
+  dormant: "#8d8479",
 };
 
 /** Graph node kind: label, badge class, and an SVG-fill hex readable on both themes. */
@@ -140,45 +143,48 @@ export interface KindStyle extends BadgeStyle {
 const KIND_STYLES: Record<GraphNodeKind, KindStyle> = {
   entrypoint: {
     label: "Entry point",
-    color: "#f59e0b",
+    color: "#c9902f",
     className:
       "bg-amber-500/12 text-amber-800 dark:text-amber-300 border-amber-500/25",
   },
   "internal-module": {
     label: "Internal module",
-    color: "#7b8cff",
+    color: "#7d8cba",
     className:
-      "bg-indigo-500/12 text-indigo-700 dark:text-indigo-300 border-indigo-500/25",
+      "bg-sky-500/12 text-sky-700 dark:text-sky-300 border-sky-500/25",
   },
   "external-package": {
     label: "External package",
-    color: "#22c55e",
+    color: "#5f9c72",
+    // green-800, not -700: at this badge's 11.5px the lighter tint measures
+    // 4.42:1 on the /12 wash and misses AA. Matches emerald/amber/cyan, which
+    // are bumped for the same reason.
     className:
-      "bg-green-500/12 text-green-700 dark:text-green-300 border-green-500/25",
+      "bg-green-500/12 text-green-800 dark:text-green-300 border-green-500/25",
   },
   service: {
     label: "Service",
-    color: "#06b6d4",
+    color: "#4f93a3",
     className:
       "bg-cyan-500/12 text-cyan-800 dark:text-cyan-300 border-cyan-500/25",
   },
   datastore: {
     label: "Datastore",
-    color: "#a855f7",
+    color: "#9079b5",
     className:
       "bg-purple-500/12 text-purple-700 dark:text-purple-300 border-purple-500/25",
   },
   "external-service": {
     label: "External service",
-    color: "#ec4899",
+    color: "#b56a8c",
     className:
       "bg-pink-500/12 text-pink-700 dark:text-pink-300 border-pink-500/25",
   },
   other: {
     label: "Other",
-    color: "#94a3b8",
+    color: "#9a9186",
     className:
-      "bg-slate-500/12 text-slate-700 dark:text-slate-300 border-slate-500/25",
+      "bg-stone-500/12 text-stone-700 dark:text-stone-300 border-stone-500/25",
   },
 };
 
@@ -220,14 +226,14 @@ export function diffKindStyle(kind: DiffKind): BadgeStyle {
  * so "core domain" is always the same colour across renders.
  */
 const ROLE_TINTS: string[] = [
-  "bg-indigo-500/12 text-indigo-700 dark:text-indigo-300 border-indigo-500/25",
+  "bg-sky-500/12 text-sky-700 dark:text-sky-300 border-sky-500/25",
   "bg-emerald-500/12 text-emerald-800 dark:text-emerald-300 border-emerald-500/25",
   "bg-amber-500/12 text-amber-800 dark:text-amber-300 border-amber-500/25",
   "bg-cyan-500/12 text-cyan-800 dark:text-cyan-300 border-cyan-500/25",
   "bg-violet-500/12 text-violet-700 dark:text-violet-300 border-violet-500/25",
   "bg-teal-500/12 text-teal-700 dark:text-teal-300 border-teal-500/25",
   "bg-pink-500/12 text-pink-700 dark:text-pink-300 border-pink-500/25",
-  "bg-slate-500/12 text-slate-700 dark:text-slate-300 border-slate-500/25",
+  "bg-stone-500/12 text-stone-700 dark:text-stone-300 border-stone-500/25",
 ];
 
 export function roleTint(role: string): string {
@@ -240,12 +246,12 @@ export function roleTint(role: string): string {
 
 /** Distinct language colours for the stats breakdown bar (cycled if exhausted). */
 export const LANGUAGE_PALETTE = [
-  "#7b8cff",
-  "#22c55e",
-  "#f59e0b",
-  "#06b6d4",
-  "#ec4899",
-  "#a855f7",
-  "#14b8a6",
-  "#f43f5e",
+  "#c2612b",
+  "#5b8c7b",
+  "#c0942e",
+  "#7382ac",
+  "#a2607c",
+  "#6f8f52",
+  "#a9714b",
+  "#867ca6",
 ];

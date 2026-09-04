@@ -55,7 +55,7 @@ export default async function SetupPage({
                     cy="8"
                     r="6.5"
                     stroke="currentColor"
-                    strokeWidth="1.3"
+                    strokeWidth="1.5"
                   />
                   <path
                     d="M5.2 8.2 7 10l3.8-4"

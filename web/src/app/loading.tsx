@@ -9,7 +9,7 @@ export default function RootLoading() {
       <SkeletonLine className="mt-4 h-4 w-3/4" />
       <div className="mt-12 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: 6 }, (_, index) => (
-          <div key={index} className="rounded-xl border border-border bg-surface p-5">
+          <div key={index} className="rounded-2xl border border-border bg-surface p-5 shadow-soft">
             <SkeletonLine className="h-5 w-2/3" />
             <SkeletonLine className="mt-4 h-3 w-full" />
             <SkeletonLine className="mt-2 h-3 w-4/5" />

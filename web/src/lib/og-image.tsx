@@ -21,29 +21,39 @@ export const OG_ALT =
 
 /** Dark-theme tokens, hard-coded so the image never depends on CSS variables. */
 const C = {
-  bgFrom: "#0a0e16",
-  bgTo: "#131b2c",
-  surface: "#111725",
-  border: "#232f47",
-  text: "#e7edf7",
-  muted: "#9aa7bd",
-  faint: "#66748d",
-  accent: "#7b8cff",
-  accentSoft: "rgba(123, 140, 255, 0.14)",
+  bgFrom: "#0f1216",
+  bgTo: "#1b2129",
+  surface: "#171b21",
+  border: "#272d35",
+  text: "#e9edf2",
+  muted: "#98a3b1",
+  faint: "#7f8b9a",
+  accent: "#7aa7ee",
+  accentFg: "#0f1216",
+  accentSoft: "rgba(122, 167, 238, 0.14)",
 } as const;
 
 function Wordmark() {
   return (
     <div style={{ display: "flex", alignItems: "center" }}>
+      {/* The site mark: the same cobalt tile the header carries. */}
       <div
         style={{
-          width: 14,
-          height: 14,
-          borderRadius: 999,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: 34,
+          height: 34,
+          borderRadius: 10,
           background: C.accent,
-          marginRight: 12,
+          color: C.accentFg,
+          fontSize: 19,
+          fontWeight: 700,
+          marginRight: 14,
         }}
-      />
+      >
+        {"{}"}
+      </div>
       <div
         style={{
           fontSize: 24,
@@ -65,7 +75,7 @@ function Pill({ children }: { children: string }) {
         display: "flex",
         alignItems: "center",
         padding: "10px 20px",
-        borderRadius: 999,
+        borderRadius: 10,
         background: C.accentSoft,
         border: `1px solid ${C.accent}`,
         color: C.accent,

@@ -29,7 +29,7 @@ export function AnalysisShellSkeleton() {
       <LoadingStatus label="Loading analysis" />
       <aside className="lg:w-64 lg:shrink-0">
         <SkeletonLine className="mb-4 h-4 w-24" />
-        <div className="mb-5 rounded-xl border border-border bg-surface p-4">
+        <div className="mb-5 rounded-xl border border-border bg-surface p-4 shadow-soft">
           <SkeletonLine className="h-4 w-3/4" />
           <SkeletonLine className="mt-3 h-3 w-1/2" />
           <SkeletonLine className="mt-2 h-3 w-full" />
@@ -56,7 +56,7 @@ export function SectionSkeleton({ cards = 3 }: { cards?: number }) {
       <SkeletonLine className="mt-3 h-4 w-3/4" />
       <div className="mt-8 space-y-4">
         {Array.from({ length: cards }, (_, index) => (
-          <div key={index} className="rounded-xl border border-border bg-surface p-5">
+          <div key={index} className="rounded-2xl border border-border bg-surface p-5 shadow-soft">
             <SkeletonLine className="h-5 w-2/5" />
             <SkeletonLine className="mt-4 h-3 w-full" />
             <SkeletonLine className="mt-2 h-3 w-4/5" />
@@ -87,21 +87,21 @@ export function RouteErrorState({
   }, [error]);
 
   return (
-    <div className="mx-auto flex min-h-[55vh] max-w-xl items-center px-5 py-12">
-      <div role="alert" className="w-full rounded-xl border border-border bg-surface p-8 text-center">
-        <h1 className="text-xl font-semibold text-text">{title}</h1>
-        <p className="mt-2 text-sm leading-relaxed text-muted">{hint}</p>
+    <div className="mx-auto flex min-h-[55dvh] max-w-xl items-center px-5 py-12">
+      <div role="alert" className="w-full rounded-2xl border border-border bg-surface p-10 text-center shadow-soft">
+        <h1 className="text-[1.35rem] font-semibold tracking-[-0.02em] text-text">{title}</h1>
+        <p className="mx-auto mt-2.5 max-w-[42ch] text-sm leading-relaxed text-muted">{hint}</p>
         <div className="mt-6 flex flex-wrap justify-center gap-3">
           <button
             type="button"
             onClick={reset}
-            className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg transition hover:bg-accent-hover"
+            className="press rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-accent-fg shadow-raised hover:bg-accent-hover"
           >
             Try again
           </button>
           <Link
             href={backHref}
-            className="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-text transition hover:border-border-strong"
+            className="press rounded-lg border border-border bg-surface-2 px-4 py-2.5 text-sm font-medium text-text hover:border-border-strong hover:bg-surface-3"
           >
             {backLabel}
           </Link>

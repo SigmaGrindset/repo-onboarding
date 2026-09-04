@@ -12,3 +12,6 @@ dist/
 .DS_Store
 web/playwright-report/
 web/test-results/
+
+# Cygwin/MSYS crash dumps (see web/.gitignore for why this matters).
+*.stackdump

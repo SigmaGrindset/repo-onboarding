@@ -18,6 +18,19 @@ export async function waitForPageReady(page: Page, path: string) {
     await expect(page.locator(".mermaid-host svg").first()).toBeVisible();
   }
   if (path.endsWith("/graph")) {
+    // Below `lg` the force-directed canvas starts collapsed behind a
+    // disclosure (DependencyGraph.tsx); above it the canvas is always shown
+    // and the button is `lg:hidden`. The button stays in the DOM either way,
+    // so its visibility — not the viewport width — is what tells the two
+    // layouts apart. Open it when present, so the mobile project exercises
+    // the same graph the desktop project does instead of skipping it.
+    const disclosure = page.locator(
+      'button[aria-controls="dependency-graph-visual"]',
+    );
+    if (await disclosure.isVisible()) {
+      await disclosure.click();
+      await expect(disclosure).toHaveAttribute("aria-expanded", "true");
+    }
     await expect(page.locator("main svg.touch-none")).toBeVisible();
   }
   await page.evaluate(() => document.fonts.ready);

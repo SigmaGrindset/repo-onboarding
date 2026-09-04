@@ -46,7 +46,7 @@ export function ChatPanel({
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Ask this repo"
-        className="fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-full bg-accent px-4 py-3 text-sm font-medium text-accent-fg shadow-lg transition hover:bg-accent-hover"
+        className="press fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-full bg-accent px-4 py-3 text-sm font-medium text-accent-fg shadow-float hover:bg-accent-hover"
       >
         <ChatIcon />
         <span className="hidden sm:inline">Ask this repo</span>
@@ -59,14 +59,14 @@ export function ChatPanel({
             <div className="fixed inset-0 z-50">
               {/* Backdrop — mainly for the full-width mobile drawer. */}
               <div
-                className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+                className="absolute inset-0 bg-[#0f1216]/45 backdrop-blur-sm"
                 onClick={close}
               />
               <div
                 role="dialog"
                 aria-modal="true"
                 aria-label="Ask this repo"
-                className="absolute inset-y-0 right-0 flex w-full flex-col border-l border-border bg-surface shadow-2xl sm:w-[420px]"
+                className="absolute inset-y-0 right-0 flex w-full flex-col border-l border-border bg-surface shadow-float sm:w-[440px]"
               >
                 <ChatSession
                   analysisId={analysisId}
@@ -91,7 +91,7 @@ function ChatIcon() {
       viewBox="0 0 16 16"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.4"
+      strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden

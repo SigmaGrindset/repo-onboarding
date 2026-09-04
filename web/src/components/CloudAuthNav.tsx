@@ -41,7 +41,7 @@ export function CloudAuthNav() {
       <div className="flex items-center gap-3">
         <Link
           href="/generate"
-          className="rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-accent-fg transition hover:bg-accent-hover"
+          className="press shrink-0 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-accent-fg shadow-raised hover:bg-accent-hover"
         >
           New analysis
         </Link>
@@ -67,17 +67,17 @@ export function CloudAuthNav() {
     <div className="flex items-center gap-3">
       <Link
         href="/generate"
-        className="text-xs font-medium text-muted transition hover:text-text"
+        className="press hidden text-xs font-medium text-muted hover:text-text min-[480px]:block"
       >
         Generate
       </Link>
       <SignInButton mode="modal">
-        <button className="text-xs font-medium text-muted transition hover:text-text">
+        <button className="press text-xs font-medium text-muted hover:text-text">
           Sign in
         </button>
       </SignInButton>
       <SignUpButton mode="modal">
-        <button className="rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-accent-fg transition hover:bg-accent-hover">
+        <button className="press rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-accent-fg shadow-raised hover:bg-accent-hover">
           Sign up
         </button>
       </SignUpButton>

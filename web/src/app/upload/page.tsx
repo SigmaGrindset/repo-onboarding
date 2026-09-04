@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { isCloudMode } from "@/lib/mode";
-import { Card, SectionHeader } from "@/components/ui";
+import { Badge, Card, SectionHeader } from "@/components/ui";
 import { UploadForm } from "@/components/UploadForm";
 
 export const dynamic = "force-dynamic";
@@ -24,10 +24,10 @@ export default function UploadPage() {
         <UploadForm />
       ) : (
         <Card className="p-6">
-          <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-border bg-surface-2 px-3 py-1 text-xs font-medium text-muted">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-faint" />
+          <Badge className="mb-3 border-border bg-surface-2 text-muted">
+            <span aria-hidden className="inline-block h-1.5 w-1.5 rounded-full bg-faint" />
             Cloud mode not configured
-          </div>
+          </Badge>
           <p className="text-sm leading-relaxed text-muted">
             This deployment is running in <strong className="text-text">local mode</strong>,
             which serves the read-only fixture analyses from{" "}
@@ -52,7 +52,7 @@ export default function UploadPage() {
           </p>
           <Link
             href="/"
-            className="mt-5 inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-text transition hover:border-border-strong"
+            className="press mt-5 inline-flex items-center gap-2 rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm font-medium text-text hover:border-border-strong hover:bg-surface-3"
           >
             Back to analyses
           </Link>

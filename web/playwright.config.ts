@@ -1,5 +1,10 @@
 import { defineConfig, devices } from "@playwright/test";
 
+// The suite owns its server. 3100 is the default, but it is a shared port on
+// some machines, so E2E_PORT lets a run move off it without editing config.
+const PORT = Number(process.env.E2E_PORT ?? 3100);
+const ORIGIN = `http://127.0.0.1:${PORT}`;
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
@@ -10,7 +15,7 @@ export default defineConfig({
     ? [["line"], ["html", { open: "never" }]]
     : [["list"], ["html", { open: "never" }]],
   use: {
-    baseURL: "http://127.0.0.1:3100",
+    baseURL: ORIGIN,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
@@ -27,8 +32,8 @@ export default defineConfig({
   ],
   webServer: {
     // Keep feature-gated UI stable even when a developer/CI has no local env.
-    command: "cross-env AI_GATEWAY_API_KEY=e2e-placeholder npm run start:local",
-    url: "http://127.0.0.1:3100",
+    command: `cross-env APP_MODE=local NEXT_DIST_DIR=.next-local AI_GATEWAY_API_KEY=e2e-placeholder next start -p ${PORT}`,
+    url: ORIGIN,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },

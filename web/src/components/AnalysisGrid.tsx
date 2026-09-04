@@ -112,13 +112,14 @@ export function AnalysisGrid({
   }, [cards, query, language, sort]);
 
   const filtering = query.trim() !== "" || language !== null;
+  const spans = useMemo(() => computeSpans(visible.length), [visible.length]);
 
   return (
     <>
       {showToolbar ? (
         <div className="mb-6 flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex min-w-[220px] flex-1 items-center gap-2.5 rounded-lg border border-border bg-surface px-3 transition-colors focus-within:border-accent/35">
+            <div className="flex min-w-[220px] flex-1 items-center gap-2.5 rounded-lg border border-border bg-surface px-3 shadow-soft transition-colors focus-within:border-accent/45">
               <span className="text-faint">
                 <SearchIcon />
               </span>
@@ -130,12 +131,12 @@ export function AnalysisGrid({
                 aria-label="Filter analyses"
                 className="focus-quiet w-full bg-transparent py-2 text-sm text-text outline-none placeholder:text-faint"
               />
-              <kbd className="shrink-0 rounded border border-border bg-surface-2 px-1.5 py-0.5 font-sans text-[0.65rem] font-medium text-faint">
+              <kbd className="shrink-0 rounded border border-border bg-surface-2 px-1.5 py-0.5 font-mono text-[0.65rem] font-medium text-faint">
                 /
               </kbd>
             </div>
-            <div className="flex items-center gap-2 text-xs text-faint">
-              Sort
+            <div className="flex items-center gap-2">
+              <span className="kicker text-faint">Sort</span>
               <SortSelect value={sort} onChange={setSort} />
             </div>
           </div>
@@ -168,7 +169,7 @@ export function AnalysisGrid({
           ) : null}
 
           {filtering ? (
-            <p className="text-xs text-faint" aria-live="polite">
+            <p className="font-mono text-[0.72rem] tabular-nums text-faint" aria-live="polite">
               {visible.length} of {cards.length}{" "}
               {cards.length === 1 ? "analysis" : "analyses"}
             </p>
@@ -177,7 +178,7 @@ export function AnalysisGrid({
       ) : null}
 
       {visible.length === 0 ? (
-        <div className="rounded-xl border border-border bg-surface p-8 text-center">
+        <div className="rounded-2xl border border-border bg-surface p-10 text-center shadow-soft">
           <p className="text-sm font-medium text-text">No matches</p>
           <p className="mt-1 text-sm text-muted">
             Nothing matches{query.trim() ? ` “${query.trim()}”` : ""}
@@ -189,20 +190,60 @@ export function AnalysisGrid({
               setQuery("");
               setLanguage(null);
             }}
-            className="mt-3 rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-sm font-medium text-muted transition hover:border-border-strong hover:text-text"
+            className="press mt-4 rounded-lg border border-border bg-surface-2 px-3.5 py-2 text-sm font-medium text-muted hover:border-border-strong hover:text-text"
           >
             Clear filters
           </button>
         </div>
       ) : (
-        <ul className="grid grid-cols-1 gap-5 md:grid-cols-2">
-          {visible.map((card) => (
-            <AnalysisCardItem key={card.newest.id} card={card} />
+        <ul className="stagger grid grid-cols-1 gap-5 md:grid-cols-12">
+          {visible.map((card, i) => (
+            <AnalysisCardItem
+              key={card.newest.id}
+              card={card}
+              index={i}
+              span={spans[i]}
+            />
           ))}
         </ul>
       )}
     </>
   );
+}
+
+/**
+ * Column spans cycle 7-5-5-7, so rows alternate wide-narrow / narrow-wide
+ * instead of settling into two identical columns. The cycle sums to 24 — two
+ * full rows — so an even card count never leaves a hole. A trailing card that
+ * would sit alone on its row runs the full width instead of stranding a narrow
+ * card next to dead space.
+ */
+const SPAN_CYCLE = [7, 5, 5, 7];
+
+// Literal strings so Tailwind's source scan can see every class it must emit.
+const SPAN_CLASS: Record<number, string> = {
+  5: "md:col-span-5",
+  7: "md:col-span-7",
+  12: "md:col-span-12",
+};
+
+export function computeSpans(count: number): number[] {
+  const spans = Array.from(
+    { length: count },
+    (_, i) => SPAN_CYCLE[i % SPAN_CYCLE.length],
+  );
+  let used = 0;
+  let lastRowStart = 0;
+  spans.forEach((span, i) => {
+    if (used + span > 12) {
+      used = span;
+      lastRowStart = i;
+    } else {
+      used += span;
+    }
+  });
+  if (count > 0 && lastRowStart === count - 1) spans[count - 1] = 12;
+  return spans;
 }
 
 const SORT_KEYS = Object.keys(SORT_LABELS) as SortKey[];
@@ -283,7 +324,7 @@ function SortSelect({
         aria-controls="sort-listbox"
         aria-label="Sort analyses"
         aria-activedescendant={open ? `sort-option-${active}` : undefined}
-        className="focus-quiet flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text outline-none transition hover:border-border-strong focus-visible:border-accent/35"
+        className="press focus-quiet flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text shadow-soft outline-none hover:border-border-strong focus-visible:border-accent/45"
       >
         {SORT_LABELS[value]}
         <span
@@ -298,7 +339,7 @@ function SortSelect({
           id="sort-listbox"
           role="listbox"
           aria-label="Sort analyses"
-          className="absolute right-0 top-full z-20 mt-1.5 w-44 rounded-lg border border-border bg-surface p-1 shadow-lg shadow-black/10"
+          className="absolute right-0 top-full z-20 mt-1.5 w-44 rounded-xl border border-border bg-surface p-1 shadow-float"
         >
           {SORT_KEYS.map((k) => (
             <li
@@ -366,7 +407,7 @@ function FilterChip({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium transition ${
+      className={`press inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${
         active
           ? "border-accent/25 bg-accent-soft text-accent"
           : "border-border bg-surface text-muted hover:border-border-strong hover:text-text"
@@ -377,22 +418,43 @@ function FilterChip({
   );
 }
 
-/** One analysis card — markup unchanged from the original server-rendered grid. */
-function AnalysisCardItem({ card: { newest: a, count } }: { card: AnalysisCard }) {
+/** One analysis card. */
+function AnalysisCardItem({
+  card: { newest: a, count },
+  index,
+  span,
+}: {
+  card: AnalysisCard;
+  index: number;
+  span: number;
+}) {
   const hasStats = a.totalFiles > 0 || a.totalLoc > 0;
   return (
-    <li>
+    <li
+      className={SPAN_CLASS[span]}
+      style={{ "--i": index } as React.CSSProperties}
+    >
       <Link
         href={`/analysis/${a.id}`}
-        className="group flex h-full flex-col rounded-xl border border-border bg-surface p-5 transition hover:border-border-strong hover:shadow-lg hover:shadow-black/5"
+        className="lift group relative flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-surface p-5 shadow-soft hover:border-border-strong sm:p-6"
       >
+        {/* Accent rail — the card's edge lights up under the cursor rather
+            than the whole surface changing colour. */}
+        <span
+          aria-hidden
+          className="absolute inset-y-0 left-0 w-[3px] origin-top scale-y-0 bg-accent transition-transform duration-300 ease-out group-hover:scale-y-100"
+        />
+
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="truncate text-lg font-semibold text-text transition group-hover:text-accent">
+            <h2 className="truncate text-[1.15rem] font-semibold tracking-[-0.02em] text-text transition group-hover:text-accent">
               {a.repoName}
             </h2>
-            <p className="mt-0.5 text-xs text-faint">
-              Analyzed {formatDate(a.analyzedAt)}
+            <p className="mt-1 text-[0.72rem] text-faint">
+              Analyzed{" "}
+              <span className="font-mono tabular-nums">
+                {formatDate(a.analyzedAt)}
+              </span>
             </p>
           </div>
           {a.primaryLanguage ? (
@@ -402,20 +464,22 @@ function AnalysisCardItem({ card: { newest: a, count } }: { card: AnalysisCard }
           ) : null}
         </div>
 
-        <p className="mt-3 flex-1 text-sm leading-relaxed text-muted">
+        <p className="mt-4 max-w-[58ch] flex-1 text-[0.9rem] leading-[1.6] text-muted">
           {snippet(a.summary, 200)}
         </p>
 
-        <div className="mt-4 flex items-center gap-4 border-t border-border pt-3 text-xs text-faint">
+        {/* Pinned to the bottom of the card, so the meta rows line up across
+            the grid however long the summaries above them run. */}
+        <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border pt-3.5 text-[0.72rem] text-faint">
           {hasStats ? (
             <>
-              <span>
+              <span className="font-mono tabular-nums">
                 <span className="font-medium text-muted">
                   {compactNumber(a.totalFiles)}
                 </span>{" "}
                 files
               </span>
-              <span>
+              <span className="font-mono tabular-nums">
                 <span className="font-medium text-muted">
                   {compactNumber(a.totalLoc)}
                 </span>{" "}
@@ -436,9 +500,16 @@ function AnalysisCardItem({ card: { newest: a, count } }: { card: AnalysisCard }
               {count} versions
             </Badge>
           ) : null}
-          <span className="ml-auto inline-flex items-center gap-1 font-medium text-accent opacity-0 transition group-hover:opacity-100">
+          <span className="ml-auto inline-flex items-center gap-1 font-medium text-accent/70 transition group-hover:text-accent">
             Explore
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="none"
+              className="transition-transform duration-200 group-hover:translate-x-0.5"
+              aria-hidden
+            >
               <path
                 d="M6 3.5 10.5 8 6 12.5"
                 stroke="currentColor"
