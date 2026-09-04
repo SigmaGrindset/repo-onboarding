@@ -11,7 +11,6 @@ import {
   type Simulation,
 } from "d3-force";
 import {
-  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -25,6 +24,7 @@ import type {
 } from "@schema/analysis";
 import { kindStyle } from "@/lib/styles";
 import { Badge } from "@/components/ui";
+import { ViewportControls, useViewport } from "@/components/viewport";
 
 interface SimNode extends GraphNode {
   x: number;
@@ -42,8 +42,6 @@ interface SimLink {
 }
 
 const NODE_R = 9;
-const MIN_K = 0.3;
-const MAX_K = 4;
 
 function truncate(s: string, n = 22): string {
   return s.length > n ? `${s.slice(0, n - 1)}…` : s;
@@ -51,7 +49,19 @@ function truncate(s: string, n = 22): string {
 
 export function DependencyGraph({ data }: { data: DependencyGraphData }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const svgRef = useRef<SVGSVGElement>(null);
+  // The graph owns its own page, so there is nothing behind it to scroll
+  // past: a plain wheel zooms.
+  const {
+    ref: surfaceRef,
+    transform,
+    isPanning,
+    toContent,
+    zoomBy,
+    reset,
+    beginPan,
+    updatePan,
+    endPan,
+  } = useViewport<SVGSVGElement>({ minScale: 0.3, maxScale: 4 });
   const simRef = useRef<Simulation<SimNode, undefined> | null>(null);
   // Mirror of the latest node objects for use inside event handlers only.
   const nodesRef = useRef<SimNode[]>([]);
@@ -64,8 +74,6 @@ export function DependencyGraph({ data }: { data: DependencyGraphData }) {
     links: [],
   });
   const [dims, setDims] = useState({ w: 800, h: 560 });
-  const [transform, setTransform] = useState({ x: 0, y: 0, k: 1 });
-  const [isPanning, setIsPanning] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [hoverKind, setHoverKind] = useState<GraphNodeKind | null>(null);
@@ -163,38 +171,10 @@ export function DependencyGraph({ data }: { data: DependencyGraphData }) {
     sim.alpha(0.3).restart();
   }, [dims]);
 
-  // Convert a client point to graph-space coordinates.
-  const toGraph = useCallback(
-    (clientX: number, clientY: number) => {
-      const rect = svgRef.current?.getBoundingClientRect();
-      const left = rect?.left ?? 0;
-      const top = rect?.top ?? 0;
-      return {
-        x: (clientX - left - transform.x) / transform.k,
-        y: (clientY - top - transform.y) / transform.k,
-      };
-    },
-    [transform],
-  );
-
   // --- Panning (background drag) -----------------------------------------
-  const panState = useRef<{
-    startX: number;
-    startY: number;
-    origX: number;
-    origY: number;
-  } | null>(null);
-
   const onBackgroundPointerDown = (e: React.PointerEvent) => {
     setSelectedId(null);
-    setIsPanning(true);
-    panState.current = {
-      startX: e.clientX,
-      startY: e.clientY,
-      origX: transform.x,
-      origY: transform.y,
-    };
-    (e.target as Element).setPointerCapture?.(e.pointerId);
+    beginPan(e);
   };
 
   // --- Node dragging ------------------------------------------------------
@@ -204,7 +184,7 @@ export function DependencyGraph({ data }: { data: DependencyGraphData }) {
     e.stopPropagation();
     dragState.current = node.id;
     (e.target as Element).setPointerCapture?.(e.pointerId);
-    const p = toGraph(e.clientX, e.clientY);
+    const p = toContent(e.clientX, e.clientY);
     node.fx = p.x;
     node.fy = p.y;
     simRef.current?.alphaTarget(0.3).restart();
@@ -214,20 +194,13 @@ export function DependencyGraph({ data }: { data: DependencyGraphData }) {
     if (dragState.current) {
       const node = nodesRef.current.find((n) => n.id === dragState.current);
       if (node) {
-        const p = toGraph(e.clientX, e.clientY);
+        const p = toContent(e.clientX, e.clientY);
         node.fx = p.x;
         node.fy = p.y;
       }
       return;
     }
-    if (panState.current) {
-      const ps = panState.current;
-      setTransform((t) => ({
-        ...t,
-        x: ps.origX + (e.clientX - ps.startX),
-        y: ps.origY + (e.clientY - ps.startY),
-      }));
-    }
+    updatePan(e);
   };
 
   const endInteraction = () => {
@@ -240,37 +213,8 @@ export function DependencyGraph({ data }: { data: DependencyGraphData }) {
       simRef.current?.alphaTarget(0);
       dragState.current = null;
     }
-    if (panState.current) {
-      panState.current = null;
-      setIsPanning(false);
-    }
+    endPan();
   };
-
-  // --- Zoom (wheel, cursor-anchored) -------------------------------------
-  const onWheel = (e: React.WheelEvent) => {
-    const rect = svgRef.current?.getBoundingClientRect();
-    const sx = e.clientX - (rect?.left ?? 0);
-    const sy = e.clientY - (rect?.top ?? 0);
-    setTransform((t) => {
-      const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
-      const k = Math.min(MAX_K, Math.max(MIN_K, t.k * factor));
-      const gx = (sx - t.x) / t.k;
-      const gy = (sy - t.y) / t.k;
-      return { k, x: sx - gx * k, y: sy - gy * k };
-    });
-  };
-
-  const zoomBy = (factor: number) =>
-    setTransform((t) => {
-      const k = Math.min(MAX_K, Math.max(MIN_K, t.k * factor));
-      const cx = dims.w / 2;
-      const cy = dims.h / 2;
-      const gx = (cx - t.x) / t.k;
-      const gy = (cy - t.y) / t.k;
-      return { k, x: cx - gx * k, y: cy - gy * k };
-    });
-
-  const reset = () => setTransform({ x: 0, y: 0, k: 1 });
 
   // --- Highlight computation ---------------------------------------------
   const activeId = hoverId ?? selectedId;
@@ -333,25 +277,14 @@ export function DependencyGraph({ data }: { data: DependencyGraphData }) {
         className={`${mobileGraphOpen ? "block" : "hidden"} relative h-[70dvh] max-h-[560px] min-h-[420px] flex-none overflow-hidden rounded-xl border border-border bg-surface lg:block lg:h-[560px] lg:max-h-none lg:min-h-0 lg:flex-1`}
       >
         {/* Controls */}
-        <div className="absolute right-3 top-3 z-10 flex flex-col gap-1">
-          <GraphButton label="Zoom in" onClick={() => zoomBy(1.25)}>
-            +
-          </GraphButton>
-          <GraphButton label="Zoom out" onClick={() => zoomBy(1 / 1.25)}>
-            −
-          </GraphButton>
-          <GraphButton label="Reset view" onClick={reset}>
-            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden>
-              <path
-                d="M13 8a5 5 0 1 1-1.5-3.5M13 2v3h-3"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </GraphButton>
-        </div>
+        <ViewportControls
+          zoomBy={zoomBy}
+          orientation="vertical"
+          tone="surface"
+          resetVariant="reset"
+          onReset={reset}
+          className="absolute right-3 top-3 z-10"
+        />
 
         <p className="pointer-events-none absolute bottom-3 left-3 z-10 max-w-[90%] text-[0.7rem] text-faint">
           Scroll to zoom · drag background to pan · drag a node to move it ·
@@ -359,7 +292,7 @@ export function DependencyGraph({ data }: { data: DependencyGraphData }) {
         </p>
 
         <svg
-          ref={svgRef}
+          ref={surfaceRef}
           width="100%"
           height="100%"
           className="touch-none select-none"
@@ -368,7 +301,6 @@ export function DependencyGraph({ data }: { data: DependencyGraphData }) {
           onPointerMove={onPointerMove}
           onPointerUp={endInteraction}
           onPointerLeave={endInteraction}
-          onWheel={onWheel}
         >
           <defs>
             <marker
@@ -620,28 +552,6 @@ function MobileNodeList({
         })}
       </ul>
     </section>
-  );
-}
-
-function GraphButton({
-  children,
-  label,
-  onClick,
-}: {
-  children: React.ReactNode;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-      className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface text-base font-medium text-muted shadow-sm transition hover:border-border-strong hover:text-text"
-    >
-      {children}
-    </button>
   );
 }
 

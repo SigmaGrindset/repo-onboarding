@@ -1,14 +1,12 @@
 "use client";
 
-import {
-  forwardRef,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import {
+  ViewportButton,
+  ViewportControls,
+  useViewport,
+} from "@/components/viewport";
 
 let counter = 0;
 
@@ -174,14 +172,11 @@ export function Mermaid({ source, title }: { source: string; title?: string }) {
   );
 }
 
-const MIN_K = 0.2;
-const MAX_K = 8;
 const FIT_MARGIN = 32; // px of breathing room around the fitted diagram
 const CONTENT_PAD = 16; // matches the p-4 on the lightbox content card
-
-function clampK(k: number): number {
-  return Math.min(MAX_K, Math.max(MIN_K, k));
-}
+// Never fit above 2x — tiny diagrams shouldn't balloon — but always fit down
+// so the whole diagram is visible on open.
+const MAX_FIT_SCALE = 2;
 
 /**
  * Fullscreen diagram viewer: renders the already-produced SVG at its natural
@@ -197,21 +192,24 @@ function DiagramLightbox({
   title?: string;
   onClose: () => void;
 }) {
-  const viewportRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(
     null,
   );
-  const [transform, setTransform] = useState({ x: 0, y: 0, k: 1 });
-  const [isPanning, setIsPanning] = useState(false);
-  const panState = useRef<{
-    startX: number;
-    startY: number;
-    origX: number;
-    origY: number;
-    moved: boolean;
-  } | null>(null);
+  // Fullscreen and modal: nothing is behind it, so a plain wheel zooms.
+  const {
+    ref: viewportRef,
+    element: viewportEl,
+    transform,
+    isPanning,
+    zoomAtClient,
+    zoomBy,
+    fitToContent,
+    beginPan,
+    updatePan,
+    endPan,
+  } = useViewport<HTMLDivElement>({ minScale: 0.2, maxScale: 8 });
 
   // Read the diagram's natural size from its viewBox. The wrapper div is then
   // sized declaratively from this state and CSS makes the SVG fill it (see
@@ -228,19 +226,12 @@ function DiagramLightbox({
 
   // Scale to fit the viewport and centre the diagram.
   const fit = useCallback(() => {
-    const viewport = viewportRef.current;
-    if (!viewport || !natural) return;
-    const cw = natural.w + CONTENT_PAD * 2;
-    const ch = natural.h + CONTENT_PAD * 2;
-    const vw = viewport.clientWidth;
-    const vh = viewport.clientHeight;
-    // Never fit above 2x — tiny diagrams shouldn't balloon — but always fit
-    // down so the whole diagram is visible on open.
-    const k = clampK(
-      Math.min(2, (vw - FIT_MARGIN) / cw, (vh - FIT_MARGIN) / ch),
-    );
-    setTransform({ k, x: (vw - cw * k) / 2, y: (vh - ch * k) / 2 });
-  }, [natural]);
+    if (!natural) return;
+    fitToContent(natural.w + CONTENT_PAD * 2, natural.h + CONTENT_PAD * 2, {
+      margin: FIT_MARGIN,
+      maxScale: MAX_FIT_SCALE,
+    });
+  }, [natural, fitToContent]);
 
   useLayoutEffect(() => {
     fit();
@@ -263,68 +254,14 @@ function DiagramLightbox({
     };
   }, [onClose, fit]);
 
-  const zoomAt = (sx: number, sy: number, factor: number) =>
-    setTransform((t) => {
-      const k = clampK(t.k * factor);
-      const gx = (sx - t.x) / t.k;
-      const gy = (sy - t.y) / t.k;
-      return { k, x: sx - gx * k, y: sy - gy * k };
-    });
-
-  const onWheel = (e: React.WheelEvent) => {
-    const rect = viewportRef.current?.getBoundingClientRect();
-    zoomAt(
-      e.clientX - (rect?.left ?? 0),
-      e.clientY - (rect?.top ?? 0),
-      e.deltaY < 0 ? 1.12 : 1 / 1.12,
-    );
-  };
-
-  const zoomBy = (factor: number) => {
-    const viewport = viewportRef.current;
-    zoomAt(
-      (viewport?.clientWidth ?? 0) / 2,
-      (viewport?.clientHeight ?? 0) / 2,
-      factor,
-    );
-  };
-
-  const onPointerDown = (e: React.PointerEvent) => {
-    setIsPanning(true);
-    panState.current = {
-      startX: e.clientX,
-      startY: e.clientY,
-      origX: transform.x,
-      origY: transform.y,
-      moved: false,
-    };
-    (e.target as Element).setPointerCapture?.(e.pointerId);
-  };
-
-  const onPointerMove = (e: React.PointerEvent) => {
-    const ps = panState.current;
-    if (!ps) return;
-    const dx = e.clientX - ps.startX;
-    const dy = e.clientY - ps.startY;
-    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) ps.moved = true;
-    setTransform((t) => ({ ...t, x: ps.origX + dx, y: ps.origY + dy }));
-  };
-
   const onPointerUp = (e: React.PointerEvent) => {
-    const ps = panState.current;
-    panState.current = null;
-    setIsPanning(false);
+    const pan = endPan();
     // A plain click (no drag) on the backdrop — not on the diagram — closes.
-    if (ps && !ps.moved && e.target === viewportRef.current) onClose();
+    if (pan && !pan.moved && e.target === viewportEl) onClose();
   };
 
   const onDoubleClick = (e: React.MouseEvent) => {
-    const rect = viewportRef.current?.getBoundingClientRect();
-    zoomAt(
-      e.clientX - (rect?.left ?? 0),
-      e.clientY - (rect?.top ?? 0),
-      1.6,
-    );
+    zoomAtClient(e.clientX, e.clientY, 1.6);
   };
 
   return createPortal(
@@ -340,24 +277,19 @@ function DiagramLightbox({
           {title ?? "Diagram"}
         </span>
         <div className="flex shrink-0 items-center gap-1">
-          <LightboxButton label="Zoom out" onClick={() => zoomBy(1 / 1.25)}>
-            −
-          </LightboxButton>
-          <LightboxButton label="Zoom in" onClick={() => zoomBy(1.25)}>
-            +
-          </LightboxButton>
-          <LightboxButton label="Fit to screen" onClick={fit}>
-            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden>
-              <path
-                d="M6 2H2v4M10 2h4v4M6 14H2v-4M10 14h4v-4"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </LightboxButton>
-          <LightboxButton label="Close" onClick={onClose} ref={closeRef}>
+          <ViewportControls
+            zoomBy={zoomBy}
+            orientation="horizontal"
+            tone="overlay"
+            resetVariant="fit"
+            onReset={fit}
+          />
+          <ViewportButton
+            tone="overlay"
+            label="Close"
+            onClick={onClose}
+            ref={closeRef}
+          >
             <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden>
               <path
                 d="M4 4l8 8M12 4l-8 8"
@@ -366,7 +298,7 @@ function DiagramLightbox({
                 strokeLinecap="round"
               />
             </svg>
-          </LightboxButton>
+          </ViewportButton>
         </div>
       </div>
 
@@ -375,11 +307,10 @@ function DiagramLightbox({
         ref={viewportRef}
         className="relative flex-1 touch-none select-none overflow-hidden"
         style={{ cursor: isPanning ? "grabbing" : "grab" }}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
+        onPointerDown={beginPan}
+        onPointerMove={updatePan}
         onPointerUp={onPointerUp}
         onPointerLeave={onPointerUp}
-        onWheel={onWheel}
         onDoubleClick={onDoubleClick}
       >
         <div
@@ -401,28 +332,6 @@ function DiagramLightbox({
     document.body,
   );
 }
-
-const LightboxButton = forwardRef<
-  HTMLButtonElement,
-  {
-    children: React.ReactNode;
-    label: string;
-    onClick: () => void;
-  }
->(function LightboxButton({ children, label, onClick }, ref) {
-  return (
-    <button
-      ref={ref}
-      type="button"
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-      className="press flex h-8 w-8 items-center justify-center rounded-md bg-[#e9edf2]/10 text-base font-medium text-[#e9edf2] hover:bg-[#e9edf2]/20"
-    >
-      {children}
-    </button>
-  );
-});
 
 function ExpandIcon() {
   return (

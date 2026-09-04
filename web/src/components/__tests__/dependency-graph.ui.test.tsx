@@ -27,15 +27,15 @@ const data = {
   edges: [{ from: "api", to: "store", relationship: "writes" }],
 };
 
+beforeEach(() => {
+  vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe("DependencyGraph mobile layout", () => {
-  beforeEach(() => {
-    vi.stubGlobal("ResizeObserver", ResizeObserverStub);
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
   test("defaults to the node list and expands the visual graph on demand", async () => {
     render(<DependencyGraph data={data} />);
 
@@ -61,5 +61,21 @@ describe("DependencyGraph mobile layout", () => {
     expect(visualToggle).toHaveAttribute("aria-expanded", "true");
     expect(visualGraph).not.toHaveClass("hidden");
     expect(screen.getByRole("button", { name: "Zoom in" })).toBeVisible();
+  });
+});
+
+describe("DependencyGraph wheel zoom", () => {
+  test("zooming with the wheel does not also scroll the page behind it", () => {
+    render(<DependencyGraph data={data} />);
+
+    const surface = document.querySelector("#dependency-graph-visual > svg");
+    const wheel = new WheelEvent("wheel", {
+      deltaY: -120,
+      bubbles: true,
+      cancelable: true,
+    });
+    surface?.dispatchEvent(wheel);
+
+    expect(wheel.defaultPrevented).toBe(true);
   });
 });
