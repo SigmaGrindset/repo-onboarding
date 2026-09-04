@@ -1,11 +1,24 @@
 "use client";
 
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
-import { deriveDiagramModel } from "@/lib/diagram-model";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  deriveDiagramModel,
+  neighbourhoodOf,
+  type DiagramModel,
+  type Neighbourhood,
+} from "@/lib/diagram-model";
 import {
   ViewportButton,
   ViewportControls,
   svgContentSize,
+  useInjectedSvg,
   useViewport,
 } from "@/components/viewport";
 
@@ -22,6 +35,11 @@ import {
  * A canvas is as tall as its diagram is actually drawn, between a floor and a
  * ceiling, and the initial fit never scales above natural size: a small diagram
  * looks exactly as it did before, and only a large one arrives zoomed out.
+ *
+ * Selecting an element lights its neighbourhood and dims the rest of the drawing.
+ * The canvas was handed its diagram as a string, so highlighting means marking up
+ * the SVG it injected — unlike the dependency graph, which draws its own elements
+ * and can style them where it draws them.
  */
 
 /** Scale limits. Wider than the graph's, because diagram text is small. */
@@ -44,6 +62,7 @@ export function DiagramCanvas({
   onExpand: () => void;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const html = useInjectedSvg(svg);
   const [content, setContent] = useState<{
     width: number;
     height: number;
@@ -51,7 +70,9 @@ export function DiagramCanvas({
   const [available, setAvailable] = useState(0);
   // The capability probe. A diagram whose rendered output exposes none of the
   // identity the canvas reads is a pan-and-zoom surface and nothing more.
-  const [addressable, setAddressable] = useState(false);
+  const [model, setModel] = useState<DiagramModel | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [hoverId, setHoverId] = useState<string | null>(null);
 
   const {
     ref: viewportRef,
@@ -71,14 +92,53 @@ export function DiagramCanvas({
     shouldZoomOnWheel: (event) => event.ctrlKey || event.metaKey,
   });
 
+  const selectable = offersSelection(model);
+
   // Measure and probe the drawing once it is in the DOM. Both are redone when a
   // theme change re-renders the diagram.
   useLayoutEffect(() => {
     const svgEl = hostRef.current?.querySelector("svg");
     if (!svgEl) return;
     setContent(svgContentSize(svgEl));
-    setAddressable(deriveDiagramModel(svgEl) !== null);
+
+    const derived = deriveDiagramModel(svgEl);
+    setModel(derived);
+    if (offersSelection(derived)) markIdentity(svgEl, derived);
+    // A theme change re-renders the same diagram, so the reader keeps their
+    // selection; a different diagram would not hold the element they picked.
+    setSelectedId((current) =>
+      current && derived?.elements.some((el) => el.id === current)
+        ? current
+        : null,
+    );
+    setHoverId(null);
   }, [svg]);
+
+  // Hover previews a selection without committing to one, exactly as the
+  // dependency graph does.
+  const activeId = hoverId ?? selectedId;
+  const lit = useMemo<Neighbourhood | null>(
+    () => (model && activeId ? neighbourhoodOf(model, activeId) : null),
+    [model, activeId],
+  );
+
+  useLayoutEffect(() => {
+    const svgEl = hostRef.current?.querySelector("svg");
+    if (svgEl) paintHighlight(svgEl, lit, selectedId);
+  }, [svg, lit, selectedId]);
+
+  // Escape clears, so a reader is never left with a diagram they cannot un-dim.
+  // Bound to the window because nothing here is focusable yet, so Escape clears
+  // every canvas on the page at once; the keyboard ticket gives the canvas focus
+  // and scopes this to it.
+  useEffect(() => {
+    if (!selectedId) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSelectedId(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selectedId]);
 
   // How wide the canvas is. Only the width is watched: the height is computed
   // from it below, so watching both would be watching our own output.
@@ -122,9 +182,19 @@ export function DiagramCanvas({
     fit();
   }, [shape, fit]);
 
+  // A press that travelled was a pan, not a click on whatever sat under it; and
+  // a press from a finger belongs to the page, which owns touch on a canvas.
+  const pressRef = useRef({ dragged: false, touch: false });
+  const finishPan = useCallback(() => {
+    pressRef.current.dragged = endPan()?.moved ?? false;
+  }, [endPan]);
+
   return (
     <div
-      data-diagram-addressable={addressable}
+      // The capability probe's own answer: whether this diagram exposes any
+      // identity at all. Offering selection on top of that also needs
+      // connections, which is what `selectable` says.
+      data-diagram-addressable={model !== null}
       className="group relative overflow-hidden rounded-md border border-border bg-surface"
       style={{ height }}
     >
@@ -135,11 +205,26 @@ export function DiagramCanvas({
         // Touch is deliberately not handled: the page owns that gesture, and a
         // reader on a phone gets the same scrolling they had before.
         onPointerDown={(event) => {
+          pressRef.current.touch = event.pointerType === "touch";
           if (event.pointerType !== "touch") beginPan(event);
         }}
         onPointerMove={updatePan}
-        onPointerUp={endPan}
-        onPointerLeave={endPan}
+        onPointerUp={finishPan}
+        onPointerOver={(event) => {
+          if (event.pointerType === "touch" || !selectable || isPanning) return;
+          setHoverId(elementIdAt(event.target));
+        }}
+        onPointerLeave={() => {
+          finishPan();
+          setHoverId(null);
+        }}
+        onClick={(event) => {
+          const { dragged, touch } = pressRef.current;
+          if (!selectable || dragged || touch) return;
+          // The same element again, or the space around the drawing, clears.
+          const id = elementIdAt(event.target);
+          setSelectedId((current) => (id && id !== current ? id : null));
+        }}
       >
         <div
           ref={hostRef}
@@ -152,7 +237,7 @@ export function DiagramCanvas({
             transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.k})`,
             visibility: content ? "visible" : "hidden",
           }}
-          dangerouslySetInnerHTML={{ __html: svg }}
+          dangerouslySetInnerHTML={html}
         />
       </div>
 
@@ -177,10 +262,103 @@ export function DiagramCanvas({
           cover the drawing while the reader is reading. It appears when the
           pointer is on the canvas — which is exactly when the wheel matters. */}
       <p className="pointer-events-none absolute bottom-2 left-2 rounded-full border border-border bg-surface/85 px-2.5 py-1 text-[0.7rem] text-faint opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100">
+        {selectable ? "Click to highlight · " : null}
         {zoomModifierLabel()} + scroll to zoom · drag to pan
       </p>
     </div>
   );
+}
+
+/**
+ * Whether this diagram gives a reader anything to select. A model with no
+ * connections has no neighbourhood to light, so its canvas keeps no selection
+ * affordances at all rather than half of them — which today means every sequence
+ * diagram, whose connections arrive with that family's own reader.
+ */
+function offersSelection(model: DiagramModel | null): model is DiagramModel {
+  return (model?.connections.length ?? 0) > 0;
+}
+
+/**
+ * Which addressable element the reader is pointing at, if any. A diagram's parts
+ * nest — a label inside a foreign object inside the node's own group — so the
+ * answer is the nearest marked ancestor of whatever the pointer landed on.
+ */
+function elementIdAt(target: EventTarget | null): string | null {
+  const marked =
+    target instanceof Element ? target.closest("[data-diagram-element]") : null;
+  return marked?.getAttribute("data-diagram-element") ?? null;
+}
+
+/**
+ * Everything the drawing contains that carries no identity: subgraph frames and
+ * their titles, and any edge whose endpoints would not resolve. Decoration is
+ * never part of a neighbourhood, so it dims whenever anything is lit — an edge
+ * the canvas admits it cannot read must not end up the brightest thing on a
+ * dimmed diagram. Selected after identity is marked, so `:not` can see it.
+ */
+const DECORATION = [
+  "g.cluster",
+  "g.cluster-label",
+  'path[data-et="edge"]:not([data-diagram-connection])',
+  "g.edgeLabels g.label:not([data-diagram-connection])",
+].join(", ");
+
+/**
+ * Marks the drawing with the identities the model derived, so that pointing,
+ * highlighting and styling all work off our own attributes instead of
+ * re-deriving Mermaid's on every event. Re-applied whenever the diagram is
+ * re-rendered, since that replaces the drawing wholesale.
+ */
+function markIdentity(svg: SVGSVGElement, model: DiagramModel) {
+  for (const element of model.elements) {
+    svg
+      .querySelector(`[id="${element.domId}"]`)
+      ?.setAttribute("data-diagram-element", element.id);
+  }
+  for (const connection of model.connections) {
+    // The connection's path and, where the diagram drew one, its label.
+    for (const part of svg.querySelectorAll(`[data-id="${connection.id}"]`)) {
+      part.setAttribute("data-diagram-connection", connection.id);
+    }
+  }
+  for (const part of svg.querySelectorAll(DECORATION)) {
+    part.setAttribute("data-diagram-decoration", "");
+  }
+}
+
+/**
+ * Lights the neighbourhood and dims the remainder. With nothing active the marks
+ * come off entirely, so an untouched diagram carries no highlight styling at all.
+ */
+function paintHighlight(
+  svg: SVGSVGElement,
+  lit: Neighbourhood | null,
+  selectedId: string | null,
+) {
+  for (const node of svg.querySelectorAll("[data-diagram-element]")) {
+    const id = node.getAttribute("data-diagram-element");
+    setOrRemove(node, "data-diagram-lit", inside(lit?.elements, id));
+    setOrRemove(node, "data-diagram-selected", id === selectedId ? "true" : null);
+  }
+  for (const edge of svg.querySelectorAll("[data-diagram-connection]")) {
+    const id = edge.getAttribute("data-diagram-connection");
+    setOrRemove(edge, "data-diagram-lit", inside(lit?.connections, id));
+  }
+  for (const part of svg.querySelectorAll("[data-diagram-decoration]")) {
+    setOrRemove(part, "data-diagram-lit", lit ? "false" : null);
+  }
+}
+
+/** Whether a neighbourhood holds this identity, or null when nothing is lit. */
+function inside(neighbourhood: Set<string> | undefined, id: string | null) {
+  if (!neighbourhood || !id) return null;
+  return String(neighbourhood.has(id));
+}
+
+function setOrRemove(el: Element, name: string, value: string | null) {
+  if (value === null) el.removeAttribute(name);
+  else el.setAttribute(name, value);
 }
 
 /**

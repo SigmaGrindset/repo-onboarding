@@ -7,6 +7,7 @@ import {
   ViewportButton,
   ViewportControls,
   svgContentSize,
+  useInjectedSvg,
   useViewport,
 } from "@/components/viewport";
 
@@ -183,6 +184,7 @@ function DiagramLightbox({
   onClose: () => void;
 }) {
   const contentRef = useRef<HTMLDivElement>(null);
+  const html = useInjectedSvg(svg);
   const closeRef = useRef<HTMLButtonElement>(null);
   const [natural, setNatural] = useState<{
     width: number;
@@ -309,7 +311,7 @@ function DiagramLightbox({
             height: natural ? natural.height + CONTENT_PAD * 2 : undefined,
             visibility: natural ? "visible" : "hidden",
           }}
-          dangerouslySetInnerHTML={{ __html: svg }}
+          dangerouslySetInnerHTML={html}
         />
         <p className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-[#0f1216]/70 px-3 py-1 text-[0.7rem] text-[#e9edf2]/75">
           Scroll to zoom · drag to pan · double-click to zoom in · Esc to close

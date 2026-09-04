@@ -4,6 +4,7 @@ import {
   forwardRef,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -76,6 +77,18 @@ export function svgContentSize(svg: SVGSVGElement): {
     width: width > 0 ? width : svg.clientWidth || FALLBACK_CONTENT.width,
     height: height > 0 ? height : svg.clientHeight || FALLBACK_CONTENT.height,
   };
+}
+
+/**
+ * What to hand `dangerouslySetInnerHTML`, stable while the diagram is.
+ *
+ * React re-sets `innerHTML` whenever this object changes identity, not when the
+ * string it holds does — so a fresh literal every render re-parses the whole
+ * drawing on every pan frame, and throws away anything a surface had marked on
+ * it. The diagram canvas depends on its marks surviving; see ADR 0003.
+ */
+export function useInjectedSvg(svg: string) {
+  return useMemo(() => ({ __html: svg }), [svg]);
 }
 
 export interface Viewport<T extends Element> {

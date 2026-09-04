@@ -462,3 +462,30 @@ p {
   height: 100% !important;
   max-width: none !important;
 }
+
+/* Selection in a diagram canvas. The canvas is handed its diagram as a string,
+   so it marks up the SVG it injected and the styling hangs off those marks: the
+   selected element's neighbourhood keeps its colour while everything else dims,
+   which is how a reader sees which lines belong to the box they care about.
+   !important beats Mermaid's own id-scoped rules, which outrank a class here. */
+.diagram-canvas [data-diagram-element] {
+  cursor: pointer;
+}
+.diagram-canvas [data-diagram-lit] {
+  transition: opacity 0.15s ease-out;
+}
+.diagram-canvas [data-diagram-lit="false"] {
+  opacity: 0.12;
+}
+.diagram-canvas [data-diagram-selected="true"] {
+  filter: drop-shadow(0 0 3px var(--accent));
+}
+.diagram-canvas path[data-diagram-connection][data-diagram-lit="true"] {
+  stroke: var(--accent) !important;
+  stroke-width: 2 !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .diagram-canvas [data-diagram-lit] {
+    transition: none;
+  }
+}

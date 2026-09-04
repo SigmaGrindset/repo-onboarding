@@ -97,9 +97,13 @@ afterEach(() => {
 });
 
 async function showDiagram(name: string, title = "How it fits together") {
+  return showRendered(fixture(name), title);
+}
+
+async function showRendered(svg: string, title = "How it fits together") {
   // Some tests compare two diagrams, and a canvas is only ever alone on a page.
   cleanup();
-  mermaidMocks.render.mockResolvedValue({ svg: fixture(name) });
+  mermaidMocks.render.mockResolvedValue({ svg });
   render(<Mermaid source="flowchart TD" title={title} />);
   const drawing = await screen.findByRole("img", { name: title });
   const surface = drawing.parentElement as HTMLElement;
@@ -129,20 +133,20 @@ function wheelOver(surface: HTMLElement, init: WheelEventInit) {
   return event;
 }
 
-function dragAcross(surface: HTMLElement, dx: number, dy: number) {
-  fireEvent.pointerDown(surface, {
+function dragAcross(target: Element, dx: number, dy: number) {
+  fireEvent.pointerDown(target, {
     pointerId: 1,
     pointerType: "mouse",
     clientX: 100,
     clientY: 100,
   });
-  fireEvent.pointerMove(surface, {
+  fireEvent.pointerMove(target, {
     pointerId: 1,
     pointerType: "mouse",
     clientX: 100 + dx,
     clientY: 100 + dy,
   });
-  fireEvent.pointerUp(surface, { pointerId: 1, pointerType: "mouse" });
+  fireEvent.pointerUp(target, { pointerId: 1, pointerType: "mouse" });
 }
 
 describe("a diagram canvas in the page", () => {
@@ -327,6 +331,35 @@ describe("a theme change under a diagram canvas", () => {
 
     expect(viewOf(drawing)).toEqual(moved);
   });
+
+  test("keeps the reader's selection, re-applied to the new drawing", async () => {
+    const { canvas, drawing } = await showDiagram(MID_DIAGRAM);
+    const lightRender = drawing.querySelector("svg")?.id;
+
+    await userEvent.click(elementIn(canvas, "entity-MENTOR-0"));
+
+    mermaidMocks.render.mockResolvedValue({
+      svg: fixture(`${MID_DIAGRAM}-dark`),
+    });
+    await act(async () => {
+      document.documentElement.dataset.theme = "dark";
+    });
+    await waitFor(() =>
+      expect(drawing.querySelector("svg")?.id).not.toBe(lightRender),
+    );
+
+    // A new drawing, and the selection re-applied to it by element id.
+    expect(
+      elementIn(canvas, "entity-MENTOR-0").getAttribute(
+        "data-diagram-selected",
+      ),
+    ).toBe("true");
+    expect(litElements(canvas)).toEqual([
+      "entity-COMMITTEE_MEMBERSHIP-3",
+      "entity-MENTOR-0",
+      "entity-THESIS-1",
+    ]);
+  });
 });
 
 describe("a diagram the canvas cannot model", () => {
@@ -343,6 +376,17 @@ describe("a diagram the canvas cannot model", () => {
     expect(viewOf(drawing).x).toBeGreaterThan(before.x);
   });
 
+  test("offers nothing to select, and clicking it does nothing", async () => {
+    const { canvas, surface } = await showDiagram(UNMODELLED_DIAGRAM);
+
+    expect(canvas.querySelectorAll("[data-diagram-element]")).toHaveLength(0);
+
+    await userEvent.click(surface);
+
+    expect(litElements(canvas)).toEqual([]);
+    expect(dimmedElements(canvas)).toEqual([]);
+  });
+
   test.each(["sample-0-flowchart", "sample-1-er", "sample-2-sequence"])(
     "%s exposes addressable elements",
     async (name) => {
@@ -351,4 +395,249 @@ describe("a diagram the canvas cannot model", () => {
       expect(canvas.dataset.diagramAddressable).toBe("true");
     },
   );
+});
+
+/**
+ * What the reader sees of a selection: which parts of the drawing stayed lit and
+ * which dimmed. The canvas expresses that by marking the SVG it was handed, so
+ * that is where the tests read it back from — jsdom paints nothing.
+ */
+function litElements(canvas: HTMLElement) {
+  return marked(canvas, "data-diagram-element", "true");
+}
+
+function dimmedElements(canvas: HTMLElement) {
+  return marked(canvas, "data-diagram-element", "false");
+}
+
+function litConnections(canvas: HTMLElement) {
+  return marked(canvas, "data-diagram-connection", "true");
+}
+
+/** Every connection the canvas could resolve, whether lit or not. */
+function connections(canvas: HTMLElement) {
+  return marked(canvas, "data-diagram-connection", null);
+}
+
+function marked(canvas: HTMLElement, attribute: string, lit: string | null) {
+  const selector =
+    lit === null
+      ? `[${attribute}]`
+      : `[${attribute}][data-diagram-lit="${lit}"]`;
+  const ids = [...canvas.querySelectorAll(selector)].map((el) =>
+    el.getAttribute(attribute),
+  );
+  // A connection marks both its path and its label, so identities repeat.
+  return [...new Set(ids)].sort();
+}
+
+function dimmed(parts: NodeListOf<Element>) {
+  return [...parts].filter(
+    (part) => part.getAttribute("data-diagram-lit") === "false",
+  ).length;
+}
+
+function elementIn(canvas: HTMLElement, id: string) {
+  const element = canvas.querySelector(`[data-diagram-element="${id}"]`);
+  if (!element) throw new Error(`no addressable element "${id}" in this diagram`);
+  return element;
+}
+
+describe("selecting an element in a diagram canvas", () => {
+  test("nothing is dimmed until the reader picks something", async () => {
+    const { canvas } = await showDiagram("sample-0-flowchart");
+
+    expect(litElements(canvas)).toEqual([]);
+    expect(dimmedElements(canvas)).toEqual([]);
+  });
+
+  test("clicking a flowchart node lights it and everything one connection away", async () => {
+    const { canvas } = await showDiagram("sample-0-flowchart");
+
+    await userEvent.click(elementIn(canvas, "HTTP"));
+
+    // HTTP is drawn with an edge to CMD and another to QRY, and nothing else.
+    expect(litElements(canvas)).toEqual(["CMD", "HTTP", "QRY"]);
+    expect(dimmedElements(canvas)).toEqual([
+      "CLI",
+      "ENTRY",
+      "LEDGER",
+      "MONEY",
+      "OUTBOX",
+      "PORTS",
+      "REPO",
+    ]);
+  });
+
+  test("clicking an ER entity does the same", async () => {
+    const { canvas } = await showDiagram("fer-mentor-1-er");
+
+    await userEvent.click(elementIn(canvas, "entity-MENTOR-0"));
+
+    expect(litElements(canvas)).toEqual([
+      "entity-COMMITTEE_MEMBERSHIP-3",
+      "entity-MENTOR-0",
+      "entity-THESIS-1",
+    ]);
+    expect(dimmedElements(canvas)).toHaveLength(5);
+  });
+
+  test("the drawing around the neighbourhood dims with it", async () => {
+    const { canvas } = await showDiagram("sample-0-flowchart");
+
+    // This diagram groups its boxes into four subgraphs. They belong to no
+    // neighbourhood, so they recede with everything else rather than staying
+    // bright over a dimmed drawing.
+    const frames = canvas.querySelectorAll("[data-diagram-decoration]");
+    expect(frames.length).toBeGreaterThan(0);
+    expect(dimmed(frames)).toBe(0);
+
+    await userEvent.click(elementIn(canvas, "HTTP"));
+
+    expect(dimmed(frames)).toBe(frames.length);
+  });
+
+  test("the connections into the neighbourhood are lit with it", async () => {
+    const { canvas } = await showDiagram("fer-mentor-1-er");
+
+    await userEvent.click(elementIn(canvas, "entity-MENTOR-0"));
+
+    // Two of the diagram's seven relationships touch MENTOR.
+    expect(connections(canvas)).toHaveLength(7);
+    expect(litConnections(canvas)).toHaveLength(2);
+  });
+
+  test("hovering previews the highlight without committing a selection", async () => {
+    const { canvas } = await showDiagram("sample-0-flowchart");
+    const node = elementIn(canvas, "HTTP");
+
+    await userEvent.hover(node);
+    expect(litElements(canvas)).toEqual(["CMD", "HTTP", "QRY"]);
+    expect(node.getAttribute("data-diagram-selected")).toBeNull();
+
+    await userEvent.unhover(node);
+    expect(litElements(canvas)).toEqual([]);
+    expect(dimmedElements(canvas)).toEqual([]);
+  });
+});
+
+describe("clearing a selection", () => {
+  test("clicking the selected element again clears it", async () => {
+    const { canvas } = await showDiagram("sample-0-flowchart");
+    const node = elementIn(canvas, "HTTP");
+
+    await userEvent.click(node);
+    await userEvent.click(node);
+
+    expect(node.getAttribute("data-diagram-selected")).toBeNull();
+    // The pointer is still on the node, so what stays lit is the preview any
+    // hover gives; it goes when the pointer does.
+    await userEvent.unhover(node);
+    expect(litElements(canvas)).toEqual([]);
+    expect(dimmedElements(canvas)).toEqual([]);
+  });
+
+  test("clicking the space around the diagram clears it", async () => {
+    const { canvas, surface } = await showDiagram("sample-0-flowchart");
+
+    await userEvent.click(elementIn(canvas, "HTTP"));
+    await userEvent.click(surface);
+
+    expect(litElements(canvas)).toEqual([]);
+  });
+
+  test("Escape clears it", async () => {
+    const { canvas } = await showDiagram("sample-0-flowchart");
+    const node = elementIn(canvas, "HTTP");
+
+    await userEvent.click(node);
+    await userEvent.keyboard("{Escape}");
+
+    expect(node.getAttribute("data-diagram-selected")).toBeNull();
+    await userEvent.unhover(node);
+    expect(litElements(canvas)).toEqual([]);
+  });
+
+  test("dragging from a node pans the diagram instead of selecting it", async () => {
+    const { canvas, drawing } = await showDiagram("sample-0-flowchart");
+    const before = viewOf(drawing);
+
+    const node = elementIn(canvas, "HTTP");
+    dragAcross(node, 80, 40);
+    // A browser still delivers the click; what the press did decides.
+    fireEvent.click(node);
+
+    expect(viewOf(drawing).x).toBeGreaterThan(before.x);
+    expect(litElements(canvas)).toEqual([]);
+  });
+
+  test("a tap selects nothing, because touch belongs to the page", async () => {
+    const { canvas } = await showDiagram("sample-0-flowchart");
+    const node = elementIn(canvas, "HTTP");
+
+    // A tap arrives as pointerover first, so a preview would flash across the
+    // diagram before the press even lands.
+    fireEvent.pointerOver(node, { pointerId: 2, pointerType: "touch" });
+    fireEvent.pointerDown(node, { pointerId: 2, pointerType: "touch" });
+    fireEvent.pointerUp(node, { pointerId: 2, pointerType: "touch" });
+    fireEvent.click(node);
+
+    expect(litElements(canvas)).toEqual([]);
+    expect(dimmedElements(canvas)).toEqual([]);
+  });
+});
+
+describe("connections between elements whose names contain the joining separator", () => {
+  test("an element is still lit with the right neighbours", async () => {
+    const { canvas } = await showDiagram("fer-mentor-1-er");
+
+    // COURSE, COURSE_OFFERING and COURSE_EMBEDDING are three entities, and a
+    // relationship id joins two of them with the underscore two of them contain.
+    await userEvent.click(elementIn(canvas, "entity-COURSE-6"));
+
+    expect(litElements(canvas)).toEqual([
+      "entity-COURSE-6",
+      "entity-COURSE_EMBEDDING-7",
+      "entity-COURSE_OFFERING-5",
+    ]);
+    expect(litConnections(canvas)).toHaveLength(2);
+  });
+
+  test("an entity named with a separator can be selected in its own right", async () => {
+    const { canvas } = await showDiagram("fer-mentor-1-er");
+
+    await userEvent.click(elementIn(canvas, "entity-THESIS_EMBEDDING-2"));
+
+    expect(litElements(canvas)).toEqual([
+      "entity-THESIS-1",
+      "entity-THESIS_EMBEDDING-2",
+    ]);
+  });
+
+  test("a connection naming an element the diagram does not have is inert", async () => {
+    // The one thing a real fixture cannot show: Mermaid always stamps endpoints
+    // it drew. One relationship is re-pointed at an entity that is not in this
+    // diagram, which is what a changed Mermaid would look like from here.
+    const { canvas } = await showRendered(
+      fixture("fer-mentor-1-er").replaceAll(
+        "id_entity-MENTOR-0_entity-THESIS-1_0",
+        "id_entity-MENTOR-0_entity-GHOST-9_0",
+      ),
+    );
+
+    await userEvent.click(elementIn(canvas, "entity-MENTOR-0"));
+
+    // The unreadable relationship is left out rather than attached to whichever
+    // entity its id half-matches, so THESIS dims with everything else.
+    expect(connections(canvas)).toHaveLength(6);
+    expect(litElements(canvas)).toEqual([
+      "entity-COMMITTEE_MEMBERSHIP-3",
+      "entity-MENTOR-0",
+    ]);
+    expect(litConnections(canvas)).toHaveLength(1);
+    // Inert means dimmed, not left as the brightest line on a dimmed diagram.
+    expect(
+      dimmed(canvas.querySelectorAll("[data-diagram-decoration]")),
+    ).toBeGreaterThan(0);
+  });
 });

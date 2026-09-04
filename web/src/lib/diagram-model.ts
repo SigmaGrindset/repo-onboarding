@@ -1,5 +1,6 @@
 /**
- * The addressable elements of a rendered architecture diagram.
+ * The addressable elements of a rendered architecture diagram, and the
+ * connections between them.
  *
  * A diagram canvas has to know what a reader can point at, and that knowledge is
  * derived from Mermaid's *rendered SVG* rather than parsed from the diagram
@@ -13,9 +14,6 @@
  * diagram it cannot model is presented as a plain pan-and-zoom surface with no
  * selection affordances, which is never worse than a static picture. See
  * docs/adr/0003-diagram-interaction-derived-from-rendered-output.md.
- *
- * This reads elements only. A neighbourhood needs the connections between them,
- * and those are read where selection is built.
  */
 
 export type DiagramFamily = "flowchart" | "er" | "sequence";
@@ -27,9 +25,27 @@ export interface AddressableElement {
   domId: string;
 }
 
+export interface DiagramConnection {
+  /**
+   * Identity as the drawing stamps it, which finds the connection's own path and
+   * its label again. Unique per diagram: the trailing counter separates two
+   * connections that run between the same pair of elements.
+   */
+  id: string;
+  from: string;
+  to: string;
+}
+
 export interface DiagramModel {
   family: DiagramFamily;
   elements: AddressableElement[];
+  connections: DiagramConnection[];
+}
+
+/** A selected element together with everything exactly one connection away. */
+export interface Neighbourhood {
+  elements: Set<string>;
+  connections: Set<string>;
 }
 
 /**
@@ -41,14 +57,35 @@ export function deriveDiagramModel(svg: SVGSVGElement): DiagramModel | null {
   return readFlowchartOrEr(svg) ?? readSequence(svg);
 }
 
+/** What stays lit around `id` while the rest of the diagram dims. */
+export function neighbourhoodOf(
+  model: DiagramModel,
+  id: string,
+): Neighbourhood {
+  const elements = new Set([id]);
+  const connections = new Set<string>();
+  for (const connection of model.connections) {
+    const far =
+      connection.from === id
+        ? connection.to
+        : connection.to === id
+          ? connection.from
+          : null;
+    if (far === null) continue;
+    elements.add(far);
+    connections.add(connection.id);
+  }
+  return { elements, connections };
+}
+
 /**
  * Flowchart and ER share a reader: both draw their elements as `g.node` groups
- * carrying identity in `id`. Only the id formats differ, and that difference is
- * what names the family.
+ * carrying identity in `id`, and stamp their connections on the edge path. Only
+ * the id formats differ, and that difference is what names the family.
  */
 function readFlowchartOrEr(svg: SVGSVGElement): DiagramModel | null {
   const elements: AddressableElement[] = [];
-  let family: DiagramFamily | null = null;
+  let family: "flowchart" | "er" | null = null;
 
   for (const node of svg.querySelectorAll("g.node[id]")) {
     const stripped = stripRenderId(node.id, svg.id);
@@ -72,7 +109,11 @@ function readFlowchartOrEr(svg: SVGSVGElement): DiagramModel | null {
   }
 
   if (!family || elements.length === 0) return null;
-  return { family, elements };
+  return {
+    family,
+    elements,
+    connections: readConnections(svg, EDGE_PREFIX[family], elements),
+  };
 }
 
 /** Sequence diagrams stamp participant identity directly, under a name of its own. */
@@ -92,7 +133,69 @@ function readSequence(svg: SVGSVGElement): DiagramModel | null {
   }
 
   if (elements.length === 0) return null;
-  return { family: "sequence", elements };
+  // Messages carry their two endpoints explicitly, so a sequence diagram needs
+  // no resolution at all — that reader arrives with the family's own selection.
+  return { family: "sequence", elements, connections: [] };
+}
+
+/** How each family opens the id it stamps on a connection. */
+const EDGE_PREFIX = { flowchart: "L_", er: "id_" } as const;
+
+/**
+ * The connections between elements, read off the edges the diagram drew. An edge
+ * whose endpoints do not resolve is dropped rather than attached to the wrong
+ * element, so it is simply not part of any neighbourhood.
+ */
+function readConnections(
+  svg: SVGSVGElement,
+  prefix: string,
+  elements: AddressableElement[],
+): DiagramConnection[] {
+  const ids = elements.map((element) => element.id);
+  const connections: DiagramConnection[] = [];
+
+  for (const edge of svg.querySelectorAll('path[data-et="edge"][data-id]')) {
+    const id = edge.getAttribute("data-id") ?? "";
+    if (!id.startsWith(prefix)) continue;
+    const ends = resolveEndpoints(id.slice(prefix.length), ids);
+    if (ends) connections.push({ id, from: ends[0], to: ends[1] });
+  }
+
+  return connections;
+}
+
+/**
+ * The two elements a connection runs between, out of `<from>_<to>_<counter>`.
+ *
+ * Element identities legitimately contain the underscore used to join them —
+ * `entity-JOURNAL_ENTRY-1` is real, and present in this repository's own
+ * documents — so the split point is found by testing candidates against the
+ * identities actually in this diagram, never by splitting on the first
+ * separator. Nothing is returned unless exactly one reading survives: a second
+ * reading means the drawing cannot say which pair it meant, and attaching a
+ * connection to the wrong element is worse than leaving it out.
+ */
+function resolveEndpoints(body: string, ids: string[]): [string, string] | null {
+  let resolved: [string, string] | null = null;
+
+  for (const from of ids) {
+    if (!body.startsWith(`${from}_`)) continue;
+    const rest = body.slice(from.length + 1);
+    for (const to of ids) {
+      if (!endsAfter(rest, to)) continue;
+      if (resolved) return null;
+      resolved = [from, to];
+    }
+  }
+
+  return resolved;
+}
+
+/** Whether `rest` is `to`, followed by nothing but the layout counter. */
+function endsAfter(rest: string, to: string): boolean {
+  if (!rest.startsWith(to)) return false;
+  const tail = rest.slice(to.length);
+  return tail === "" || /^_\d+$/.test(tail);
 }
 
 /**
