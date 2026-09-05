@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 export const CORE_ROUTES = [
   { slug: "overview", path: "/analysis/sample" },
@@ -18,12 +18,17 @@ const DIAGRAM_TIMEOUT = 20_000;
 export async function waitForPageReady(page: Page, path: string) {
   await expect(page.locator("main h1").first()).toBeVisible();
   if (path.endsWith("/architecture")) {
-    // This page stacks several diagram canvases and Mermaid lays every one of
-    // them out in the browser, so waiting for the first to appear leaves the
-    // last ones still spinning. Wait until none is still rendering, and allow
-    // longer than the default assertion timeout: a parallel run has several of
-    // these pages laying out at once, and the suite should go red on a defect
-    // rather than on load.
+    // Laying out several diagrams is the slowest thing this suite asks of a
+    // browser, and more than one spec asks for this page — so a fully parallel
+    // run has several of them laying out at once and each takes far longer than
+    // it does alone. Waiting for them can eat most of the default budget before
+    // a test body starts, which showed up as an intermittent timeout rather
+    // than as a finding. The page is genuinely slow; say so.
+    test.slow();
+    // Mermaid lays every canvas out in the browser, so waiting for the first to
+    // appear leaves the last ones still spinning. Wait until none is still
+    // rendering, and allow longer than the default assertion timeout: the suite
+    // should go red on a defect rather than on load.
     await expect(page.locator(".diagram-canvas svg").first()).toBeVisible({
       timeout: DIAGRAM_TIMEOUT,
     });
