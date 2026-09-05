@@ -479,6 +479,14 @@ p {
 .diagram-canvas [data-diagram-selected="true"] {
   filter: drop-shadow(0 0 3px var(--accent));
 }
+/* Where the keyboard is, which is not the same thing as what it has picked: the
+   cursor is a reader's place in the diagram, and the next arrow key moves from
+   here. It also lights its neighbourhood, so the outline is a sharpening of
+   something already visible rather than the only sign of where the cursor is. */
+.diagram-canvas [data-diagram-cursor="true"] {
+  outline: 2px dashed var(--accent);
+  outline-offset: 3px;
+}
 /* A flowchart edge is drawn as a path; a sequence message as a line, or as a
    path where a participant messages itself. The words along either are marked
    with the same identity and are text, so they take the colour and not the

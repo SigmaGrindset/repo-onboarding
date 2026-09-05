@@ -144,8 +144,18 @@ async function showRendered(
   cleanup();
   mermaidMocks.render.mockResolvedValue({ svg });
   render(<Mermaid source="flowchart TD" title={title} repoFiles={repoFiles} />);
-  const drawing = await screen.findByRole("img", { name: title });
-  return canvasAround(drawing);
+  return canvasAround(await waitFor(() => drawingIn(document.body)));
+}
+
+/**
+ * The drawing itself. Found by the class the stylesheet knows it by, because a
+ * modelled diagram is no longer presented as an image: what a screen reader is
+ * given is the outline beside it, and the drawing is hidden behind that.
+ */
+function drawingIn(root: HTMLElement) {
+  const drawing = root.querySelector<HTMLElement>(".diagram-canvas");
+  if (!drawing) throw new Error("nothing has been drawn yet");
+  return drawing;
 }
 
 /** The three nested boxes a canvas is, found from the drawing inside them. */
@@ -156,15 +166,12 @@ function canvasAround(drawing: HTMLElement) {
 
 /**
  * The fullscreen view of a diagram. While it is open the canvas it was promoted
- * from is hidden from the accessibility tree behind it, so a role query finds
- * the one the reader is actually looking at.
+ * from is hidden from the accessibility tree behind it, so what is found inside
+ * the dialog is the one the reader is actually looking at.
  */
 function fullscreenCanvas() {
   const dialog = screen.getByRole("dialog");
-  return {
-    ...canvasAround(within(dialog).getByRole("img")),
-    dialog,
-  };
+  return { ...canvasAround(drawingIn(dialog)), dialog };
 }
 
 /** What the reader is looking at: how far the diagram moved, and how big it is. */
@@ -1062,15 +1069,19 @@ describe("promoting a diagram canvas to fullscreen", () => {
     const { dialog } = await promote();
     const closeControl = within(dialog).getByRole("button", { name: "Close" });
 
-    // The reader arrives on the way out, which is also the last stop in the
-    // view — so the next tab comes round to the first rather than walking into
-    // the page behind, where the controls cannot be seen.
+    // The reader arrives on the way out. After the chrome comes the canvas
+    // itself, which is the last stop in the view — so the next tab comes round
+    // to the first rather than walking into the page behind, where the controls
+    // cannot be seen.
     expect(closeControl).toHaveFocus();
+    await userEvent.tab();
+    expect(outlineOf(dialog)).toHaveFocus();
+
     await userEvent.tab();
     expect(within(dialog).getByRole("button", { name: "Zoom out" })).toHaveFocus();
 
     await userEvent.tab({ shift: true });
-    expect(closeControl).toHaveFocus();
+    expect(outlineOf(dialog)).toHaveFocus();
   });
 
   test("a second Escape then clears the selection, as it does in the page", async () => {
@@ -1571,6 +1582,371 @@ describe("what a sequence diagram draws besides participants and messages", () =
     expect(connections(canvas)).toHaveLength(12);
     expect(litConnections(canvas)).toEqual(["i9"]);
     expect(litElements(canvas)).toEqual(["API", "Client"]);
+  });
+});
+
+/**
+ * Reaching a diagram with a keyboard, and reading one without sight. Both are
+ * the same construct: the canvas is one tab stop holding a cursor that moves
+ * between the diagram's addressable elements, and the outline that cursor runs
+ * along is what a screen reader is given in place of the drawing.
+ */
+
+/** The outline of a diagram: the canvas's tab stop, and its accessible content. */
+function outlineOf(root: HTMLElement = document.body) {
+  return within(root).queryByRole("listbox");
+}
+
+/** What the outline says, entry by entry, in the order a cursor walks them. */
+function outlineEntries(root: HTMLElement = document.body) {
+  const outline = outlineOf(root);
+  if (!outline) throw new Error("this diagram has no outline");
+  return within(outline)
+    .getAllByRole("option")
+    .map((option) => option.textContent);
+}
+
+/** Every stop the keyboard finds inside this canvas, in the order Tab visits them. */
+async function tabStopsInside(canvas: HTMLElement) {
+  const stops: Element[] = [];
+  // Generously more presses than any canvas has stops, so the walk ends by
+  // coming round to a stop it has already made rather than by running out.
+  for (let press = 0; press < 40; press += 1) {
+    await userEvent.tab();
+    const { activeElement } = document;
+    if (!activeElement || !canvas.contains(activeElement)) continue;
+    if (stops.includes(activeElement)) return stops;
+    stops.push(activeElement);
+  }
+  throw new Error("tabbing never came back round to where it started");
+}
+
+describe("reaching a diagram canvas with the keyboard", () => {
+  test("the whole diagram is one tab stop, however many elements it draws", async () => {
+    // Six participants and thirteen messages, every one of them selectable with
+    // a pointer — and a page of diagrams like this one is what a tab stop per
+    // element would make unusable.
+    const { canvas } = await showDiagram(SEQUENCE);
+
+    const stops = await tabStopsInside(canvas);
+
+    // The canvas itself, and then the chrome around it. Never its elements.
+    expect(stops).toEqual([
+      outlineOf(),
+      screen.getByRole("button", { name: "Zoom in" }),
+      screen.getByRole("button", { name: "Zoom out" }),
+      screen.getByRole("button", { name: "Fit to screen" }),
+      expandControl(),
+    ]);
+  });
+
+  test("the drawing is no longer an unlabelled image", async () => {
+    await showDiagram("sample-0-flowchart");
+
+    expect(screen.queryByRole("img")).toBeNull();
+    expect(outlineOf()).toHaveAccessibleName(
+      "How it fits together, flowchart diagram",
+    );
+  });
+});
+
+/**
+ * The cursor: where the keyboard is in the diagram. It is what the pointer's
+ * hover is — it lights a neighbourhood without committing to it — and like a
+ * hover it goes when the reader does.
+ */
+
+/** Where the canvas is showing the cursor to be. */
+function cursorIn(canvas: HTMLElement) {
+  const ids = [...canvas.querySelectorAll('[data-diagram-cursor="true"]')].map(
+    (el) =>
+      el.getAttribute("data-diagram-element") ??
+      el.getAttribute("data-diagram-connection"),
+  );
+  return [...new Set(ids)];
+}
+
+/**
+ * Standing on the canvas, which is where a reader without a pointer does
+ * everything. That a Tab is what puts them here is asserted on its own above; a
+ * test about the keys does not restate it.
+ */
+function standOnCanvas(root: HTMLElement = document.body) {
+  const outline = outlineOf(root);
+  if (!outline) throw new Error("this diagram has no canvas to stand on");
+  act(() => outline.focus());
+  return outline;
+}
+
+describe("moving the cursor through a diagram with the arrow keys", () => {
+  test("the first press lands on the first element the diagram drew", async () => {
+    const { canvas } = await showDiagram("sample-0-flowchart");
+    standOnCanvas();
+
+    await userEvent.keyboard("{ArrowDown}");
+
+    expect(cursorIn(canvas)).toEqual(["HTTP"]);
+    // It lights what it is on, exactly as a hover does — and, exactly as a
+    // hover does, it has picked nothing.
+    expect(litElements(canvas)).toEqual(["CMD", "HTTP", "QRY"]);
+    expect(selectedIn(canvas)).toEqual([]);
+    expect(inspectorCard()).toBeNull();
+  });
+
+  test("the arrows walk the diagram in the order it was drawn", async () => {
+    const { canvas } = await showDiagram("sample-0-flowchart");
+    standOnCanvas();
+
+    await userEvent.keyboard("{ArrowDown}{ArrowDown}");
+    expect(cursorIn(canvas)).toEqual(["CLI"]);
+
+    await userEvent.keyboard("{ArrowUp}");
+    expect(cursorIn(canvas)).toEqual(["HTTP"]);
+    expect(litElements(canvas)).toEqual(["CMD", "HTTP", "QRY"]);
+  });
+
+  test("both axes move it, since the drawing's geometry is not in the model", async () => {
+    const { canvas } = await showDiagram("sample-0-flowchart");
+    standOnCanvas();
+
+    await userEvent.keyboard("{ArrowRight}{ArrowRight}");
+    expect(cursorIn(canvas)).toEqual(["CLI"]);
+
+    await userEvent.keyboard("{ArrowLeft}");
+    expect(cursorIn(canvas)).toEqual(["HTTP"]);
+  });
+
+  test("the ends of the diagram hold, so the reader knows where they are", async () => {
+    const { canvas } = await showDiagram("sample-0-flowchart");
+    standOnCanvas();
+
+    // Backwards from nowhere is the far end of the diagram.
+    await userEvent.keyboard("{ArrowUp}");
+    expect(cursorIn(canvas)).toEqual(["OUTBOX"]);
+
+    await userEvent.keyboard("{ArrowDown}");
+    expect(cursorIn(canvas)).toEqual(["OUTBOX"]);
+  });
+
+  test("it carries on from whatever the reader had already picked", async () => {
+    const { canvas } = await showDiagram("sample-0-flowchart");
+    await userEvent.click(elementIn(canvas, "CMD"));
+
+    standOnCanvas();
+    await userEvent.keyboard("{ArrowDown}");
+
+    // CMD is the third thing the diagram drew, so the next one is the fourth.
+    expect(cursorIn(canvas)).toEqual(["QRY"]);
+    // The pointer is still parked on CMD, and no longer previewing it: the
+    // keyboard is driving.
+    expect(litElements(canvas)).toEqual(["HTTP", "PORTS", "QRY"]);
+  });
+
+  test("it reaches a sequence diagram's messages as well as its participants", async () => {
+    const { canvas } = await showDiagram(SEQUENCE);
+    standOnCanvas();
+
+    // Six participants are drawn before the thirteen arrows between them.
+    await userEvent.keyboard("{End}");
+    expect(cursorIn(canvas)).toEqual(["i12"]);
+    expect(litElements(canvas)).toEqual(["OB", "Repo"]);
+
+    await userEvent.keyboard("{Home}");
+    expect(cursorIn(canvas)).toEqual(["OB"]);
+  });
+
+  test("the reader can see where the cursor is, and that the canvas has focus", async () => {
+    const { canvas } = await showDiagram("sample-0-flowchart");
+
+    standOnCanvas();
+    expect(canvas).toHaveClass("outline-accent");
+    await userEvent.keyboard("{ArrowDown}");
+
+    expect(elementIn(canvas, "HTTP")).toHaveAttribute(
+      "data-diagram-cursor",
+      "true",
+    );
+    // The hint the canvas shows on arrival names the keys, since nothing else
+    // says the arrows do anything.
+    expect(
+      screen.getByText("Arrow keys to move · Enter for details · Esc to clear"),
+    ).toBeInTheDocument();
+  });
+
+  test("Enter opens the card for whatever the cursor is on", async () => {
+    const { canvas } = await showDiagram("sample-0-flowchart");
+    standOnCanvas();
+    await userEvent.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}");
+
+    await userEvent.keyboard("{Enter}");
+
+    expect(selectedIn(canvas)).toEqual(["CMD"]);
+    const card = openInspectorCard();
+    expect(within(card).getByText("command handlers")).toBeVisible();
+    expect(connectionsListed()).toEqual([
+      "HTTP API (Fastify)",
+      "ports (interfaces)",
+      "Ledger aggregate",
+    ]);
+    // The card is the reader's, not the keyboard's: the canvas keeps the focus
+    // it had, so the next arrow key carries on from where they were.
+    expect(outlineOf()).toHaveFocus();
+  });
+
+  test("Escape clears the selection and lets go of the canvas", async () => {
+    const { canvas } = await showDiagram("sample-0-flowchart");
+    standOnCanvas();
+    await userEvent.keyboard("{ArrowDown}{Enter}");
+    expect(selectedIn(canvas)).toEqual(["HTTP"]);
+
+    await userEvent.keyboard("{Escape}");
+
+    expect(selectedIn(canvas)).toEqual([]);
+    expect(cursorIn(canvas)).toEqual([]);
+    expect(litElements(canvas)).toEqual([]);
+    expect(inspectorCard()).toBeNull();
+    // Released, so a reader who arrived here with Tab is not held by a widget
+    // that answers to the arrow keys.
+    expect(outlineOf()).not.toHaveFocus();
+  });
+
+  test("the cursor goes when the reader tabs away, and the selection stays", async () => {
+    const { canvas } = await showDiagram("sample-0-flowchart");
+    standOnCanvas();
+    await userEvent.keyboard("{ArrowDown}{Enter}{ArrowDown}");
+    expect(cursorIn(canvas)).toEqual(["CLI"]);
+
+    await userEvent.tab();
+
+    expect(cursorIn(canvas)).toEqual([]);
+    // What the reader picked is theirs, and outlives where the keyboard was.
+    expect(selectedIn(canvas)).toEqual(["HTTP"]);
+    expect(litElements(canvas)).toEqual(["CMD", "HTTP", "QRY"]);
+  });
+});
+
+/**
+ * The outline: what a screen reader is given in place of the drawing. It says of
+ * every element what the card says of one, because it is generated from the same
+ * model — so the two cannot tell a reader different things, and neither can
+ * drift from the diagram they were both read out of.
+ */
+describe("the outline a screen reader reads instead of the drawing", () => {
+  test("names every element of a flowchart and what it connects to", async () => {
+    await showDiagram("sample-0-flowchart");
+
+    const entries = outlineEntries();
+
+    expect(entries).toHaveLength(10);
+    expect(entries[0]).toBe(
+      "HTTP API (Fastify). Node. Connects to command handlers; query handlers.",
+    );
+    expect(entries).toContain(
+      "ports (interfaces). Node. Connects to command handlers; query handlers; Postgres repositories; Outbox publisher.",
+    );
+  });
+
+  test("names every entity of an ER diagram and what it relates to", async () => {
+    await showDiagram("fer-mentor-1-er");
+
+    expect(outlineEntries()).toContain(
+      "MENTOR. Entity. Connects to THESIS; COMMITTEE_MEMBERSHIP.",
+    );
+  });
+
+  test("names a sequence diagram's participants and the messages between them", async () => {
+    await showDiagram(SEQUENCE);
+
+    const entries = outlineEntries();
+
+    // Six participants and thirteen messages: the arrows are the content of a
+    // sequence diagram, so leaving them out would leave out the interaction.
+    expect(entries).toHaveLength(19);
+    expect(entries).toContain("Client. Participant. Connects to Fastify handler.");
+    expect(entries).toContain(
+      "POST /transfers {from,to,amount}. Message. Connects to Client; Fastify handler.",
+    );
+  });
+
+  test("reads a label the diagram drew over two lines as one", async () => {
+    // Drawn as "lib/express.js" over "createApplication()", which a screen
+    // reader has no lines to hear.
+    await showExpress();
+
+    expect(outlineEntries()).toContain(
+      "lib/express.js, createApplication(). Node. Connects to index.js; lib/application.js, app prototype; lib/request.js, req prototype; lib/response.js, res prototype; router (npm); body-parser (npm); serve-static (npm).",
+    );
+  });
+
+  test("says so where an element connects to nothing else", async () => {
+    // The one relationship THESIS_EMBEDDING has, re-pointed at an entity this
+    // diagram does not draw — which is what a changed Mermaid looks like here.
+    await showRendered(
+      fixture("fer-mentor-1-er").replaceAll(
+        "id_entity-THESIS-1_entity-THESIS_EMBEDDING-2_1",
+        "id_entity-THESIS-1_entity-GHOST-9_1",
+      ),
+    );
+
+    expect(outlineEntries()).toContain(
+      "THESIS_EMBEDDING. Entity. Connects to nothing else in this diagram.",
+    );
+  });
+
+  test("the reader's selection is the one the outline marks as selected", async () => {
+    const { canvas } = await showDiagram("sample-0-flowchart");
+
+    await userEvent.click(elementIn(canvas, "CMD"));
+
+    const selected = within(outlineOf() as HTMLElement)
+      .getAllByRole("option", { selected: true })
+      .map((option) => option.textContent);
+    expect(selected).toEqual([
+      "command handlers. Node. Connects to HTTP API (Fastify); ports (interfaces); Ledger aggregate.",
+    ]);
+  });
+});
+
+describe("a diagram that degraded to pan and zoom", () => {
+  test("keeps the labelled image it has always been, and no keyboard cursor", async () => {
+    const { canvas } = await showDiagram(UNMODELLED_DIAGRAM);
+
+    // Nothing was derived from it, so there is nothing to outline and nothing
+    // an arrow key could move between. The image is not made worse for that.
+    expect(outlineOf()).toBeNull();
+    expect(
+      within(canvas).getByRole("img", { name: "How it fits together" }),
+    ).toBeInTheDocument();
+
+    const stops = await tabStopsInside(canvas);
+    expect(stops).toEqual([
+      screen.getByRole("button", { name: "Zoom in" }),
+      screen.getByRole("button", { name: "Zoom out" }),
+      screen.getByRole("button", { name: "Fit to screen" }),
+      expandControl(),
+    ]);
+  });
+});
+
+describe("the keyboard in the fullscreen view", () => {
+  test("moves a cursor through the same diagram, and carries it back out", async () => {
+    const { canvas } = await showDiagram("sample-0-flowchart");
+    const { canvas: full, dialog } = await promote();
+
+    standOnCanvas(dialog);
+    await userEvent.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}{Enter}");
+
+    expect(cursorIn(full)).toEqual(["CMD"]);
+    expect(within(openInspectorCard(dialog)).getByText("command handlers")).toBeVisible();
+
+    // Escape releases the canvas; the view is left by the press after it, which
+    // is what Escape means to a reader who is not standing on the diagram.
+    await userEvent.keyboard("{Escape}");
+    expect(screen.getByRole("dialog")).toBeVisible();
+    await userEvent.keyboard("{Escape}");
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(selectedIn(canvas)).toEqual([]);
   });
 });
 

@@ -100,3 +100,20 @@ A selected addressable element together with everything exactly one connection a
 part that stays lit while the rest of the diagram dims. The same concept governs the
 dependency graph and every diagram canvas.
 _Avoid_: cluster (that is a diagram's own subgraph), related nodes, context
+
+**Diagram outline**:
+What a reader who cannot see a diagram canvas is given in place of the drawing: one entry
+per addressable element, in the order the diagram drew them, each naming the element, its
+kind, and what it connects to. It is generated from the same model the highlighting runs
+on — it is the inspector card's reading of every element at once — so it cannot describe a
+diagram other than the one on screen. A diagram with no model has none, and keeps the
+labelled image it has always been.
+_Avoid_: alt text, description, summary, transcript, legend
+
+**Cursor**:
+Where the keyboard is inside a diagram canvas: the element the next arrow key moves from,
+and the one Enter opens the inspector card for. It lights a neighbourhood without picking
+anything, which is what a pointer's hover does — and like a hover it goes when the reader
+does, leaving whatever they had actually selected.
+_Avoid_: focus, focused element, active element. Focus belongs to the canvas as a whole,
+which is one tab stop however many elements its diagram draws.

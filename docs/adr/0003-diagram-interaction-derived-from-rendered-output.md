@@ -144,6 +144,15 @@ belt-and-braces:
   Mermaid before then should regenerate the fixtures and read the diff. Afterwards, expect
   that spec to be the thing that goes red.
 
+**The derived model is also the diagram's accessible content.** A canvas that can read its
+diagram presents the outline generated from that model — every addressable element and what
+it connects to — and hides the drawing behind it, because an image with nothing in it is
+what a screen reader had before. So an upgrade that moves the identity costs more than
+selection: the canvas falls back to the labelled image it was, which is no worse than the
+old behaviour but is a good deal worse than the new one. That the outline is generated
+rather than authored is the point — a written description of a diagram drifts from it, and
+this one is read out of the same drawing.
+
 **Highlighting means marking up someone else's SVG, inside a container React owns.** The
 canvas is handed its diagram as a string and injects it, then writes its own attributes onto
 the nodes and edges it derived, and the styling hangs off those. React re-sets `innerHTML`

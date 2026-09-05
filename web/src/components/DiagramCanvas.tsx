@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -10,11 +11,16 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import {
+  addressableIn,
+  addressablesIn,
+  connectedTo,
   deriveDiagramModel,
   markDiagram,
   neighbourhoodOf,
+  type Addressable,
   type AddressableElement,
   type ConnectionKind,
+  type DiagramFamily,
   type DiagramModel,
   type ElementKind,
   type Neighbourhood,
@@ -64,6 +70,20 @@ import { FileChip } from "@/components/ui";
  * canvas toolbar, and the fullscreen view is this same component at another
  * size — same selection, same highlighting, same card. Promoting is a change of
  * size, not a change of tool, so the two presentations cannot drift apart.
+ *
+ * Without a pointer the canvas is a composite widget: one tab stop for the whole
+ * diagram, arrow keys moving a cursor between its addressable elements, Enter
+ * opening the card, Escape clearing and letting go. A tab stop per element would
+ * be technically accessible and practically worse, since the Architecture
+ * section stacks several diagrams and one of them alone draws nineteen things a
+ * reader can pick.
+ *
+ * That widget is the same thing a screen reader is given instead of the drawing:
+ * a visually hidden outline of the diagram, one entry per addressable element,
+ * naming what it is and what it connects to. It is generated from the model the
+ * highlighting runs on, so it cannot say anything the drawing does not — and it
+ * is the inspector card's reading of every element at once, which is why the
+ * words come from the same place the card's do.
  */
 
 /** Scale limits. Wider than the graph's, because diagram text is small. */
@@ -174,6 +194,9 @@ export function DiagramCanvas({
   const hostRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const html = useInjectedSvg(svg);
+  // Both canvases of a promoted diagram are mounted at once, so the outline's
+  // entries need identity of their own rather than the elements' own ids.
+  const outlineId = useId();
   const [content, setContent] = useState<{
     width: number;
     height: number;
@@ -183,6 +206,11 @@ export function DiagramCanvas({
   // identity the canvas reads is a pan-and-zoom surface and nothing more.
   const [model, setModel] = useState<DiagramModel | null>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
+  // Where the keyboard is in the diagram, and whether it is here at all. Both
+  // are the canvas's own: the cursor is what the pointer's hover is, and it goes
+  // when the reader does.
+  const [cursorId, setCursorId] = useState<string | null>(null);
+  const [focused, setFocused] = useState(false);
 
   const {
     ref: viewportRef,
@@ -227,11 +255,15 @@ export function DiagramCanvas({
     // — nor let the reader clear it by clicking the drawing.
     keepIf((id) => offersSelection(derived) && holds(derived, id));
     setHoverId(null);
+    setCursorId((id) =>
+      id !== null && offersSelection(derived) && holds(derived, id) ? id : null,
+    );
   }, [svg, keepIf]);
 
   // Hover previews a selection without committing to one, exactly as the
-  // dependency graph does.
-  const activeId = hoverId ?? selectedId;
+  // dependency graph does — and the keyboard cursor is the same preview for a
+  // reader who has no pointer to hover with.
+  const activeId = hoverId ?? cursorId ?? selectedId;
   const lit = useMemo<Neighbourhood | null>(
     () => (model && activeId ? neighbourhoodOf(model, activeId) : null),
     [model, activeId],
@@ -239,45 +271,85 @@ export function DiagramCanvas({
 
   useLayoutEffect(() => {
     const svgEl = hostRef.current?.querySelector("svg");
-    if (svgEl) paintHighlight(svgEl, lit, selectedId);
-  }, [svg, lit, selectedId]);
+    if (svgEl) paintHighlight(svgEl, lit, selectedId, cursorId);
+  }, [svg, lit, selectedId, cursorId]);
 
-  // What the card says. Read off the selection alone, never the hover: a card
-  // that followed the pointer would flicker through the diagram on the way to it.
+  // What the card says. Read off the selection alone, never the hover or the
+  // cursor: a card that followed either would flicker through the diagram on the
+  // way to what the reader actually meant.
   const selected = useMemo(
-    () => (model && selectedId ? subjectOf(model, selectedId) : null),
+    () => (model && selectedId ? addressableIn(model, selectedId) : null),
     [model, selectedId],
   );
-  const connectedTo = useMemo(() => {
-    if (!model || !selectedId) return [];
-    const message = model.connections.find(
-      (connection) => connection.id === selectedId,
-    );
-    // A message is read from its sender to its receiver, so its ends are listed
-    // in that order rather than the order the participants were drawn in — and a
-    // participant messaging itself is one end, not two.
-    if (message) {
-      const byId = new Map(model.elements.map((el) => [el.id, el]));
-      return [...new Set([message.from, message.to])]
-        .map((id) => byId.get(id))
-        .filter((el): el is AddressableElement => el !== undefined);
+  const connections = useMemo(
+    () => (model && selectedId ? connectedTo(model, selectedId) : []),
+    [model, selectedId],
+  );
+
+  // The diagram as text: every addressable element, what it is, and what it
+  // connects to. The same reading the card gives one element at a time, which is
+  // what keeps the two from telling a reader different things.
+  const outline = useMemo(() => {
+    if (!offersSelection(model)) return [];
+    return addressablesIn(model).map((subject, index) => ({
+      id: subject.id,
+      domId: `${outlineId}-${index}`,
+      text: outlineEntry(subject, connectedTo(model, subject.id)),
+    }));
+  }, [model, outlineId]);
+  const cursor = outline.find((entry) => entry.id === cursorId);
+
+  /**
+   * The canvas's own keys, which it takes only while the reader is standing on
+   * it. Arrows move the cursor, Enter opens the card on whatever it is over, and
+   * Escape gives up both the selection and the canvas — so a reader who came in
+   * with Tab is never held here by a widget that answers to the arrow keys.
+   *
+   * Escape stops here rather than carrying on to the window handler below, which
+   * is for a canvas nobody is standing on: in fullscreen that one leaves the
+   * view, and one press must not both let go of the diagram and close it.
+   */
+  const onCanvasKey = (event: React.KeyboardEvent<HTMLElement>) => {
+    const step = CURSOR_KEY[event.key];
+    if (!step && event.key !== "Enter" && event.key !== "Escape") return;
+    // The keyboard is driving now, so whatever the pointer was left parked over
+    // gives up its preview — a stationary pointer must not outrank the cursor.
+    setHoverId(null);
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      setCursorId(null);
+      select(null);
+      event.currentTarget.blur();
+      return;
     }
-    const near = neighbourhoodOf(model, selectedId).elements;
-    // In the order the diagram drew them, so the list does not reshuffle as the
-    // reader walks from one element to the next.
-    return model.elements.filter(
-      (element) => element.id !== selectedId && near.has(element.id),
-    );
-  }, [model, selectedId]);
+
+    // Wherever the reader last was: the cursor, or failing that whatever they
+    // had already picked, so arriving on a diagram mid-reading carries on from
+    // where the pointer left off.
+    const from = cursorId ?? selectedId;
+    if (event.key === "Enter") {
+      if (!from) return;
+      event.preventDefault();
+      select(from);
+      return;
+    }
+
+    if (outline.length === 0) return;
+    // Or the page would scroll away underneath the diagram being read.
+    event.preventDefault();
+    const at = outline.findIndex((entry) => entry.id === from);
+    setCursorId(outline[step(at, outline.length)].id);
+  };
 
   // Escape clears the selection in the page, and leaves the fullscreen view —
   // which keeps its selection, so the reader comes back to where they were with
   // their place in the diagram intact. A promoted canvas sits behind a
   // fullscreen one and takes no keys, or one press would do both at once.
   //
-  // Bound to the window because nothing here is focusable yet, so Escape clears
-  // every canvas on the page at once; the keyboard ticket gives the canvas focus
-  // and scopes this to it.
+  // Bound to the window, so it answers for a canvas the reader is looking at
+  // rather than standing on. A canvas with focus has already handled the press.
   useEffect(() => {
     if (promoted) return;
     const onKey = (event: KeyboardEvent) => {
@@ -420,11 +492,16 @@ export function DiagramCanvas({
       // identity at all. Offering selection on top of that also needs
       // connections, which is what `selectable` says.
       data-diagram-addressable={model !== null}
-      className={
+      className={`${
         fullscreen
           ? "group relative min-h-0 flex-1 overflow-hidden"
           : "group relative overflow-hidden rounded-md border border-border bg-surface"
-      }
+      } ${
+        // The focus ring belongs to the canvas rather than to the outline that
+        // holds the focus, because the canvas is what the reader is standing on
+        // and the outline is a millimetre of clipped text.
+        focused ? "outline-2 outline-offset-2 outline-accent" : ""
+      }`}
       style={fullscreen ? undefined : { height }}
       // A promoted canvas is behind a fullscreen view of the same diagram, so it
       // is out of reach and out of the accessibility tree until it comes back.
@@ -474,8 +551,13 @@ export function DiagramCanvas({
       >
         <div
           ref={hostRef}
-          role="img"
-          aria-label={title ?? "Diagram"}
+          // A diagram the canvas can read is presented as its outline below; the
+          // drawing itself would only add an image with nothing in it. One it
+          // cannot read has no outline to offer, so it keeps the labelled image
+          // it has always been.
+          {...(selectable
+            ? { "aria-hidden": true }
+            : { role: "img", "aria-label": title ?? "Diagram" })}
           className={`diagram-canvas absolute left-0 top-0 origin-top-left ${
             fullscreen ? "rounded-lg bg-surface p-4 shadow-2xl" : ""
           }`}
@@ -489,10 +571,43 @@ export function DiagramCanvas({
         />
       </div>
 
+      {/* The diagram, in the two forms that are not the drawing: the canvas's
+          one tab stop, and the outline a screen reader reads. It sits before the
+          card and the toolbar so that a reader arrives at the diagram itself
+          first, and only then at the things arranged around it. */}
+      {outline.length > 0 ? (
+        <ul
+          role="listbox"
+          aria-label={outlineLabel(model, title)}
+          aria-activedescendant={cursor?.domId}
+          tabIndex={0}
+          className="sr-only"
+          onKeyDown={onCanvasKey}
+          onFocus={() => setFocused(true)}
+          onBlur={() => {
+            setFocused(false);
+            // The cursor is where the keyboard is, so it goes with the keyboard
+            // — leaving whatever the reader had actually picked still lit.
+            setCursorId(null);
+          }}
+        >
+          {outline.map((entry) => (
+            <li
+              key={entry.domId}
+              id={entry.domId}
+              role="option"
+              aria-selected={entry.id === selectedId}
+            >
+              {entry.text}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
       {selected && cardOpen ? (
         <InspectorCard
           subject={selected}
-          connectedTo={connectedTo}
+          connectedTo={connections}
           link={fileLinkFor(selected.label, repoFiles)}
           onSelect={(id) => {
             // Picking from the card is a deliberate act, and it ends whatever
@@ -529,7 +644,7 @@ export function DiagramCanvas({
             : "pointer-events-none absolute bottom-2 left-2 rounded-full border border-border bg-surface/85 px-2.5 py-1 text-[0.7rem] text-faint opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100"
         }
       >
-        {gestureHint(fullscreen, selectable)}
+        {gestureHint(fullscreen, selectable, focused)}
       </p>
     </div>
   );
@@ -573,7 +688,7 @@ export function DiagramCanvas({
  * reader that the rest of the page is not there, so letting the keyboard walk
  * out into it would leave the reader operating controls behind the overlay —
  * other diagrams' toolbars among them. Only the boundary of the view is settled
- * here; the canvas's own keys are the keyboard ticket's.
+ * here; inside it the canvas answers for its own keys.
  */
 function keepTabInside(event: React.KeyboardEvent<HTMLElement>) {
   if (event.key !== "Tab") return;
@@ -602,25 +717,83 @@ const KIND_NAME: Record<ElementKind | ConnectionKind, string> = {
   edge: "Connection",
 };
 
-/** What the card is about: an element of the diagram, or a connection in it. */
-interface CardSubject {
-  label: string;
-  kind: ElementKind | ConnectionKind;
-}
-
-/** Whichever of the two the reader picked, since either can carry a selection. */
-function subjectOf(model: DiagramModel, id: string): CardSubject | null {
-  return (
-    model.elements.find((element) => element.id === id) ??
-    model.connections.find((connection) => connection.id === id) ??
-    null
-  );
-}
-
 /** Whether this diagram still holds what the reader had picked. */
 function holds(model: DiagramModel, id: string): boolean {
-  return subjectOf(model, id) !== null;
+  return addressableIn(model, id) !== null;
 }
+
+/**
+ * What the diagram is called where it has no drawing to show for itself. Its
+ * family is part of the name, because a reader who cannot see a sequence diagram
+ * has no other way of knowing to expect messages in it.
+ */
+const FAMILY_NAME: Record<DiagramFamily, string> = {
+  flowchart: "flowchart diagram",
+  er: "entity relationship diagram",
+  sequence: "sequence diagram",
+};
+
+function outlineLabel(model: DiagramModel | null, title?: string): string {
+  const family = model ? FAMILY_NAME[model.family] : "diagram";
+  return title ? `${title}, ${family}` : family;
+}
+
+/**
+ * One entry of the outline: what an element is, and what it connects to. It says
+ * exactly what the card says about the same element, in the order the card says
+ * it — the outline is that reading of the whole diagram at once, and a second
+ * wording would be a second answer to the same question.
+ *
+ * The punctuation is load-bearing, because a diagram label is not a word. A
+ * label the diagram drew over two lines is read as one, since a screen reader
+ * has no lines — and a label that is a file path over a function name then holds
+ * a comma of its own, so the elements of a list are separated by something
+ * stronger, and each part of the entry is a sentence. Only a message can be
+ * unlabelled, and it is named by what it is rather than by an empty pause.
+ */
+function outlineEntry(
+  subject: Addressable,
+  connections: AddressableElement[],
+): string {
+  const to = connections.map((element) => oneLine(element.label)).join("; ");
+  return [
+    oneLine(subject.label),
+    KIND_NAME[subject.kind],
+    to ? `Connects to ${to}` : "Connects to nothing else in this diagram",
+  ]
+    .filter(Boolean)
+    .map((sentence) => `${sentence}.`)
+    .join(" ");
+}
+
+function oneLine(label: string): string {
+  return label.split("\n").join(", ");
+}
+
+/**
+ * Where each key takes the cursor. Both axes move it the same way, along the
+ * order the diagram drew its elements in: the drawing's own geometry is not in
+ * the model, and a cursor that guessed at "the box to the right" from label
+ * order would be wrong in a way the reader could not predict.
+ *
+ * Arriving from nowhere lands on the near end of the diagram in the direction of
+ * travel, and the ends do not wrap: a reader always knows where they are.
+ */
+// `at` is -1 when the reader has not been anywhere yet, so forwards from nowhere
+// is the first element and backwards from nowhere is the last.
+type CursorStep = (at: number, count: number) => number;
+const onwards: CursorStep = (at, count) => Math.min(at + 1, count - 1);
+const backwards: CursorStep = (at, count) =>
+  at < 0 ? count - 1 : Math.max(at - 1, 0);
+
+const CURSOR_KEY: Record<string, CursorStep> = {
+  ArrowDown: onwards,
+  ArrowRight: onwards,
+  ArrowUp: backwards,
+  ArrowLeft: backwards,
+  Home: () => 0,
+  End: (_at, count) => count - 1,
+};
 
 /**
  * The card a selection opens: what was picked, and what it touches.
@@ -638,7 +811,7 @@ function InspectorCard({
   onSelect,
   onDismiss,
 }: {
-  subject: CardSubject;
+  subject: Addressable;
   connectedTo: AddressableElement[];
   link: RepoFileLink | null;
   onSelect: (id: string) => void;
@@ -762,11 +935,15 @@ function paintHighlight(
   svg: SVGSVGElement,
   lit: Neighbourhood | null,
   selectedId: string | null,
+  cursorId: string | null,
 ) {
   for (const node of svg.querySelectorAll("[data-diagram-element]")) {
     const id = node.getAttribute("data-diagram-element");
     setOrRemove(node, "data-diagram-lit", inside(lit?.elements, id));
     setOrRemove(node, "data-diagram-selected", id === selectedId ? "true" : null);
+    // Where the keyboard is, which is a different thing from what it picked:
+    // the reader has to be able to see where the next arrow key will take them.
+    setOrRemove(node, "data-diagram-cursor", id === cursorId ? "true" : null);
   }
   for (const edge of svg.querySelectorAll("[data-diagram-connection]")) {
     // A message arrow's invisible twin is there to be pointed at, not seen.
@@ -775,6 +952,7 @@ function paintHighlight(
     setOrRemove(edge, "data-diagram-lit", inside(lit?.connections, id));
     // A message can be the selection itself, not only part of one.
     setOrRemove(edge, "data-diagram-selected", id === selectedId ? "true" : null);
+    setOrRemove(edge, "data-diagram-cursor", id === cursorId ? "true" : null);
   }
   for (const part of svg.querySelectorAll("[data-diagram-decoration]")) {
     setOrRemove(part, "data-diagram-lit", lit ? "false" : null);
@@ -809,8 +987,17 @@ function arrivalScale(
  * What the canvas can honestly tell a reader about its gestures. Both halves of
  * that differ: fullscreen has no page behind it to keep the wheel for, and a
  * reader holding a phone has no wheel, no modifier key and no Escape.
+ *
+ * A reader standing on the canvas is told about the keys instead. Nothing about
+ * the canvas announces that the arrow keys do anything, and the hint is already
+ * shown while it has focus.
  */
-function gestureHint(fullscreen: boolean, selectable: boolean) {
+function gestureHint(
+  fullscreen: boolean,
+  selectable: boolean,
+  focused: boolean,
+) {
+  if (focused) return "Arrow keys to move · Enter for details · Esc to clear";
   const touch = readsWithAFinger();
   const picking = selectable
     ? touch

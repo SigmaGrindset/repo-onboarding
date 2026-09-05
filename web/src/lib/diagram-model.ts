@@ -78,6 +78,17 @@ export interface Neighbourhood {
 }
 
 /**
+ * Anything a reader can put a selection on: an element of the diagram, and in a
+ * family whose connections are its content, a connection. Both an element and a
+ * connection already are one, which is why nothing here is constructed.
+ */
+export interface Addressable {
+  id: string;
+  label: string;
+  kind: ElementKind | ConnectionKind;
+}
+
+/**
  * The model for one rendered diagram, or null when it exposes none of the
  * identity the canvas depends on — an unmodelled family, or a Mermaid version
  * that stamps something else.
@@ -119,6 +130,53 @@ export function neighbourhoodOf(
     connections.add(connection.id);
   }
   return { elements, connections };
+}
+
+/**
+ * Everything in this diagram a reader can select, in the order the diagram drew
+ * it — which is the order a keyboard cursor walks and the order the outline
+ * lists, so neither has an order of its own to disagree with the drawing about.
+ */
+export function addressablesIn(model: DiagramModel): Addressable[] {
+  return SELECTABLE_CONNECTIONS[model.family]
+    ? [...model.elements, ...model.connections]
+    : model.elements;
+}
+
+/** The one the reader picked, whichever of the two it turned out to be. */
+export function addressableIn(
+  model: DiagramModel,
+  id: string,
+): Addressable | null {
+  return addressablesIn(model).find((subject) => subject.id === id) ?? null;
+}
+
+/**
+ * The elements one connection away from `id`, as they are read out: to the
+ * reader of an inspector card, and to a screen reader hearing the outline.
+ *
+ * A message is read from its sender to its receiver, so its ends are listed in
+ * that order rather than the order the participants were drawn in — and a
+ * participant messaging itself is one end, not two. Everything else is listed in
+ * the order the diagram drew it, so the list does not reshuffle as the reader
+ * walks from one element to the next.
+ */
+export function connectedTo(
+  model: DiagramModel,
+  id: string,
+): AddressableElement[] {
+  const byId = new Map(model.elements.map((element) => [element.id, element]));
+  const message = model.connections.find((connection) => connection.id === id);
+  if (message) {
+    return [...new Set([message.from, message.to])]
+      .map((end) => byId.get(end))
+      .filter((element): element is AddressableElement => element !== undefined);
+  }
+
+  const near = neighbourhoodOf(model, id).elements;
+  return model.elements.filter(
+    (element) => element.id !== id && near.has(element.id),
+  );
 }
 
 /**
