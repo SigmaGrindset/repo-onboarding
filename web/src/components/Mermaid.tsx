@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { DiagramCanvas } from "@/components/DiagramCanvas";
+import type { RepoFileIndex } from "@/lib/repo-files";
 import {
   ViewportButton,
   ViewportControls,
@@ -31,7 +32,16 @@ function isDarkTheme(): boolean {
  * the section itself — which can still be promoted to the fullscreen view from
  * its own toolbar.
  */
-export function Mermaid({ source, title }: { source: string; title?: string }) {
+export function Mermaid({
+  source,
+  title,
+  repoFiles,
+}: {
+  source: string;
+  title?: string;
+  /** Where a diagram label that names a file can be resolved and linked. */
+  repoFiles?: RepoFileIndex;
+}) {
   const [svg, setSvg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
@@ -150,6 +160,7 @@ export function Mermaid({ source, title }: { source: string; title?: string }) {
       <DiagramCanvas
         svg={svg}
         title={title}
+        repoFiles={repoFiles}
         onExpand={() => setExpanded(true)}
       />
       {expanded ? (

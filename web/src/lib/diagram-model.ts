@@ -18,11 +18,22 @@
 
 export type DiagramFamily = "flowchart" | "er" | "sequence";
 
+/** What a reader is looking at, in the language of the diagram they are reading. */
+export type ElementKind = "node" | "entity" | "participant";
+
 export interface AddressableElement {
   /** Identity as the diagram's own connections refer to it. Unique per diagram. */
   id: string;
   /** The `id` of the rendered group, for finding it in the drawing again. */
   domId: string;
+  /**
+   * What the drawing calls it — the text drawn inside the element, not its
+   * identity, which is frequently an abbreviation the reader never sees. Line
+   * breaks the diagram drew are kept, because a label is often a path over a
+   * function name and the two are separate things.
+   */
+  label: string;
+  kind: ElementKind;
 }
 
 export interface DiagramConnection {
@@ -96,15 +107,26 @@ function readFlowchartOrEr(svg: SVGSVGElement): DiagramModel | null {
     const flowchart = /^flowchart-(.+)-\d+$/.exec(stripped);
     if (flowchart) {
       family ??= "flowchart";
-      elements.push({ id: flowchart[1], domId: node.id });
+      elements.push({
+        id: flowchart[1],
+        domId: node.id,
+        label: labelOf(node, flowchart[1]),
+        kind: "node",
+      });
       continue;
     }
 
     // An ER diagram's connections embed the whole stripped id, so unlike a
     // flowchart's, that — not the entity name inside it — is the identity.
-    if (/^entity-.+-\d+$/.test(stripped)) {
+    const er = /^entity-(.+)-\d+$/.exec(stripped);
+    if (er) {
       family ??= "er";
-      elements.push({ id: stripped, domId: node.id });
+      elements.push({
+        id: stripped,
+        domId: node.id,
+        label: labelOf(node, er[1]),
+        kind: "entity",
+      });
     }
   }
 
@@ -129,13 +151,55 @@ function readSequence(svg: SVGSVGElement): DiagramModel | null {
     // element, whichever box the reader reaches first.
     if (!id || seen.has(id)) continue;
     seen.add(id);
-    elements.push({ id, domId: participant.id });
+    elements.push({
+      id,
+      domId: participant.id,
+      label: drawnText(participant) || id,
+      kind: "participant",
+    });
   }
 
   if (elements.length === 0) return null;
   // Messages carry their two endpoints explicitly, so a sequence diagram needs
   // no resolution at all — that reader arrives with the family's own selection.
   return { family: "sequence", elements, connections: [] };
+}
+
+/**
+ * The text drawn inside an element. A flowchart node and an ER entity both draw
+ * their name in a `.nodeLabel`; an ER entity's attribute rows follow it, and are
+ * not part of the name. Falls back to the identity when there is no label to
+ * read, so an element is never nameless.
+ */
+function labelOf(node: Element, fallback: string): string {
+  const label = node.querySelector(".nodeLabel");
+  return (label ? drawnText(label) : "") || fallback;
+}
+
+/**
+ * The text of a drawn label, with the line breaks the diagram drew. Mermaid
+ * writes a multi-line label as one element broken by `<br>`, which plain
+ * `textContent` would run together — and the lines are frequently distinct
+ * things, such as a file path above the function it holds.
+ */
+function drawnText(root: Element): string {
+  let text = "";
+  for (const child of root.childNodes) {
+    if (child.nodeType === 3 /* text */) {
+      text += child.nodeValue ?? "";
+      continue;
+    }
+    if (child.nodeType !== 1 /* element */) continue;
+    const element = child as Element;
+    const tag = element.tagName.toLowerCase();
+    if (tag === "br") text += "\n";
+    else text += drawnText(element) + (tag === "p" ? "\n" : "");
+  }
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join("\n");
 }
 
 /** How each family opens the id it stamps on a connection. */

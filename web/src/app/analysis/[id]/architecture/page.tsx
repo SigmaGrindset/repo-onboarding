@@ -5,6 +5,7 @@ import { Markdown } from "@/lib/markdown";
 import { Badge, Card, EmptyState, SectionHeader } from "@/components/ui";
 import { Mermaid } from "@/components/Mermaid";
 import { JumpToParam } from "@/components/JumpToParam";
+import { repoFileIndex } from "@/lib/repo-files";
 import { ArchitectureReadTracker } from "@/components/OnboardingMilestoneControls";
 
 export const dynamic = "force-dynamic";
@@ -20,6 +21,10 @@ export default async function ArchitecturePage({
   if (!analysis) notFound();
 
   const sections = analysis.architecture;
+  // Every path this document names, so a diagram label that happens to be one of
+  // them can be offered as a link. Labels are prose far more often than not, so
+  // most of them resolve to nothing and are offered nothing.
+  const repoFiles = repoFileIndex(analysis);
 
   return (
     <div>
@@ -71,6 +76,7 @@ export default async function ArchitecturePage({
                     <Mermaid
                       source={section.diagram.source}
                       title={section.diagram.title ?? section.title}
+                      repoFiles={repoFiles}
                     />
                   </figure>
                 ) : null}

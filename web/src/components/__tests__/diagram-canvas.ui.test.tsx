@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { readFileSync, readdirSync } from "node:fs";
@@ -19,6 +20,7 @@ const mermaidMocks = vi.hoisted(() => ({
 vi.mock("mermaid", () => ({ default: mermaidMocks }));
 
 import { Mermaid } from "@/components/Mermaid";
+import type { RepoFileIndex } from "@/lib/repo-files";
 
 /**
  * The canvas is driven through the component a reader actually meets, with
@@ -96,15 +98,23 @@ afterEach(() => {
   Reflect.deleteProperty(HTMLElement.prototype, "clientHeight");
 });
 
-async function showDiagram(name: string, title = "How it fits together") {
-  return showRendered(fixture(name), title);
+async function showDiagram(
+  name: string,
+  title = "How it fits together",
+  repoFiles?: RepoFileIndex,
+) {
+  return showRendered(fixture(name), title, repoFiles);
 }
 
-async function showRendered(svg: string, title = "How it fits together") {
+async function showRendered(
+  svg: string,
+  title = "How it fits together",
+  repoFiles?: RepoFileIndex,
+) {
   // Some tests compare two diagrams, and a canvas is only ever alone on a page.
   cleanup();
   mermaidMocks.render.mockResolvedValue({ svg });
-  render(<Mermaid source="flowchart TD" title={title} />);
+  render(<Mermaid source="flowchart TD" title={title} repoFiles={repoFiles} />);
   const drawing = await screen.findByRole("img", { name: title });
   const surface = drawing.parentElement as HTMLElement;
   return { canvas: surface.parentElement as HTMLElement, surface, drawing };
@@ -639,5 +649,263 @@ describe("connections between elements whose names contain the joining separator
     expect(
       dimmed(canvas.querySelectorAll("[data-diagram-decoration]")),
     ).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * The card a selection opens, or null when the reader has none open. It is a
+ * region rather than a dialog: it never takes focus off the canvas, and a
+ * reader goes on panning and selecting with it on screen.
+ */
+function inspectorCard() {
+  return screen.queryByRole("region", { name: "Selected element" });
+}
+
+function openInspectorCard() {
+  const card = inspectorCard();
+  if (!card) throw new Error("no card is open on this canvas");
+  return card;
+}
+
+/** What the open card says the selection connects to, in the order it lists them. */
+function connectionsListed() {
+  const list = within(openInspectorCard()).getByRole("list", {
+    name: "Connects to",
+  });
+  return within(list)
+    .getAllByRole("button")
+    .map((button) => button.textContent);
+}
+
+function connectionListed(name: string) {
+  return within(openInspectorCard()).getByRole("button", { name });
+}
+
+/**
+ * A repository the express diagram's labels can be resolved against. It names
+ * some of the files that diagram draws and not others, which is what separates
+ * a label that earns a link from one that does not.
+ */
+const EXPRESS_REPO: RepoFileIndex = {
+  paths: ["index.js", "lib/express.js", "lib/application.js", "lib/view.js"],
+  repoUrl: "https://github.com/expressjs/express",
+  commitSha: "4bd6c1b",
+};
+
+async function showExpress() {
+  return showDiagram(
+    "express-0-flowchart",
+    "How it fits together",
+    EXPRESS_REPO,
+  );
+}
+
+describe("the card a selection opens", () => {
+  test("names the selected element and what kind of element it is", async () => {
+    const { canvas } = await showDiagram("sample-0-flowchart");
+    expect(inspectorCard()).toBeNull();
+
+    await userEvent.click(elementIn(canvas, "HTTP"));
+
+    const card = openInspectorCard();
+    expect(within(card).getByText("HTTP API (Fastify)")).toBeVisible();
+    expect(within(card).getByText("Node")).toBeVisible();
+  });
+
+  test("lists the elements the selection connects to", async () => {
+    const { canvas } = await showDiagram("sample-0-flowchart");
+
+    await userEvent.click(elementIn(canvas, "HTTP"));
+
+    expect(connectionsListed()).toEqual(["command handlers", "query handlers"]);
+  });
+
+  test("lists every element around one the whole diagram leans on", async () => {
+    const { canvas } = await showDiagram("sample-0-flowchart");
+
+    await userEvent.click(elementIn(canvas, "PORTS"));
+
+    expect(connectionsListed()).toEqual([
+      "command handlers",
+      "query handlers",
+      "Postgres repositories",
+      "Outbox publisher",
+    ]);
+  });
+
+  test("names an entity and the entities it relates to", async () => {
+    const { canvas } = await showDiagram("fer-mentor-1-er");
+
+    await userEvent.click(elementIn(canvas, "entity-MENTOR-0"));
+
+    const card = openInspectorCard();
+    expect(within(card).getByText("MENTOR")).toBeVisible();
+    expect(within(card).getByText("Entity")).toBeVisible();
+    expect(connectionsListed()).toEqual(["THESIS", "COMMITTEE_MEMBERSHIP"]);
+  });
+
+  test("costs the diagram none of the canvas width", async () => {
+    const { canvas, drawing } = await showDiagram("sample-0-flowchart");
+    const before = viewOf(drawing);
+
+    await userEvent.click(elementIn(canvas, "HTTP"));
+
+    // The card is inside the canvas, over the drawing — not beside it.
+    expect(canvas.contains(openInspectorCard())).toBe(true);
+    expect(viewOf(drawing)).toEqual(before);
+  });
+});
+
+describe("walking the diagram from the card", () => {
+  test("clicking a listed connection moves the selection there", async () => {
+    const { canvas } = await showDiagram("sample-0-flowchart");
+    await userEvent.click(elementIn(canvas, "HTTP"));
+
+    await userEvent.click(connectionListed("command handlers"));
+
+    expect(elementIn(canvas, "CMD").getAttribute("data-diagram-selected")).toBe(
+      "true",
+    );
+    expect(litElements(canvas)).toEqual(["CMD", "HTTP", "LEDGER", "PORTS"]);
+  });
+
+  test("the card follows the selection it moved", async () => {
+    const { canvas } = await showDiagram("sample-0-flowchart");
+    await userEvent.click(elementIn(canvas, "HTTP"));
+
+    await userEvent.click(connectionListed("command handlers"));
+
+    const card = openInspectorCard();
+    expect(within(card).getByText("command handlers")).toBeVisible();
+    expect(connectionsListed()).toEqual([
+      "HTTP API (Fastify)",
+      "ports (interfaces)",
+      "Ledger aggregate",
+    ]);
+  });
+});
+
+describe("dismissing the card", () => {
+  test("closes it without clearing the selection", async () => {
+    const { canvas } = await showDiagram("sample-0-flowchart");
+    await userEvent.click(elementIn(canvas, "HTTP"));
+
+    await userEvent.click(
+      within(openInspectorCard()).getByRole("button", { name: "Dismiss" }),
+    );
+
+    expect(inspectorCard()).toBeNull();
+    expect(elementIn(canvas, "HTTP").getAttribute("data-diagram-selected")).toBe(
+      "true",
+    );
+    expect(litElements(canvas)).toEqual(["CMD", "HTTP", "QRY"]);
+  });
+
+  test("does not stop the next selection opening one", async () => {
+    const { canvas } = await showDiagram("sample-0-flowchart");
+    await userEvent.click(elementIn(canvas, "HTTP"));
+    await userEvent.click(
+      within(openInspectorCard()).getByRole("button", { name: "Dismiss" }),
+    );
+
+    await userEvent.click(elementIn(canvas, "CMD"));
+
+    expect(within(openInspectorCard()).getByText("command handlers")).toBeVisible();
+  });
+
+  test("the card closes on its own when the selection clears", async () => {
+    const { canvas, surface } = await showDiagram("sample-0-flowchart");
+    await userEvent.click(elementIn(canvas, "HTTP"));
+    expect(inspectorCard()).not.toBeNull();
+
+    await userEvent.keyboard("{Escape}");
+    expect(inspectorCard()).toBeNull();
+
+    await userEvent.click(elementIn(canvas, "HTTP"));
+    expect(inspectorCard()).not.toBeNull();
+
+    // Clicking the space around the drawing clears the selection too.
+    await userEvent.click(surface);
+    expect(inspectorCard()).toBeNull();
+  });
+});
+
+describe("a diagram label that names a file", () => {
+  test("is offered as a link to that file", async () => {
+    const { canvas } = await showExpress();
+
+    await userEvent.click(elementIn(canvas, "view"));
+
+    const link = within(openInspectorCard()).getByRole("link");
+    expect(link).toHaveAttribute(
+      "href",
+      "https://github.com/expressjs/express/blob/4bd6c1b/lib/view.js",
+    );
+    expect(link.textContent).toContain("lib/view.js");
+  });
+
+  test("is still offered when the label carries a second line", async () => {
+    const { canvas } = await showExpress();
+
+    // Drawn as "lib/express.js" over "createApplication()". The path is exact,
+    // so there is nothing being guessed at.
+    await userEvent.click(elementIn(canvas, "express"));
+
+    const card = openInspectorCard();
+    expect(within(card).getByRole("link")).toHaveAttribute(
+      "href",
+      "https://github.com/expressjs/express/blob/4bd6c1b/lib/express.js",
+    );
+    // The line that is the path is the link; what is left of the label is the
+    // name. The path is never printed twice.
+    expect(within(card).getByText("createApplication()")).toBeVisible();
+    expect(card.textContent?.match(/lib\/express\.js/g)).toHaveLength(1);
+  });
+
+  test("a bare filename is never matched against a path that ends with it", async () => {
+    // Resolving "express.js" against lib/express.js is an inference, not a
+    // reading of the drawing, so the card offers nothing.
+    const { canvas } = await showRendered(
+      fixture("express-0-flowchart").replace(
+        ">lib/express.js<br>createApplication()<",
+        ">express.js<",
+      ),
+      "How it fits together",
+      EXPRESS_REPO,
+    );
+
+    await userEvent.click(elementIn(canvas, "express"));
+
+    const card = openInspectorCard();
+    expect(within(card).getByText("express.js")).toBeVisible();
+    expect(within(card).queryByRole("link")).toBeNull();
+  });
+
+  test("a label that is prose offers no link at all", async () => {
+    const { canvas } = await showExpress();
+
+    await userEvent.click(elementIn(canvas, "router"));
+
+    const card = openInspectorCard();
+    expect(within(card).getByText("router (npm)")).toBeVisible();
+    expect(within(card).queryByRole("link")).toBeNull();
+  });
+
+  test("a path the repository does not have offers no link at all", async () => {
+    const { canvas } = await showExpress();
+
+    // lib/utils.js is drawn by this diagram but is not among the paths the
+    // analysis document names, so the card offers nothing rather than a guess.
+    await userEvent.click(elementIn(canvas, "utils"));
+
+    expect(within(openInspectorCard()).queryByRole("link")).toBeNull();
+  });
+
+  test("offers no link when there is no repository to link to", async () => {
+    const { canvas } = await showDiagram("express-0-flowchart");
+
+    await userEvent.click(elementIn(canvas, "view"));
+
+    expect(within(openInspectorCard()).queryByRole("link")).toBeNull();
   });
 });

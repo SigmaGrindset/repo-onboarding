@@ -78,6 +78,13 @@ a cluster, an edge, a participant, a message. Everything else in the drawing is
 decoration, which cannot be selected.
 _Avoid_: shape, box, item
 
+**Inspector card**:
+The small panel a selection opens in the corner of a diagram canvas, naming the selected
+addressable element, its kind, and the elements it connects to. It sits over the drawing
+rather than beside it, and dismissing it does not clear the selection it described.
+_Avoid_: panel, popover, tooltip, sidebar, rail. Its accessible name is "Selected
+element", which describes what it holds rather than what it is called.
+
 **Neighbourhood**:
 A selected addressable element together with everything exactly one connection away — the
 part that stays lit while the rest of the diagram dims. The same concept governs the

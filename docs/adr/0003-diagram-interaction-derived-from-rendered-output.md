@@ -32,17 +32,34 @@ because intuition reaches for both: nodes carry **no `data-id`**, and node ident
 
     flowchart / graph
       node     g.node    id="<renderId>-flowchart-<key>-<n>"     (NO data-id)
+               label     span.nodeLabel, lines broken by <br>
       edge     path      data-et="edge"
                          data-id="L_<from>_<to>_<n>"             (un-prefixed)
                          data-points="<base64 JSON polyline>"
     er
       entity   g.node    id="<renderId>-entity-<NAME>-<n>"       (NO data-id)
+               label     span.nodeLabel — the entity name; its attribute
+                         rows follow it inside the same group
       edge     path      data-et="edge"
                          data-id="id_<nodeIdA>_<nodeIdB>_<n>"    (endpoints verbatim)
     sequence
       actor    g         data-et="participant"   data-id="<actor name>"
+               label     the <text> drawn in the actor box
       message  line      data-et="message"       data-id="i<N>"
                          data-from="<actor>"     data-to="<actor>"
+
+Identity and label are separate readings of the same element, and both are needed: an
+identity is frequently an abbreviation the reader never sees, so a card that named one would
+be naming something that is not on the drawing. A label's line breaks are load-bearing —
+Mermaid writes a multi-line label as one element broken by `<br>`, which `textContent` runs
+together, and the lines are frequently distinct things, such as a file path above the function
+inside it.
+
+A label is the one reading that degrades rather than disappearing: an element with no
+readable label falls back to its identity, so a Mermaid change that moved only the label
+leaves a card naming `HTTP` where it used to name "HTTP API (Fastify)". That is deliberate,
+and it is the exception to the all-or-nothing rule below — an element with no name at all
+would be worse than one named as the drawing's own id names it.
 
 Two rules bind any code that reads it:
 

@@ -11,9 +11,16 @@ import {
 import {
   deriveDiagramModel,
   neighbourhoodOf,
+  type AddressableElement,
   type DiagramModel,
+  type ElementKind,
   type Neighbourhood,
 } from "@/lib/diagram-model";
+import {
+  fileLinkFor,
+  type RepoFileIndex,
+  type RepoFileLink,
+} from "@/lib/repo-files";
 import {
   ViewportButton,
   ViewportControls,
@@ -21,6 +28,7 @@ import {
   useInjectedSvg,
   useViewport,
 } from "@/components/viewport";
+import { FileChip } from "@/components/ui";
 
 /**
  * A diagram canvas: one architecture diagram as a live surface in the section it
@@ -40,6 +48,11 @@ import {
  * The canvas was handed its diagram as a string, so highlighting means marking up
  * the SVG it injected — unlike the dependency graph, which draws its own elements
  * and can style them where it draws them.
+ *
+ * A selection also opens a card in the corner of the canvas naming what was
+ * picked and what it connects to. The card sits over the drawing rather than
+ * beside it: the reading column is narrow and the content per element is thin,
+ * so a rail would spend a third of the column on four lines of text.
  */
 
 /** Scale limits. Wider than the graph's, because diagram text is small. */
@@ -54,10 +67,13 @@ const FIT_MARGIN = 24;
 export function DiagramCanvas({
   svg,
   title,
+  repoFiles,
   onExpand,
 }: {
   svg: string;
   title?: string;
+  /** Where a label that names a file can be resolved and linked. */
+  repoFiles?: RepoFileIndex;
   /** Opens the fullscreen view. */
   onExpand: () => void;
 }) {
@@ -73,6 +89,9 @@ export function DiagramCanvas({
   const [model, setModel] = useState<DiagramModel | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
+  // The card is dismissible without giving up the selection it describes, so a
+  // reader who wants to see the drawing under it keeps their highlight.
+  const [dismissed, setDismissed] = useState(false);
 
   const {
     ref: viewportRef,
@@ -127,6 +146,29 @@ export function DiagramCanvas({
     if (svgEl) paintHighlight(svgEl, lit, selectedId);
   }, [svg, lit, selectedId]);
 
+  // What the card says. Read off the selection alone, never the hover: a card
+  // that followed the pointer would flicker through the diagram on the way to it.
+  const selected = useMemo(
+    () => model?.elements.find((element) => element.id === selectedId) ?? null,
+    [model, selectedId],
+  );
+  const connectedTo = useMemo(() => {
+    if (!model || !selectedId) return [];
+    const near = neighbourhoodOf(model, selectedId).elements;
+    // In the order the diagram drew them, so the list does not reshuffle as the
+    // reader walks from one element to the next.
+    return model.elements.filter(
+      (element) => element.id !== selectedId && near.has(element.id),
+    );
+  }, [model, selectedId]);
+
+  // Every way of choosing an element goes through here, because choosing one
+  // always brings its card with it, however the reader left the last one.
+  const select = useCallback((id: string | null) => {
+    setSelectedId(id);
+    setDismissed(false);
+  }, []);
+
   // Escape clears, so a reader is never left with a diagram they cannot un-dim.
   // Bound to the window because nothing here is focusable yet, so Escape clears
   // every canvas on the page at once; the keyboard ticket gives the canvas focus
@@ -134,11 +176,11 @@ export function DiagramCanvas({
   useEffect(() => {
     if (!selectedId) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setSelectedId(null);
+      if (event.key === "Escape") select(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selectedId]);
+  }, [selectedId, select]);
 
   // How wide the canvas is. Only the width is watched: the height is computed
   // from it below, so watching both would be watching our own output.
@@ -223,7 +265,7 @@ export function DiagramCanvas({
           if (!selectable || dragged || touch) return;
           // The same element again, or the space around the drawing, clears.
           const id = elementIdAt(event.target);
-          setSelectedId((current) => (id && id !== current ? id : null));
+          select(id && id !== selectedId ? id : null);
         }}
       >
         <div
@@ -240,6 +282,22 @@ export function DiagramCanvas({
           dangerouslySetInnerHTML={html}
         />
       </div>
+
+      {selected && !dismissed ? (
+        <InspectorCard
+          element={selected}
+          connectedTo={connectedTo}
+          link={fileLinkFor(selected.label, repoFiles)}
+          onSelect={(id) => {
+            // Picking from the card is a deliberate act, and it ends whatever
+            // the pointer was previewing — which is otherwise still the element
+            // the reader clicked to open the card in the first place.
+            setHoverId(null);
+            select(id);
+          }}
+          onDismiss={() => setDismissed(true)}
+        />
+      ) : null}
 
       <div className="absolute right-2 top-2 flex flex-col gap-1">
         <ViewportControls
@@ -266,6 +324,116 @@ export function DiagramCanvas({
         {zoomModifierLabel()} + scroll to zoom · drag to pan
       </p>
     </div>
+  );
+}
+
+/** What the diagram's own language calls the thing the reader picked. */
+const KIND_NAME: Record<ElementKind, string> = {
+  node: "Node",
+  entity: "Entity",
+  participant: "Participant",
+};
+
+/**
+ * The card a selection opens: what was picked, and what it touches.
+ *
+ * It sits in the corner of the canvas, outside the panning surface — inside it,
+ * every click on the card would also read as a click on the space around the
+ * drawing, which clears the selection. It is a region rather than a dialog
+ * because it takes no focus and blocks nothing: the reader goes on panning,
+ * zooming and selecting with it open.
+ */
+function InspectorCard({
+  element,
+  connectedTo,
+  link,
+  onSelect,
+  onDismiss,
+}: {
+  element: AddressableElement;
+  connectedTo: AddressableElement[];
+  link: RepoFileLink | null;
+  onSelect: (id: string) => void;
+  onDismiss: () => void;
+}) {
+  // Where a line of the label is the file, that line *is* the link — never the
+  // same path printed once as text and again as a chip underneath it. What is
+  // left of the label is the name, which for a path drawn over a function is
+  // the function, and for a label that is only a path is nothing at all.
+  const name = link
+    ? element.label
+        .split("\n")
+        .filter((line) => line !== link.path)
+        .join("\n")
+    : element.label;
+
+  return (
+    <section
+      aria-label="Selected element"
+      className="absolute left-2 top-2 z-10 flex max-h-[calc(100%-1rem)] w-52 flex-col overflow-hidden rounded-md border border-border bg-surface/95 shadow-lg backdrop-blur-sm sm:w-60"
+    >
+      <div className="flex items-start gap-1 border-b border-border px-3 py-2">
+        <div className="min-w-0 flex-1">
+          <p className="mb-0.5 text-[0.65rem] font-medium uppercase tracking-wider text-faint">
+            {KIND_NAME[element.kind]}
+          </p>
+          {/* Offered only where a line of the label turned out to name a real
+              file. Most labels are prose, so most cards carry no link at all. */}
+          {link ? (
+            <div className={name ? "mb-1" : undefined}>
+              <FileChip path={link.path} href={link.href} />
+            </div>
+          ) : null}
+          {name ? (
+            <p className="whitespace-pre-line break-words text-[0.83rem] font-semibold leading-snug text-text">
+              {name}
+            </p>
+          ) : null}
+        </div>
+        <button
+          type="button"
+          aria-label="Dismiss"
+          onClick={onDismiss}
+          className="-mr-1 shrink-0 rounded p-1 text-faint transition hover:bg-surface-2 hover:text-text"
+        >
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden>
+            <path
+              d="M4 4l8 8M12 4l-8 8"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
+      </div>
+
+      <div className="min-h-0 overflow-y-auto px-3 py-2">
+        {connectedTo.length > 0 ? (
+          <>
+            <p className="mb-1 text-[0.65rem] font-medium uppercase tracking-wider text-faint">
+              Connects to
+            </p>
+            <ul aria-label="Connects to" className="space-y-0.5">
+              {connectedTo.map((neighbour) => (
+                <li key={neighbour.id}>
+                  <button
+                    type="button"
+                    onClick={() => onSelect(neighbour.id)}
+                    className="w-full whitespace-pre-line break-words rounded px-1.5 py-1 text-left text-[0.78rem] leading-snug text-muted transition hover:bg-accent-soft hover:text-accent"
+                  >
+                    {neighbour.label}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : (
+          <p className="text-[0.78rem] text-faint">
+            Nothing else in this diagram connects to it.
+          </p>
+        )}
+      </div>
+    </section>
   );
 }
 
