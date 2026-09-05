@@ -909,3 +909,390 @@ describe("a diagram label that names a file", () => {
     expect(within(openInspectorCard()).queryByRole("link")).toBeNull();
   });
 });
+
+/**
+ * A sequence diagram is read through a grammar of its own: its participants are
+ * columns, and its messages are the arrows stacked between them. Both are
+ * selectable, because on a drawing where thirteen arrows run between six
+ * columns, picking one arrow out is the reading a reader came for.
+ */
+const SEQUENCE = "sample-2-sequence";
+
+/** The arrow itself, which is what a reader points at to pick a message. */
+function messageIn(canvas: HTMLElement, id: string) {
+  const arrow = canvas.querySelector(
+    `[data-et="message"][data-diagram-connection="${id}"]`,
+  );
+  if (!arrow) throw new Error(`no message "${id}" in this diagram`);
+  return arrow;
+}
+
+/** The words the diagram wrote along it, which are part of the same message. */
+function messageWordsIn(canvas: HTMLElement, id: string) {
+  const text = canvas.querySelector(
+    `text[data-diagram-connection="${id}"]`,
+  );
+  if (!text) throw new Error(`message "${id}" has no words along it`);
+  return text;
+}
+
+/** What the canvas is showing as picked, rather than merely lit around it. */
+function selectedIn(canvas: HTMLElement) {
+  const ids = [...canvas.querySelectorAll('[data-diagram-selected="true"]')].map(
+    (el) =>
+      el.getAttribute("data-diagram-element") ??
+      el.getAttribute("data-diagram-connection"),
+  );
+  return [...new Set(ids)];
+}
+
+/** Every part of the drawing the canvas marked as one element. */
+function partsOf(canvas: HTMLElement, id: string) {
+  return [...canvas.querySelectorAll(`[data-diagram-element="${id}"]`)];
+}
+
+function litness(parts: Element[]) {
+  return parts.map((part) => part.getAttribute("data-diagram-lit"));
+}
+
+describe("selecting a participant in a sequence diagram", () => {
+  test("lights every message it sends or receives, and who is at the far end", async () => {
+    const { canvas } = await showDiagram(SEQUENCE);
+
+    // The client sends the request and is sent the response, and both run to
+    // the same participant — so it is lit with the API and nothing else.
+    await userEvent.click(elementIn(canvas, "Client"));
+
+    expect(litElements(canvas)).toEqual(["API", "Client"]);
+    expect(dimmedElements(canvas)).toEqual(["D", "H", "OB", "Repo"]);
+    expect(litConnections(canvas)).toEqual(["i0", "i9"]);
+  });
+
+  test("lights all of them for a participant in the middle of the exchange", async () => {
+    const { canvas } = await showDiagram(SEQUENCE);
+
+    await userEvent.click(elementIn(canvas, "H"));
+
+    expect(litElements(canvas)).toEqual(["API", "D", "H", "Repo"]);
+    expect(dimmedElements(canvas)).toEqual(["Client", "OB"]);
+    // Eight of the diagram's thirteen messages run through the handler.
+    expect(connections(canvas)).toHaveLength(13);
+    expect(litConnections(canvas)).toHaveLength(8);
+  });
+
+  test("lights the message a participant sends to itself", async () => {
+    const { canvas } = await showDiagram(SEQUENCE);
+
+    await userEvent.click(elementIn(canvas, "OB"));
+
+    // The outbox worker polls and marks in the repository, and publishes to
+    // itself; the self-message lights without a second participant to add.
+    expect(litElements(canvas)).toEqual(["OB", "Repo"]);
+    expect(litConnections(canvas)).toEqual(["i10", "i11", "i12"]);
+  });
+
+  test("lights both drawings of it, at the head and foot of its lifeline", async () => {
+    const { canvas } = await showDiagram(SEQUENCE);
+
+    // Mermaid draws every participant twice, once at the head of its lifeline
+    // and once mirrored at the foot, and stamps identity only on the first.
+    // Both are the participant, so a selection has to reach both — including
+    // the stick-figure actor, which Mermaid gives no id of any kind.
+    expect(partsOf(canvas, "OB")).toHaveLength(2);
+    expect(partsOf(canvas, "Client")).toHaveLength(2);
+
+    await userEvent.click(elementIn(canvas, "OB"));
+
+    expect(litness(partsOf(canvas, "OB"))).toEqual(["true", "true"]);
+    expect(litness(partsOf(canvas, "Client"))).toEqual(["false", "false"]);
+  });
+
+  test("names the participant and what it exchanges messages with", async () => {
+    const { canvas } = await showDiagram(SEQUENCE);
+
+    await userEvent.click(elementIn(canvas, "Client"));
+
+    const card = openInspectorCard();
+    expect(within(card).getByText("Client")).toBeVisible();
+    expect(within(card).getByText("Participant")).toBeVisible();
+    expect(connectionsListed()).toEqual(["Fastify handler"]);
+  });
+});
+
+describe("selecting a message in a sequence diagram", () => {
+  test("lights the two participants it runs between, and nothing else", async () => {
+    const { canvas } = await showDiagram(SEQUENCE);
+
+    // The handler calls the domain, and that arrow runs between those two.
+    await userEvent.click(messageIn(canvas, "i4"));
+
+    expect(litElements(canvas)).toEqual(["D", "H"]);
+    expect(dimmedElements(canvas)).toEqual(["API", "Client", "OB", "Repo"]);
+    expect(litConnections(canvas)).toEqual(["i4"]);
+    expect(selectedIn(canvas)).toEqual(["i4"]);
+  });
+
+  test("a message a participant sends to itself lights that one participant", async () => {
+    const { canvas } = await showDiagram(SEQUENCE);
+
+    await userEvent.click(messageIn(canvas, "i11"));
+
+    expect(litElements(canvas)).toEqual(["OB"]);
+    expect(dimmedElements(canvas)).toEqual(["API", "Client", "D", "H", "Repo"]);
+    expect(litConnections(canvas)).toEqual(["i11"]);
+  });
+
+  test("the words written along a message pick it too", async () => {
+    const { canvas } = await showDiagram(SEQUENCE);
+
+    // An arrow is two pixels of stroke; the words beside it are the target a
+    // reader actually has, and they belong to the same message.
+    await userEvent.click(messageWordsIn(canvas, "i4"));
+
+    expect(selectedIn(canvas)).toEqual(["i4"]);
+    expect(litElements(canvas)).toEqual(["D", "H"]);
+  });
+
+  test("an arrow carries a wider invisible twin that picks the same message", async () => {
+    const { canvas } = await showDiagram(SEQUENCE);
+
+    // Two pixels of stroke is not something a reader can hit, so each arrow is
+    // shadowed by an unpainted copy of itself with a stroke wide enough to.
+    const twin = messageIn(canvas, "i11").nextElementSibling as Element;
+    expect(twin.hasAttribute("data-diagram-hit")).toBe(true);
+
+    await userEvent.click(twin);
+
+    expect(selectedIn(canvas)).toEqual(["i11"]);
+    expect(litElements(canvas)).toEqual(["OB"]);
+    // Being pointed at is all it does: it is never lit, dimmed or drawn, and it
+    // says so where Mermaid's own id-scoped rules cannot outrank it.
+    expect(twin.hasAttribute("data-diagram-lit")).toBe(false);
+    expect(twin.getAttribute("style")).toContain(
+      "stroke: transparent !important",
+    );
+  });
+
+  test("names the message and the participants it runs between", async () => {
+    const { canvas } = await showDiagram(SEQUENCE);
+
+    await userEvent.click(messageIn(canvas, "i0"));
+
+    const card = openInspectorCard();
+    expect(
+      within(card).getByText("POST /transfers {from,to,amount}"),
+    ).toBeVisible();
+    expect(within(card).getByText("Message")).toBeVisible();
+    // Sender first, then receiver — the order the message is read in.
+    expect(connectionsListed()).toEqual(["Client", "Fastify handler"]);
+  });
+
+  test("names a self-message's one participant once, not twice", async () => {
+    const { canvas } = await showDiagram(SEQUENCE);
+
+    await userEvent.click(messageIn(canvas, "i11"));
+
+    const card = openInspectorCard();
+    expect(within(card).getByText("publish settlement.v1")).toBeVisible();
+    expect(connectionsListed()).toEqual(["Outbox worker"]);
+  });
+
+  test("walking from the card moves the selection onto a participant", async () => {
+    const { canvas } = await showDiagram(SEQUENCE);
+    await userEvent.click(messageIn(canvas, "i0"));
+
+    await userEvent.click(connectionListed("Fastify handler"));
+
+    expect(selectedIn(canvas)).toEqual(["API"]);
+    expect(litElements(canvas)).toEqual(["API", "Client", "H"]);
+  });
+});
+
+describe("a sequence diagram clears and survives as the other families do", () => {
+  test("hovering a message previews it without committing a selection", async () => {
+    const { canvas } = await showDiagram(SEQUENCE);
+    const message = messageIn(canvas, "i4");
+
+    await userEvent.hover(message);
+    expect(litElements(canvas)).toEqual(["D", "H"]);
+    expect(selectedIn(canvas)).toEqual([]);
+    expect(inspectorCard()).toBeNull();
+
+    await userEvent.unhover(message);
+    expect(litElements(canvas)).toEqual([]);
+    expect(dimmedElements(canvas)).toEqual([]);
+  });
+
+  test("the same message again, the space around the drawing, or Escape clears", async () => {
+    const { canvas, surface } = await showDiagram(SEQUENCE);
+    const message = messageIn(canvas, "i4");
+
+    await userEvent.click(message);
+    await userEvent.click(message);
+    await userEvent.unhover(message);
+    expect(litElements(canvas)).toEqual([]);
+
+    await userEvent.click(elementIn(canvas, "OB"));
+    await userEvent.click(surface);
+    expect(litElements(canvas)).toEqual([]);
+
+    await userEvent.click(elementIn(canvas, "OB"));
+    await userEvent.keyboard("{Escape}");
+    expect(selectedIn(canvas)).toEqual([]);
+    expect(inspectorCard()).toBeNull();
+  });
+
+  test("a theme change keeps the selected message, re-applied to the new drawing", async () => {
+    const { canvas, drawing } = await showDiagram(SEQUENCE);
+    const lightRender = drawing.querySelector("svg")?.id;
+
+    await userEvent.click(messageIn(canvas, "i4"));
+
+    mermaidMocks.render.mockResolvedValue({ svg: fixture(`${SEQUENCE}-dark`) });
+    await act(async () => {
+      document.documentElement.dataset.theme = "dark";
+    });
+    await waitFor(() =>
+      expect(drawing.querySelector("svg")?.id).not.toBe(lightRender),
+    );
+
+    expect(selectedIn(canvas)).toEqual(["i4"]);
+    expect(litElements(canvas)).toEqual(["D", "H"]);
+  });
+});
+
+describe("what a sequence diagram draws besides participants and messages", () => {
+  // The express diagram draws a note across two of its participants.
+  const NOTED_SEQUENCE = "express-1-sequence";
+
+  test("lifelines and notes are decoration, and dim with everything else", async () => {
+    const { canvas } = await showDiagram(NOTED_SEQUENCE);
+
+    const decoration = canvas.querySelectorAll("[data-diagram-decoration]");
+    expect(canvas.querySelectorAll('[data-et="life-line"]')).toHaveLength(6);
+    expect(canvas.querySelectorAll('[data-et="note"]')).toHaveLength(1);
+    expect(dimmed(decoration)).toBe(0);
+
+    await userEvent.click(elementIn(canvas, "Client"));
+
+    expect(dimmed(decoration)).toBe(decoration.length);
+  });
+
+  test("clicking a note selects nothing", async () => {
+    const { canvas } = await showDiagram(NOTED_SEQUENCE);
+    const note = canvas.querySelector('[data-et="note"]') as Element;
+    const lifeline = canvas.querySelector('[data-et="life-line"]') as Element;
+
+    expect(note.hasAttribute("data-diagram-selectable")).toBe(false);
+    expect(lifeline.hasAttribute("data-diagram-selectable")).toBe(false);
+
+    await userEvent.click(note);
+
+    expect(litElements(canvas)).toEqual([]);
+    expect(inspectorCard()).toBeNull();
+  });
+
+  test("a message naming a participant the diagram does not have is inert", async () => {
+    // Mermaid always stamps endpoints it drew, so this is the one thing a real
+    // fixture cannot show: the request re-pointed at a participant nobody drew.
+    const { canvas } = await showRendered(
+      fixture(SEQUENCE).replace(
+        'data-id="i0" data-from="Client" data-to="API"',
+        'data-id="i0" data-from="Client" data-to="GHOST"',
+      ),
+    );
+
+    await userEvent.click(elementIn(canvas, "Client"));
+
+    // Only the response is left running between the client and the API.
+    expect(connections(canvas)).toHaveLength(12);
+    expect(litConnections(canvas)).toEqual(["i9"]);
+    expect(litElements(canvas)).toEqual(["API", "Client"]);
+  });
+});
+
+/**
+ * Every fixture whose diagram the canvas offers selection on. What is not marked
+ * as element, connection or decoration keeps its full strength while everything
+ * else dims, so the marks have to cover the whole drawing — and a family's
+ * grammar can add parts no diagram in this repository happens to draw yet.
+ */
+const SELECTABLE_FIXTURES = fixtureNames().filter(
+  (name) => name !== UNMODELLED_DIAGRAM,
+);
+
+/** The tags that put ink on the page. */
+const PAINTED = "rect, circle, ellipse, line, polyline, polygon, path, text";
+
+/**
+ * An arrowhead, which is painted only where the line it belongs to is drawn and
+ * so already carries that line's dimming. Walked by tag, because `closest` does
+ * not answer for an SVG tag name in jsdom.
+ */
+function insideMarker(part: Element) {
+  for (let node: Element | null = part; node; node = node.parentElement) {
+    const tag = node.tagName.toLowerCase();
+    if (tag === "defs" || tag === "marker") return true;
+  }
+  return false;
+}
+
+function unmarkedPaint(canvas: HTMLElement) {
+  // The drawing only: the canvas's own zoom controls are icons of ours.
+  const drawing = canvas.querySelector(".diagram-canvas") as HTMLElement;
+  return [...drawing.querySelectorAll(PAINTED)]
+    .filter((part) => !insideMarker(part))
+    .filter(
+      (part) =>
+        !part.closest(
+          "[data-diagram-element], [data-diagram-connection], [data-diagram-decoration]",
+        ),
+    )
+    .map((part) => `${part.tagName}.${part.getAttribute("class") ?? ""}`);
+}
+
+describe("what a selection dims", () => {
+  test.each(SELECTABLE_FIXTURES)(
+    "%s has nothing left bright when something is lit",
+    async (name) => {
+      const { canvas } = await showDiagram(name);
+
+      expect([...new Set(unmarkedPaint(canvas))]).toEqual([]);
+    },
+  );
+
+  test("a loop, an alternative, an activation and a participant box all dim", async () => {
+    // The control structures of the sequence grammar, which no analysis document
+    // in this repository draws yet — so this fixture is rendered for them.
+    const { canvas } = await showDiagram("sequence-control-structures");
+
+    expect(canvas.querySelectorAll('[data-et="control-structure"]')).toHaveLength(2);
+    expect(canvas.querySelectorAll("rect.activation0")).toHaveLength(1);
+    expect(canvas.querySelectorAll("rect.rect")).toHaveLength(1);
+
+    const decoration = canvas.querySelectorAll("[data-diagram-decoration]");
+    expect(dimmed(decoration)).toBe(0);
+
+    await userEvent.click(elementIn(canvas, "DB"));
+
+    expect(litElements(canvas)).toEqual(["API", "DB"]);
+    expect(dimmed(decoration)).toBe(decoration.length);
+  });
+
+  test("an unreadable message dims rather than staying the brightest arrow", async () => {
+    const { canvas } = await showRendered(
+      fixture(SEQUENCE).replace(
+        'data-id="i0" data-from="Client" data-to="API"',
+        'data-id="i0" data-from="Client" data-to="GHOST"',
+      ),
+    );
+
+    await userEvent.click(elementIn(canvas, "Client"));
+
+    // The arrow the canvas could not read is left out of every neighbourhood,
+    // so it has to recede with the rest and not hang over the drawing.
+    const orphan = canvas.querySelector('[data-et="message"][data-id="i0"]');
+    expect(orphan?.hasAttribute("data-diagram-connection")).toBe(false);
+    expect(orphan?.getAttribute("data-diagram-lit")).toBe("false");
+  });
+});

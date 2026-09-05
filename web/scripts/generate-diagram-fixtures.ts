@@ -59,12 +59,45 @@ const UNMODELLED_FAMILY: Diagram = {
 };
 
 /**
- * The diagram whose dark render is also captured. A theme change re-renders a
- * diagram into different SVG at the same size, and the canvas must not treat
- * that as a new diagram and refit — which needs two real renders of one diagram
- * to test, not one fixture handed over twice.
+ * A sequence diagram drawn with the control structures none of this
+ * repository's analysis documents happen to use yet: a participant box, an
+ * activation bar, a loop, an alternative and a note. They carry no identity, so
+ * the canvas has to recognise them as decoration and dim them with everything
+ * else — and only a real render says what Mermaid makes them out of.
  */
-const THEME_CHANGE_DIAGRAM = "fer-mentor-1-er";
+const SEQUENCE_CONTROL_STRUCTURES: Diagram = {
+  name: "sequence-control-structures",
+  type: "sequence",
+  source: `sequenceDiagram
+  box Web
+    participant UI as Browser
+    participant API as API server
+  end
+  participant DB as Database
+  UI->>API: GET /orders
+  activate API
+  Note over UI,API: a session cookie is required
+  loop every page
+    API->>DB: SELECT ...
+    DB-->>API: rows
+  end
+  alt nothing found
+    API-->>UI: 404
+  else some found
+    API-->>UI: 200 OK
+  end
+  deactivate API`,
+};
+
+/**
+ * The diagrams whose dark render is also captured. A theme change re-renders a
+ * diagram into different SVG at the same size, and the canvas must not treat
+ * that as a new diagram and refit, nor lose the reader's selection — which needs
+ * two real renders of one diagram to test, not one fixture handed over twice.
+ * One diagram per family that carries a selection, since each is re-derived by a
+ * reader of its own.
+ */
+const THEME_CHANGE_DIAGRAMS = ["fer-mentor-1-er", "sample-2-sequence"];
 
 function collectDiagrams(): Diagram[] {
   const diagrams: Diagram[] = [];
@@ -85,17 +118,15 @@ function collectDiagrams(): Diagram[] {
       });
     });
   }
-  const themeChange = diagrams.find(({ name }) => name === THEME_CHANGE_DIAGRAM);
-  if (!themeChange) {
-    throw new Error(`No diagram named ${THEME_CHANGE_DIAGRAM} to render in dark`);
+  for (const name of THEME_CHANGE_DIAGRAMS) {
+    const themeChange = diagrams.find((diagram) => diagram.name === name);
+    if (!themeChange) {
+      throw new Error(`No diagram named ${name} to render in dark`);
+    }
+    diagrams.push({ ...themeChange, name: `${name}-dark`, theme: "dark" });
   }
-  diagrams.push({
-    ...themeChange,
-    name: `${themeChange.name}-dark`,
-    theme: "dark",
-  });
 
-  diagrams.push(UNMODELLED_FAMILY);
+  diagrams.push(SEQUENCE_CONTROL_STRUCTURES, UNMODELLED_FAMILY);
   return diagrams;
 }
 
@@ -160,7 +191,8 @@ async function main() {
       "Generated — never edit by hand. Regenerate with `npm run fixtures:diagrams`.",
       "",
       `Rendered by Mermaid ${MERMAID_VERSION} from every diagram in \`data/*/analysis.json\`,`,
-      "plus one dark render and one diagram family the canvas cannot model.",
+      "plus a dark render per selectable family, one sequence diagram drawn with",
+      "control structures, and one family the canvas cannot model.",
       "",
       ...rendered.map(({ name }) => `- \`${name}.svg\``),
       ...(failed.length

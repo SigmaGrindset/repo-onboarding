@@ -74,13 +74,15 @@ here edits
 
 **Addressable element**:
 A part of a rendered diagram that carries identity and can therefore be selected: a node,
-a cluster, an edge, a participant, a message. Everything else in the drawing is
-decoration, which cannot be selected.
+an entity, a participant, and — in a sequence diagram, whose arrows are its content — a
+message. Everything else in the drawing is decoration, which cannot be selected: subgraph
+frames, lifelines, notes, and any connection whose ends could not be read.
 _Avoid_: shape, box, item
 
 **Inspector card**:
 The small panel a selection opens in the corner of a diagram canvas, naming the selected
-addressable element, its kind, and the elements it connects to. It sits over the drawing
+addressable element, its kind, and the elements it connects to — which for a selected
+message are the two participants it runs between, sender first. It sits over the drawing
 rather than beside it, and dismissing it does not clear the selection it described.
 _Avoid_: panel, popover, tooltip, sidebar, rail. Its accessible name is "Selected
 element", which describes what it holds rather than what it is called.

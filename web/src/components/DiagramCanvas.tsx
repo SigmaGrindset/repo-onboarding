@@ -10,8 +10,10 @@ import {
 } from "react";
 import {
   deriveDiagramModel,
+  markDiagram,
   neighbourhoodOf,
   type AddressableElement,
+  type ConnectionKind,
   type DiagramModel,
   type ElementKind,
   type Neighbourhood,
@@ -45,6 +47,8 @@ import { FileChip } from "@/components/ui";
  * looks exactly as it did before, and only a large one arrives zoomed out.
  *
  * Selecting an element lights its neighbourhood and dims the rest of the drawing.
+ * In a sequence diagram a message is selectable in its own right, because the
+ * arrows are that diagram's content rather than decoration between its boxes.
  * The canvas was handed its diagram as a string, so highlighting means marking up
  * the SVG it injected — unlike the dependency graph, which draws its own elements
  * and can style them where it draws them.
@@ -122,11 +126,13 @@ export function DiagramCanvas({
 
     const derived = deriveDiagramModel(svgEl);
     setModel(derived);
-    if (offersSelection(derived)) markIdentity(svgEl, derived);
+    if (offersSelection(derived)) markDiagram(svgEl, derived);
     // A theme change re-renders the same diagram, so the reader keeps their
-    // selection; a different diagram would not hold the element they picked.
+    // selection; a different diagram would not hold the element they picked, and
+    // a re-render the canvas can no longer offer selection on could not show it
+    // — nor let the reader clear it by clicking the drawing.
     setSelectedId((current) =>
-      current && derived?.elements.some((el) => el.id === current)
+      current && offersSelection(derived) && holds(derived, current)
         ? current
         : null,
     );
@@ -149,11 +155,23 @@ export function DiagramCanvas({
   // What the card says. Read off the selection alone, never the hover: a card
   // that followed the pointer would flicker through the diagram on the way to it.
   const selected = useMemo(
-    () => model?.elements.find((element) => element.id === selectedId) ?? null,
+    () => (model && selectedId ? subjectOf(model, selectedId) : null),
     [model, selectedId],
   );
   const connectedTo = useMemo(() => {
     if (!model || !selectedId) return [];
+    const message = model.connections.find(
+      (connection) => connection.id === selectedId,
+    );
+    // A message is read from its sender to its receiver, so its ends are listed
+    // in that order rather than the order the participants were drawn in — and a
+    // participant messaging itself is one end, not two.
+    if (message) {
+      const byId = new Map(model.elements.map((el) => [el.id, el]));
+      return [...new Set([message.from, message.to])]
+        .map((id) => byId.get(id))
+        .filter((el): el is AddressableElement => el !== undefined);
+    }
     const near = neighbourhoodOf(model, selectedId).elements;
     // In the order the diagram drew them, so the list does not reshuffle as the
     // reader walks from one element to the next.
@@ -254,7 +272,7 @@ export function DiagramCanvas({
         onPointerUp={finishPan}
         onPointerOver={(event) => {
           if (event.pointerType === "touch" || !selectable || isPanning) return;
-          setHoverId(elementIdAt(event.target));
+          setHoverId(selectableIdAt(event.target));
         }}
         onPointerLeave={() => {
           finishPan();
@@ -264,7 +282,7 @@ export function DiagramCanvas({
           const { dragged, touch } = pressRef.current;
           if (!selectable || dragged || touch) return;
           // The same element again, or the space around the drawing, clears.
-          const id = elementIdAt(event.target);
+          const id = selectableIdAt(event.target);
           select(id && id !== selectedId ? id : null);
         }}
       >
@@ -285,7 +303,7 @@ export function DiagramCanvas({
 
       {selected && !dismissed ? (
         <InspectorCard
-          element={selected}
+          subject={selected}
           connectedTo={connectedTo}
           link={fileLinkFor(selected.label, repoFiles)}
           onSelect={(id) => {
@@ -328,11 +346,33 @@ export function DiagramCanvas({
 }
 
 /** What the diagram's own language calls the thing the reader picked. */
-const KIND_NAME: Record<ElementKind, string> = {
+const KIND_NAME: Record<ElementKind | ConnectionKind, string> = {
   node: "Node",
   entity: "Entity",
   participant: "Participant",
+  message: "Message",
+  edge: "Connection",
 };
+
+/** What the card is about: an element of the diagram, or a connection in it. */
+interface CardSubject {
+  label: string;
+  kind: ElementKind | ConnectionKind;
+}
+
+/** Whichever of the two the reader picked, since either can carry a selection. */
+function subjectOf(model: DiagramModel, id: string): CardSubject | null {
+  return (
+    model.elements.find((element) => element.id === id) ??
+    model.connections.find((connection) => connection.id === id) ??
+    null
+  );
+}
+
+/** Whether this diagram still holds what the reader had picked. */
+function holds(model: DiagramModel, id: string): boolean {
+  return subjectOf(model, id) !== null;
+}
 
 /**
  * The card a selection opens: what was picked, and what it touches.
@@ -344,13 +384,13 @@ const KIND_NAME: Record<ElementKind, string> = {
  * zooming and selecting with it open.
  */
 function InspectorCard({
-  element,
+  subject,
   connectedTo,
   link,
   onSelect,
   onDismiss,
 }: {
-  element: AddressableElement;
+  subject: CardSubject;
   connectedTo: AddressableElement[];
   link: RepoFileLink | null;
   onSelect: (id: string) => void;
@@ -361,11 +401,11 @@ function InspectorCard({
   // left of the label is the name, which for a path drawn over a function is
   // the function, and for a label that is only a path is nothing at all.
   const name = link
-    ? element.label
+    ? subject.label
         .split("\n")
         .filter((line) => line !== link.path)
         .join("\n")
-    : element.label;
+    : subject.label;
 
   return (
     <section
@@ -375,7 +415,7 @@ function InspectorCard({
       <div className="flex items-start gap-1 border-b border-border px-3 py-2">
         <div className="min-w-0 flex-1">
           <p className="mb-0.5 text-[0.65rem] font-medium uppercase tracking-wider text-faint">
-            {KIND_NAME[element.kind]}
+            {KIND_NAME[subject.kind]}
           </p>
           {/* Offered only where a line of the label turned out to name a real
               file. Most labels are prose, so most cards carry no link at all. */}
@@ -440,59 +480,30 @@ function InspectorCard({
 /**
  * Whether this diagram gives a reader anything to select. A model with no
  * connections has no neighbourhood to light, so its canvas keeps no selection
- * affordances at all rather than half of them — which today means every sequence
- * diagram, whose connections arrive with that family's own reader.
+ * affordances at all rather than half of them — which would be a flowchart after
+ * a Mermaid upgrade that moved only the edge identity. That degradation matches
+ * the probe's: total and silent, never a half-interactive state.
  */
 function offersSelection(model: DiagramModel | null): model is DiagramModel {
   return (model?.connections.length ?? 0) > 0;
 }
 
 /**
- * Which addressable element the reader is pointing at, if any. A diagram's parts
- * nest — a label inside a foreign object inside the node's own group — so the
- * answer is the nearest marked ancestor of whatever the pointer landed on.
+ * What the reader is pointing at, if anything: an element, or in a family whose
+ * connections are selectable, a connection. A diagram's parts nest — a label
+ * inside a foreign object inside the node's own group — so the answer is the
+ * nearest marked ancestor of whatever the pointer landed on.
  */
-function elementIdAt(target: EventTarget | null): string | null {
+function selectableIdAt(target: EventTarget | null): string | null {
   const marked =
-    target instanceof Element ? target.closest("[data-diagram-element]") : null;
-  return marked?.getAttribute("data-diagram-element") ?? null;
-}
-
-/**
- * Everything the drawing contains that carries no identity: subgraph frames and
- * their titles, and any edge whose endpoints would not resolve. Decoration is
- * never part of a neighbourhood, so it dims whenever anything is lit — an edge
- * the canvas admits it cannot read must not end up the brightest thing on a
- * dimmed diagram. Selected after identity is marked, so `:not` can see it.
- */
-const DECORATION = [
-  "g.cluster",
-  "g.cluster-label",
-  'path[data-et="edge"]:not([data-diagram-connection])',
-  "g.edgeLabels g.label:not([data-diagram-connection])",
-].join(", ");
-
-/**
- * Marks the drawing with the identities the model derived, so that pointing,
- * highlighting and styling all work off our own attributes instead of
- * re-deriving Mermaid's on every event. Re-applied whenever the diagram is
- * re-rendered, since that replaces the drawing wholesale.
- */
-function markIdentity(svg: SVGSVGElement, model: DiagramModel) {
-  for (const element of model.elements) {
-    svg
-      .querySelector(`[id="${element.domId}"]`)
-      ?.setAttribute("data-diagram-element", element.id);
-  }
-  for (const connection of model.connections) {
-    // The connection's path and, where the diagram drew one, its label.
-    for (const part of svg.querySelectorAll(`[data-id="${connection.id}"]`)) {
-      part.setAttribute("data-diagram-connection", connection.id);
-    }
-  }
-  for (const part of svg.querySelectorAll(DECORATION)) {
-    part.setAttribute("data-diagram-decoration", "");
-  }
+    target instanceof Element
+      ? target.closest("[data-diagram-selectable]")
+      : null;
+  if (!marked) return null;
+  return (
+    marked.getAttribute("data-diagram-element") ??
+    marked.getAttribute("data-diagram-connection")
+  );
 }
 
 /**
@@ -510,8 +521,12 @@ function paintHighlight(
     setOrRemove(node, "data-diagram-selected", id === selectedId ? "true" : null);
   }
   for (const edge of svg.querySelectorAll("[data-diagram-connection]")) {
+    // A message arrow's invisible twin is there to be pointed at, not seen.
+    if (edge.hasAttribute("data-diagram-hit")) continue;
     const id = edge.getAttribute("data-diagram-connection");
     setOrRemove(edge, "data-diagram-lit", inside(lit?.connections, id));
+    // A message can be the selection itself, not only part of one.
+    setOrRemove(edge, "data-diagram-selected", id === selectedId ? "true" : null);
   }
   for (const part of svg.querySelectorAll("[data-diagram-decoration]")) {
     setOrRemove(part, "data-diagram-lit", lit ? "false" : null);

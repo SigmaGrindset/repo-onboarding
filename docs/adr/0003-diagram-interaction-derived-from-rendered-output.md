@@ -45,8 +45,29 @@ because intuition reaches for both: nodes carry **no `data-id`**, and node ident
     sequence
       actor    g         data-et="participant"   data-id="<actor name>"
                label     the <text> drawn in the actor box
+               mirror    .actor-bottom  name="<actor name>"
+                         the same actor drawn again at the foot of its
+                         lifeline, carrying the name and no identity; on a
+                         box actor the name is on the box, inside the group
+                         that also holds its label, and a stick-figure actor
+                         *is* that group
       message  line      data-et="message"       data-id="i<N>"
                          data-from="<actor>"     data-to="<actor>"
+                         (a self-message is drawn as a path, not a line)
+               label     text.messageText, drawn immediately BEFORE its
+                         arrow and carrying no identity of its own
+      lifeline line      data-et="life-line"     — decoration
+      note     g         data-et="note"          data-id="i<N>" — decoration,
+                         and numbered out of the same counter as the
+                         messages, so `data-id` alone does not say which is
+                         which
+      loop/alt g         data-et="control-structure"  data-id="i<N>"
+                         — decoration; holds the frame, label box and
+                         section titles
+      activation
+               rect      class="activation<depth>"  — decoration
+      box      rect.rect + text.text  — decoration; the frame and title
+                         Mermaid draws around a `box` of participants
 
 Identity and label are separate readings of the same element, and both are needed: an
 identity is frequently an abbreviation the reader never sees, so a card that named one would
@@ -59,7 +80,14 @@ A label is the one reading that degrades rather than disappearing: an element wi
 readable label falls back to its identity, so a Mermaid change that moved only the label
 leaves a card naming `HTTP` where it used to name "HTTP API (Fastify)". That is deliberate,
 and it is the exception to the all-or-nothing rule below — an element with no name at all
-would be worse than one named as the drawing's own id names it.
+would be worse than one named as the drawing's own id names it. A *connection* falls back to
+nothing, because its identity is a layout counter rather than anyone's word for it: a card
+naming `i7` would be naming something that is not on the drawing at all.
+
+Only a sequence diagram's connections can be selected. A message is the content of that
+diagram — thirteen arrows stacked between six participants, where picking one out is the
+reading a reader came for — where a flowchart's edge is the relation between two boxes, which
+a reader asks about by pointing at either box.
 
 Two rules bind any code that reads it:
 
@@ -72,12 +100,31 @@ Two rules bind any code that reads it:
   survives; one that resolves to none, or to two, is left inert rather than attached to the
   wrong element.
 
-Both rules have code. `deriveDiagramModel` reads a diagram's elements and, for flowchart and
-ER, the connections between them — which is what a neighbourhood is made of, and where the
-second rule binds. A sequence diagram's connections are not read yet; when they are, they will
-need no resolution at all, because a message carries its two endpoints explicitly.
+Both rules have code. `deriveDiagramModel` reads a diagram's elements and the connections
+between them — which is what a neighbourhood is made of. The second rule binds for flowchart
+and ER only: a message carries its two endpoints explicitly, so a sequence diagram needs no
+resolution at all. It is still held to the same standard, and a message naming a participant
+the diagram does not have is left inert rather than attached to nothing.
+
+Reading the drawing and marking it are the same knowledge, so they live in the same module.
+`markDiagram` writes our own attributes onto what `deriveDiagramModel` read, and every
+selector that knows what Mermaid stamps is in `web/src/lib/diagram-model.ts` — a version that
+changes the drawing has one file to answer to. Marking also *adds* to the drawing in one
+place: a message arrow is two pixels of stroke, so each gets an invisible twin with a stroke
+wide enough to point at. Mermaid styles its own drawing through id-scoped rules that outrank
+any presentation attribute, so the twin states its width inline and `!important` — without
+that it came out exactly as thin as the arrow it was there to make hittable.
 
 ## Consequences
+
+**Decoration has to be named exhaustively, and it is the one list that fails loudly.**
+Everything else degrades by going quiet: identity that moves leaves the canvas with no
+selection at all. A part of the drawing that is *not* in the decoration list does the
+opposite — it stays at full strength while everything around it dims, which is the loudest
+possible way to be wrong. The sequence list therefore names parts of the grammar no analysis
+document in this repository draws yet: `loop` and `alt` frames, activation bars and
+participant boxes. `sequence-control-structures.svg` is rendered for them alone, and a test
+asserts that nothing a fixture paints is left unmarked.
 
 **A Mermaid upgrade can break this, and can break it silently.** If the identity moves, the
 canvas derives nothing and every architecture diagram quietly becomes what it was before —

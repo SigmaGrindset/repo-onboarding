@@ -468,7 +468,7 @@ p {
    selected element's neighbourhood keeps its colour while everything else dims,
    which is how a reader sees which lines belong to the box they care about.
    !important beats Mermaid's own id-scoped rules, which outrank a class here. */
-.diagram-canvas [data-diagram-element] {
+.diagram-canvas [data-diagram-selectable] {
   cursor: pointer;
 }
 .diagram-canvas [data-diagram-lit] {
@@ -480,9 +480,16 @@ p {
 .diagram-canvas [data-diagram-selected="true"] {
   filter: drop-shadow(0 0 3px var(--accent));
 }
-.diagram-canvas path[data-diagram-connection][data-diagram-lit="true"] {
+/* A flowchart edge is drawn as a path; a sequence message as a line, or as a
+   path where a participant messages itself. The words along either are marked
+   with the same identity and are text, so they take the colour and not the
+   stroke. */
+.diagram-canvas :is(path, line)[data-diagram-connection][data-diagram-lit="true"] {
   stroke: var(--accent) !important;
   stroke-width: 2 !important;
+}
+.diagram-canvas text[data-diagram-connection][data-diagram-lit="true"] {
+  fill: var(--accent) !important;
 }
 @media (prefers-reduced-motion: reduce) {
   .diagram-canvas [data-diagram-lit] {
