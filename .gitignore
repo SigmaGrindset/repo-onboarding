@@ -15,3 +15,6 @@ web/test-results/
 
 # Cygwin/MSYS crash dumps (see web/.gitignore for why this matters).
 *.stackdump
+
+# Agent issue tracker: specs and tickets stay local (see docs/agents/issue-tracker.md).
+.scratch/
