@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   deriveDiagramModel,
   markDiagram,
@@ -24,6 +25,7 @@ import {
   type RepoFileLink,
 } from "@/lib/repo-files";
 import {
+  CLICK_SLOP,
   ViewportButton,
   ViewportControls,
   svgContentSize,
@@ -57,6 +59,11 @@ import { FileChip } from "@/components/ui";
  * picked and what it connects to. The card sits over the drawing rather than
  * beside it: the reading column is narrow and the content per element is thin,
  * so a rail would spend a third of the column on four lines of text.
+ *
+ * A diagram too large for the reading column is promoted to fullscreen from the
+ * canvas toolbar, and the fullscreen view is this same component at another
+ * size — same selection, same highlighting, same card. Promoting is a change of
+ * size, not a change of tool, so the two presentations cannot drift apart.
  */
 
 /** Scale limits. Wider than the graph's, because diagram text is small. */
@@ -67,35 +74,115 @@ const MIN_HEIGHT = 200;
 const MAX_HEIGHT = 560;
 /** Breathing room around the fitted diagram. */
 const FIT_MARGIN = 24;
+const FULLSCREEN_FIT_MARGIN = 32;
+/** The card the fullscreen view draws its diagram on, matching its `p-4`. */
+const FULLSCREEN_PAD = 16;
+/**
+ * How far fullscreen may scale a diagram up. Inline the ceiling is natural size,
+ * because a small diagram should look the way it always did; fullscreen is the
+ * reader asking for the whole viewport, so a small diagram may grow into it.
+ */
+const FULLSCREEN_MAX_FIT_SCALE = 2;
+
+/** Where a canvas is being read: in the page, or filling the viewport. */
+export type DiagramPresentation = "inline" | "fullscreen";
+
+/**
+ * The reader's place in a diagram: what they picked, and whether the card
+ * describing it is open.
+ *
+ * It is held above the canvas because one diagram has two of them — the canvas
+ * in the page and the fullscreen view it promotes to, which are mounted at once
+ * while the reader is in fullscreen. Sharing this is what makes promoting carry
+ * the selection, the highlighting and the card across in both directions.
+ */
+export interface DiagramSelection {
+  id: string | null;
+  cardOpen: boolean;
+  /** Pick an element, or clear. Always brings its card back with it. */
+  select: (id: string | null) => void;
+  /** Close the card without giving up the selection it describes. */
+  dismissCard: () => void;
+  /** After a re-render, keep the selection only if the new drawing holds it. */
+  keepIf: (holdsId: (id: string) => boolean) => void;
+}
+
+export function useDiagramSelection(): DiagramSelection {
+  const [state, setState] = useState<{ id: string | null; cardOpen: boolean }>({
+    id: null,
+    cardOpen: false,
+  });
+
+  // Every way of choosing an element goes through here, because choosing one
+  // always brings its card with it, however the reader left the last one.
+  const select = useCallback(
+    (id: string | null) => setState({ id, cardOpen: id !== null }),
+    [],
+  );
+  // The card is dismissible without giving up the selection it describes, so a
+  // reader who wants to see the drawing under it keeps their highlight.
+  const dismissCard = useCallback(
+    () => setState((current) => ({ ...current, cardOpen: false })),
+    [],
+  );
+  const keepIf = useCallback(
+    (holdsId: (id: string) => boolean) =>
+      setState((current) =>
+        current.id === null || holdsId(current.id)
+          ? current
+          : { id: null, cardOpen: false },
+      ),
+    [],
+  );
+
+  return useMemo(
+    () => ({ ...state, select, dismissCard, keepIf }),
+    [state, select, dismissCard, keepIf],
+  );
+}
 
 export function DiagramCanvas({
   svg,
   title,
   repoFiles,
+  selection,
+  presentation = "inline",
+  promoted = false,
   onExpand,
+  onClose,
 }: {
   svg: string;
   title?: string;
   /** Where a label that names a file can be resolved and linked. */
   repoFiles?: RepoFileIndex;
-  /** Opens the fullscreen view. */
-  onExpand: () => void;
+  /** Shared with the fullscreen view this canvas promotes to. */
+  selection: DiagramSelection;
+  presentation?: DiagramPresentation;
+  /**
+   * Inline only: whether this canvas has been promoted, so a fullscreen view of
+   * the same diagram is now in front of it and owns the reader's attention.
+   */
+  promoted?: boolean;
+  /** Inline only: promotes to fullscreen. */
+  onExpand?: () => void;
+  /** Fullscreen only: returns the reader to the page. */
+  onClose?: () => void;
 }) {
+  const fullscreen = presentation === "fullscreen";
+  const { id: selectedId, cardOpen, select, dismissCard, keepIf } = selection;
+
   const hostRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
   const html = useInjectedSvg(svg);
   const [content, setContent] = useState<{
     width: number;
     height: number;
   } | null>(null);
-  const [available, setAvailable] = useState(0);
+  const [available, setAvailable] = useState({ width: 0, height: 0 });
   // The capability probe. A diagram whose rendered output exposes none of the
   // identity the canvas reads is a pan-and-zoom surface and nothing more.
   const [model, setModel] = useState<DiagramModel | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
-  // The card is dismissible without giving up the selection it describes, so a
-  // reader who wants to see the drawing under it keeps their highlight.
-  const [dismissed, setDismissed] = useState(false);
 
   const {
     ref: viewportRef,
@@ -110,12 +197,19 @@ export function DiagramCanvas({
   } = useViewport<HTMLDivElement>({
     minScale: MIN_SCALE,
     maxScale: MAX_SCALE,
-    // Held modifier only, so a plain wheel keeps scrolling the page. Trackpad
-    // pinch is delivered as a wheel with ctrlKey set, so it lands here too.
-    shouldZoomOnWheel: (event) => event.ctrlKey || event.metaKey,
+    // In the page a held modifier only, so a plain wheel keeps scrolling it;
+    // trackpad pinch is delivered as a wheel with ctrlKey set, so it lands here
+    // too. Fullscreen there is no page behind to scroll, so every wheel zooms:
+    // the rule is never to take the primary gesture, not to demand a modifier
+    // for its own sake.
+    shouldZoomOnWheel: fullscreen
+      ? undefined
+      : (event) => event.ctrlKey || event.metaKey,
   });
 
   const selectable = offersSelection(model);
+  /** Fullscreen draws the diagram on a card, and its padding is part of it. */
+  const pad = fullscreen ? FULLSCREEN_PAD : 0;
 
   // Measure and probe the drawing once it is in the DOM. Both are redone when a
   // theme change re-renders the diagram.
@@ -131,13 +225,9 @@ export function DiagramCanvas({
     // selection; a different diagram would not hold the element they picked, and
     // a re-render the canvas can no longer offer selection on could not show it
     // — nor let the reader clear it by clicking the drawing.
-    setSelectedId((current) =>
-      current && offersSelection(derived) && holds(derived, current)
-        ? current
-        : null,
-    );
+    keepIf((id) => offersSelection(derived) && holds(derived, id));
     setHoverId(null);
-  }, [svg]);
+  }, [svg, keepIf]);
 
   // Hover previews a selection without committing to one, exactly as the
   // dependency graph does.
@@ -180,33 +270,52 @@ export function DiagramCanvas({
     );
   }, [model, selectedId]);
 
-  // Every way of choosing an element goes through here, because choosing one
-  // always brings its card with it, however the reader left the last one.
-  const select = useCallback((id: string | null) => {
-    setSelectedId(id);
-    setDismissed(false);
-  }, []);
-
-  // Escape clears, so a reader is never left with a diagram they cannot un-dim.
+  // Escape clears the selection in the page, and leaves the fullscreen view —
+  // which keeps its selection, so the reader comes back to where they were with
+  // their place in the diagram intact. A promoted canvas sits behind a
+  // fullscreen one and takes no keys, or one press would do both at once.
+  //
   // Bound to the window because nothing here is focusable yet, so Escape clears
   // every canvas on the page at once; the keyboard ticket gives the canvas focus
   // and scopes this to it.
   useEffect(() => {
-    if (!selectedId) return;
+    if (promoted) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") select(null);
+      if (event.key !== "Escape") return;
+      if (fullscreen) onClose?.();
+      else if (selectedId) select(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selectedId, select]);
+  }, [promoted, fullscreen, onClose, selectedId, select]);
 
-  // How wide the canvas is. Only the width is watched: the height is computed
-  // from it below, so watching both would be watching our own output.
+  // Fullscreen is modal: the page behind it holds its scroll position rather
+  // than scrolling under the overlay, and the reader arrives on the control that
+  // takes them back out.
+  useEffect(() => {
+    if (!fullscreen) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    closeRef.current?.focus();
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [fullscreen]);
+
+  // How big the canvas is. Inline, only the width is used: the height is
+  // computed from it below, so sizing from both would be reading our own output.
   useLayoutEffect(() => {
     if (!viewportEl) return;
-    const observer = new ResizeObserver(([entry]) =>
-      setAvailable(entry.contentRect.width),
-    );
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      // Same box, same object: the fit is keyed off this, and a fresh one every
+      // notification would re-render the whole drawing for nothing.
+      setAvailable((current) =>
+        current.width === width && current.height === height
+          ? current
+          : { width, height },
+      );
+    });
     observer.observe(viewportEl);
     return () => observer.disconnect();
   }, [viewportEl]);
@@ -214,8 +323,9 @@ export function DiagramCanvas({
   // How tall the diagram will actually be drawn. Sizing the canvas to the
   // diagram's natural height instead would leave a wide, short diagram sitting
   // in a band of empty space, since it is its width that forces the scale down.
+  // Fullscreen there is nothing to compute: the view is as tall as the viewport.
   const drawn = content
-    ? content.height * arrivalScale(content, available) + FIT_MARGIN
+    ? content.height * arrivalScale(content, available.width) + FIT_MARGIN
     : 0;
   const height = content
     ? Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, drawn))
@@ -223,18 +333,28 @@ export function DiagramCanvas({
 
   const fit = useCallback(() => {
     if (!content) return;
-    // Never above natural size: a three-box diagram should not be blown up to
-    // fill the canvas, it should look the way it always did.
-    fitToContent(content.width, content.height, {
-      margin: FIT_MARGIN,
-      maxScale: 1,
+    fitToContent(content.width + pad * 2, content.height + pad * 2, {
+      margin: fullscreen ? FULLSCREEN_FIT_MARGIN : FIT_MARGIN,
+      // Inline, never above natural size: a three-box diagram should not be
+      // blown up to fill the canvas, it should look the way it always did.
+      maxScale: fullscreen ? FULLSCREEN_MAX_FIT_SCALE : 1,
     });
-  }, [content, fitToContent]);
+  }, [content, fitToContent, fullscreen, pad]);
 
   // Fit on arrival, and again when the canvas changes size. Deliberately not on
   // every re-measure: a theme change re-renders the same diagram, and refitting
   // there would throw away wherever the reader had zoomed and panned to.
-  const shape = content ? `${content.width}x${content.height}@${height}` : null;
+  //
+  // The measured width is part of what "changed size" means even inline, where
+  // the height is computed rather than measured: a diagram already at its
+  // natural size, or one whose canvas is clamped at the floor or the ceiling,
+  // keeps the same height through a narrowing window — and a fit that is never
+  // redone leaves it centred on a width the canvas no longer has, hanging off
+  // the side of it.
+  const box = fullscreen
+    ? `${available.width}x${available.height}`
+    : `${available.width}x${height}`;
+  const shape = content ? `${content.width}x${content.height}@${box}` : null;
   const fittedShape = useRef<string | null>(null);
   useLayoutEffect(() => {
     if (!shape || fittedShape.current === shape) return;
@@ -242,45 +362,111 @@ export function DiagramCanvas({
     fit();
   }, [shape, fit]);
 
-  // A press that travelled was a pan, not a click on whatever sat under it; and
-  // a press from a finger belongs to the page, which owns touch on a canvas.
-  const pressRef = useRef({ dragged: false, touch: false });
-  const finishPan = useCallback(() => {
-    pressRef.current.dragged = endPan()?.moved ?? false;
-  }, [endPan]);
+  // A press that travelled was a pan, not a click on whatever sat under it. In
+  // the page a finger is not a gesture the canvas takes at all — it belongs to
+  // the page, which scrolls through the diagram exactly as it did when this was
+  // a picture — so a touch press only records where it began, and a tap that
+  // stayed put promotes to fullscreen. There, nothing is underneath to compete,
+  // so a finger pans, pinches and selects like any other pointer.
+  const pressRef = useRef({ dragged: false, touch: false, x: 0, y: 0 });
 
-  return (
+  const onPointerDown = (event: React.PointerEvent) => {
+    const touch = event.pointerType === "touch";
+    pressRef.current = {
+      dragged: false,
+      touch,
+      x: event.clientX,
+      y: event.clientY,
+    };
+    if (!touch || fullscreen) beginPan(event);
+  };
+
+  const onPointerMove = (event: React.PointerEvent) => {
+    const press = pressRef.current;
+    if (press.touch && !fullscreen) {
+      // The page is scrolling under the finger; all the canvas needs to know is
+      // that what happens next is not a tap.
+      if (
+        Math.abs(event.clientX - press.x) > CLICK_SLOP ||
+        Math.abs(event.clientY - press.y) > CLICK_SLOP
+      ) {
+        press.dragged = true;
+      }
+      return;
+    }
+    updatePan(event);
+  };
+
+  const finishPress = (event: React.PointerEvent) => {
+    const pan = endPan(event);
+    // Null while other fingers are still down, or when the press was never a
+    // gesture this canvas took — neither of which says anything about a click.
+    if (pan) pressRef.current.dragged = pan.moved;
+  };
+
+  const zoomControls = (
+    <ViewportControls
+      zoomBy={zoomBy}
+      orientation={fullscreen ? "horizontal" : "vertical"}
+      tone={fullscreen ? "overlay" : "surface"}
+      resetVariant="fit"
+      onReset={fit}
+    />
+  );
+
+  const canvas = (
     <div
       // The capability probe's own answer: whether this diagram exposes any
       // identity at all. Offering selection on top of that also needs
       // connections, which is what `selectable` says.
       data-diagram-addressable={model !== null}
-      className="group relative overflow-hidden rounded-md border border-border bg-surface"
-      style={{ height }}
+      className={
+        fullscreen
+          ? "group relative min-h-0 flex-1 overflow-hidden"
+          : "group relative overflow-hidden rounded-md border border-border bg-surface"
+      }
+      style={fullscreen ? undefined : { height }}
+      // A promoted canvas is behind a fullscreen view of the same diagram, so it
+      // is out of reach and out of the accessibility tree until it comes back.
+      aria-hidden={promoted || undefined}
+      inert={promoted}
     >
       <div
         ref={viewportRef}
-        className="absolute inset-0 select-none overflow-hidden"
+        className={`absolute inset-0 select-none overflow-hidden ${
+          // Inline, the page keeps every touch gesture it had. Fullscreen the
+          // canvas takes them, because there is no page left to take them from.
+          fullscreen ? "touch-none" : ""
+        }`}
         style={{ cursor: isPanning ? "grabbing" : "grab" }}
-        // Touch is deliberately not handled: the page owns that gesture, and a
-        // reader on a phone gets the same scrolling they had before.
-        onPointerDown={(event) => {
-          pressRef.current.touch = event.pointerType === "touch";
-          if (event.pointerType !== "touch") beginPan(event);
-        }}
-        onPointerMove={updatePan}
-        onPointerUp={finishPan}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={finishPress}
+        // A gesture the browser takes away — a system swipe, a call arriving —
+        // ends here too, or the pointer it never lifted would still be counted
+        // against the next one and turn a plain press into half a pinch.
+        onPointerCancel={finishPress}
         onPointerOver={(event) => {
+          // A tap arrives as a pointerover first, so previewing on touch would
+          // flash a highlight across the diagram before the press even lands.
           if (event.pointerType === "touch" || !selectable || isPanning) return;
           setHoverId(selectableIdAt(event.target));
         }}
-        onPointerLeave={() => {
-          finishPan();
+        onPointerLeave={(event) => {
+          finishPress(event);
           setHoverId(null);
         }}
         onClick={(event) => {
           const { dragged, touch } = pressRef.current;
-          if (!selectable || dragged || touch) return;
+          if (dragged) return;
+          // A tap in the page promotes rather than selects: the inline canvas
+          // takes no gestures on touch, and fullscreen is where a finger can
+          // pinch, pan and pick with nothing underneath competing for it.
+          if (touch && !fullscreen) {
+            onExpand?.();
+            return;
+          }
+          if (!selectable) return;
           // The same element again, or the space around the drawing, clears.
           const id = selectableIdAt(event.target);
           select(id && id !== selectedId ? id : null);
@@ -290,10 +476,12 @@ export function DiagramCanvas({
           ref={hostRef}
           role="img"
           aria-label={title ?? "Diagram"}
-          className="diagram-canvas absolute left-0 top-0 origin-top-left"
+          className={`diagram-canvas absolute left-0 top-0 origin-top-left ${
+            fullscreen ? "rounded-lg bg-surface p-4 shadow-2xl" : ""
+          }`}
           style={{
-            width: content?.width,
-            height: content?.height,
+            width: content ? content.width + pad * 2 : undefined,
+            height: content ? content.height + pad * 2 : undefined,
             transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.k})`,
             visibility: content ? "visible" : "hidden",
           }}
@@ -301,7 +489,7 @@ export function DiagramCanvas({
         />
       </div>
 
-      {selected && !dismissed ? (
+      {selected && cardOpen ? (
         <InspectorCard
           subject={selected}
           connectedTo={connectedTo}
@@ -313,36 +501,96 @@ export function DiagramCanvas({
             setHoverId(null);
             select(id);
           }}
-          onDismiss={() => setDismissed(true)}
+          onDismiss={dismissCard}
         />
       ) : null}
 
-      <div className="absolute right-2 top-2 flex flex-col gap-1">
-        <ViewportControls
-          zoomBy={zoomBy}
-          orientation="vertical"
-          tone="surface"
-          resetVariant="fit"
-          onReset={fit}
-        />
-        <ViewportButton
-          tone="surface"
-          label={`Expand diagram${title ? `: ${title}` : ""}`}
-          onClick={onExpand}
-        >
-          <ExpandIcon />
-        </ViewportButton>
-      </div>
+      {fullscreen ? null : (
+        <div className="absolute right-2 top-2 flex flex-col gap-1">
+          {zoomControls}
+          <ViewportButton
+            tone="surface"
+            label={`Expand diagram${title ? `: ${title}` : ""}`}
+            onClick={() => onExpand?.()}
+          >
+            <ExpandIcon />
+          </ViewportButton>
+        </div>
+      )}
 
       {/* The canvas is sized to its diagram, so a hint pinned over it would
-          cover the drawing while the reader is reading. It appears when the
-          pointer is on the canvas — which is exactly when the wheel matters. */}
-      <p className="pointer-events-none absolute bottom-2 left-2 rounded-full border border-border bg-surface/85 px-2.5 py-1 text-[0.7rem] text-faint opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100">
-        {selectable ? "Click to highlight · " : null}
-        {zoomModifierLabel()} + scroll to zoom · drag to pan
+          cover the drawing while the reader is reading. Inline it appears when
+          the pointer is on the canvas — which is exactly when the wheel matters
+          — and fullscreen there is room for it to simply stay. */}
+      <p
+        className={
+          fullscreen
+            ? "pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-[#0f1216]/70 px-3 py-1 text-[0.7rem] text-[#e9edf2]/75"
+            : "pointer-events-none absolute bottom-2 left-2 rounded-full border border-border bg-surface/85 px-2.5 py-1 text-[0.7rem] text-faint opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100"
+        }
+      >
+        {gestureHint(fullscreen, selectable)}
       </p>
     </div>
   );
+
+  if (!fullscreen) return canvas;
+
+  // The same canvas, filling the viewport. Its chrome moves to a bar above the
+  // drawing, where a title and a way out have somewhere to live.
+  return createPortal(
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={title ? `Diagram: ${title}` : "Diagram"}
+      className="fixed inset-0 z-50 flex flex-col bg-[#0f1216]/80 backdrop-blur-sm"
+      onKeyDown={keepTabInside}
+    >
+      <div className="flex items-center justify-between gap-3 px-4 py-3">
+        <span className="min-w-0 truncate text-sm font-medium text-[#e9edf2]/90">
+          {title ?? "Diagram"}
+        </span>
+        <div className="flex shrink-0 items-center gap-1">
+          {zoomControls}
+          <ViewportButton
+            tone="overlay"
+            label="Close"
+            onClick={() => onClose?.()}
+            ref={closeRef}
+          >
+            <CloseIcon />
+          </ViewportButton>
+        </div>
+      </div>
+      {canvas}
+    </div>,
+    document.body,
+  );
+}
+
+/**
+ * Keeps Tab inside the fullscreen view. `aria-modal` has already told a screen
+ * reader that the rest of the page is not there, so letting the keyboard walk
+ * out into it would leave the reader operating controls behind the overlay —
+ * other diagrams' toolbars among them. Only the boundary of the view is settled
+ * here; the canvas's own keys are the keyboard ticket's.
+ */
+function keepTabInside(event: React.KeyboardEvent<HTMLElement>) {
+  if (event.key !== "Tab") return;
+  const focusable = event.currentTarget.querySelectorAll<HTMLElement>(
+    'button, a[href], [tabindex]:not([tabindex="-1"])',
+  );
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (!first) return;
+
+  const active = document.activeElement;
+  const leaving = event.shiftKey ? first : last;
+  // Anywhere outside counts as leaving too: with focus on the page behind, the
+  // next Tab would carry on through it rather than coming back in.
+  if (active !== leaving && event.currentTarget.contains(active)) return;
+  event.preventDefault();
+  (event.shiftKey ? last : first).focus();
 }
 
 /** What the diagram's own language calls the thing the reader picked. */
@@ -558,6 +806,39 @@ function arrivalScale(
 }
 
 /**
+ * What the canvas can honestly tell a reader about its gestures. Both halves of
+ * that differ: fullscreen has no page behind it to keep the wheel for, and a
+ * reader holding a phone has no wheel, no modifier key and no Escape.
+ */
+function gestureHint(fullscreen: boolean, selectable: boolean) {
+  const touch = readsWithAFinger();
+  const picking = selectable
+    ? touch
+      ? "Tap to highlight"
+      : "Click to highlight"
+    : null;
+  const moving = fullscreen
+    ? touch
+      ? "pinch to zoom · drag to pan"
+      : "scroll to zoom · drag to pan · Esc to close"
+    : `${zoomModifierLabel()} + scroll to zoom · drag to pan`;
+  return [picking, moving].filter(Boolean).join(" · ");
+}
+
+/**
+ * Whether the reader's primary pointer is a finger. In the page that changes
+ * nothing — the canvas takes no touch there and the hint is revealed by a hover
+ * nobody has — but fullscreen is where a phone reader does everything, so the
+ * gestures named there had better be the ones they have.
+ */
+function readsWithAFinger() {
+  return (
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(pointer: coarse)").matches === true
+  );
+}
+
+/**
  * What to call the zoom modifier in the hint. Both keys zoom, but naming the one
  * the reader's keyboard actually has is the whole point of a hint. Read during
  * render without guarding for hydration, because a canvas only ever exists once
@@ -568,6 +849,19 @@ function zoomModifierLabel() {
     typeof navigator !== "undefined" &&
     /Mac|iPhone|iPad|iPod/.test(navigator.userAgent);
   return apple ? "⌘" : "Ctrl";
+}
+
+function CloseIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden>
+      <path
+        d="M4 4l8 8M12 4l-8 8"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
 }
 
 function ExpandIcon() {

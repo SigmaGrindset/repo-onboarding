@@ -13,8 +13,9 @@ import {
 /**
  * Pan and zoom for the viewer's interactive surfaces — the dependency graph and
  * every diagram canvas. One primitive owns the transform, its clamping, fitting
- * to bounds, cursor-anchored wheel zoom, pointer panning, and the toolbar
- * chrome, so the surfaces cannot drift apart in the small ways they already had.
+ * to bounds, cursor-anchored wheel zoom, pointer panning, two-finger pinch, and
+ * the toolbar chrome, so the surfaces cannot drift apart in the small ways they
+ * already had.
  *
  * What stays with the caller is what legitimately differs: the scale limits, the
  * rule for when a wheel gesture zooms, what "reset" means, and everything about
@@ -33,8 +34,13 @@ const IDENTITY: Transform = { x: 0, y: 0, k: 1 };
 const WHEEL_STEP = 1.12;
 /** One toolbar button press. */
 const BUTTON_STEP = 1.25;
-/** Movement under this many pixels still counts as a click, not a drag. */
-const CLICK_SLOP = 4;
+/**
+ * Movement under this many pixels still counts as a click, not a drag. Exported
+ * because a surface that declines a gesture still has to tell a tap from a
+ * travelling press: the inline diagram canvas takes no touch at all, and a tap
+ * on it means something different from a finger scrolling the page across it.
+ */
+export const CLICK_SLOP = 4;
 
 export interface ViewportOptions {
   /** Scale limits. Per-consumer: the surfaces legitimately differ. */
@@ -115,10 +121,13 @@ export interface Viewport<T extends Element> {
   beginPan: (event: React.PointerEvent) => void;
   updatePan: (event: React.PointerEvent) => void;
   /**
-   * Ends a pan, reporting whether the pointer actually travelled. A caller that
-   * treats a stationary press as a click reads `moved` to tell the two apart.
+   * Ends one pointer's part in a gesture, reporting whether it travelled once
+   * the last of them lifts — a caller that treats a stationary press as a click
+   * reads `moved` to tell the two apart, and gets null while fingers remain.
+   * Called without an event it ends the whole gesture, which is what a surface
+   * that only ever sees one pointer wants.
    */
-  endPan: () => { moved: boolean } | null;
+  endPan: (event?: React.PointerEvent) => { moved: boolean } | null;
 }
 
 export function useViewport<T extends Element>(
@@ -208,7 +217,11 @@ export function useViewport<T extends Element>(
     [element],
   );
 
-  // --- Panning ------------------------------------------------------------
+  // --- Panning and pinching -----------------------------------------------
+  // Every pointer currently pressed on the surface, so a second finger can turn
+  // a drag into a pinch and the first can carry on panning when it lifts.
+  const pointersRef = useRef(new Map<number, Point>());
+  const pinchRef = useRef<{ spread: number } | null>(null);
   const panRef = useRef<{
     startX: number;
     startY: number;
@@ -217,37 +230,100 @@ export function useViewport<T extends Element>(
     moved: boolean;
   } | null>(null);
 
+  // Read when a pinch hands the gesture back to a single finger, which happens
+  // between renders and so cannot use the transform this render closed over.
+  const transformRef = useRef(transform);
+  useEffect(() => {
+    transformRef.current = transform;
+  });
+
+  const startPan = useCallback((from: Point, origin: Transform) => {
+    panRef.current = {
+      startX: from.x,
+      startY: from.y,
+      origX: origin.x,
+      origY: origin.y,
+      // A finger that has already been part of a pinch is mid-gesture, so what
+      // it does next is never a click on whatever happens to sit under it.
+      moved: pinchRef.current !== null,
+    };
+  }, []);
+
   const beginPan = useCallback(
     (event: React.PointerEvent) => {
-      panRef.current = {
-        startX: event.clientX,
-        startY: event.clientY,
-        origX: transform.x,
-        origY: transform.y,
-        moved: false,
-      };
-      setIsPanning(true);
+      const pointers = pointersRef.current;
+      pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
       (event.target as Element).setPointerCapture?.(event.pointerId);
+
+      if (pointers.size === 2) {
+        // Two fingers zoom about the point between them, and whatever drag was
+        // in flight is over — it is now half of a pinch.
+        pinchRef.current = { spread: spreadOf(pointers) };
+        if (panRef.current) panRef.current.moved = true;
+        return;
+      }
+      if (pointers.size > 2) return;
+
+      startPan({ x: event.clientX, y: event.clientY }, transform);
+      setIsPanning(true);
     },
-    [transform],
+    [startPan, transform],
   );
 
-  const updatePan = useCallback((event: React.PointerEvent) => {
-    const pan = panRef.current;
-    if (!pan) return;
-    const dx = event.clientX - pan.startX;
-    const dy = event.clientY - pan.startY;
-    if (Math.abs(dx) > CLICK_SLOP || Math.abs(dy) > CLICK_SLOP) pan.moved = true;
-    setTransform((t) => ({ ...t, x: pan.origX + dx, y: pan.origY + dy }));
-  }, []);
+  const updatePan = useCallback(
+    (event: React.PointerEvent) => {
+      const pointers = pointersRef.current;
+      if (pointers.has(event.pointerId)) {
+        pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      }
 
-  const endPan = useCallback(() => {
-    const pan = panRef.current;
-    if (!pan) return null;
-    panRef.current = null;
-    setIsPanning(false);
-    return { moved: pan.moved };
-  }, []);
+      const pinch = pinchRef.current;
+      if (pinch) {
+        if (pointers.size < 2) return;
+        const spread = spreadOf(pointers);
+        if (spread <= 0 || pinch.spread <= 0) return;
+        const centre = centreOf(pointers);
+        zoomAtClient(centre.x, centre.y, spread / pinch.spread);
+        pinch.spread = spread;
+        return;
+      }
+
+      const pan = panRef.current;
+      if (!pan) return;
+      const dx = event.clientX - pan.startX;
+      const dy = event.clientY - pan.startY;
+      if (Math.abs(dx) > CLICK_SLOP || Math.abs(dy) > CLICK_SLOP) pan.moved = true;
+      setTransform((t) => ({ ...t, x: pan.origX + dx, y: pan.origY + dy }));
+    },
+    [zoomAtClient],
+  );
+
+  const endPan = useCallback(
+    (event?: React.PointerEvent) => {
+      const pointers = pointersRef.current;
+      // A caller that lifts without naming a pointer — a mouse-only surface, or
+      // the pointer leaving the element — is ending the whole gesture.
+      if (event) pointers.delete(event.pointerId);
+      else pointers.clear();
+
+      if (pinchRef.current && pointers.size < 2) {
+        const [remaining] = pointers.values();
+        // One finger left carries on panning from where it is now, not from
+        // where the gesture started two fingers ago.
+        if (remaining) startPan(remaining, transformRef.current);
+        pinchRef.current = null;
+      }
+      // Still fingers down: the gesture has not ended, so nothing is reported.
+      if (pointers.size > 0) return null;
+
+      const pan = panRef.current;
+      if (!pan) return null;
+      panRef.current = null;
+      setIsPanning(false);
+      return { moved: pan.moved };
+    },
+    [startPan],
+  );
 
   // --- Wheel zoom ---------------------------------------------------------
   // Bound natively and non-passively: a wheel that zooms must not also scroll
@@ -285,6 +361,23 @@ export function useViewport<T extends Element>(
     updatePan,
     endPan,
   };
+}
+
+interface Point {
+  x: number;
+  y: number;
+}
+
+/** How far apart two fingers are, which is what a pinch changes. */
+function spreadOf(pointers: Map<number, Point>): number {
+  const [a, b] = pointers.values();
+  return Math.hypot(b.x - a.x, b.y - a.y);
+}
+
+/** The point a pinch zooms about, which stays put between the two fingers. */
+function centreOf(pointers: Map<number, Point>): Point {
+  const [a, b] = pointers.values();
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
 }
 
 export type ViewportButtonTone = "surface" | "overlay";

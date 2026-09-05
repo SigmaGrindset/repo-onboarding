@@ -1,16 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { DiagramCanvas } from "@/components/DiagramCanvas";
-import type { RepoFileIndex } from "@/lib/repo-files";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ViewportButton,
-  ViewportControls,
-  svgContentSize,
-  useInjectedSvg,
-  useViewport,
-} from "@/components/viewport";
+  DiagramCanvas,
+  useDiagramSelection,
+} from "@/components/DiagramCanvas";
+import type { RepoFileIndex } from "@/lib/repo-files";
 
 let counter = 0;
 
@@ -29,8 +24,10 @@ function isDarkTheme(): boolean {
  * inside a <pre> with an error note, rather than crashing the page.
  *
  * What comes back is handed to a diagram canvas — a live pan-and-zoom surface in
- * the section itself — which can still be promoted to the fullscreen view from
- * its own toolbar.
+ * the section itself — which promotes to a fullscreen one from its own toolbar.
+ * Promotion is a change of size and not a change of tool, so both canvases are
+ * the same component reading one shared selection: whatever the reader had
+ * picked, lit and open is there on the way in and still there on the way back.
  */
 export function Mermaid({
   source,
@@ -46,6 +43,29 @@ export function Mermaid({
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [renderAttempt, setRenderAttempt] = useState(0);
+  const selection = useDiagramSelection();
+
+  // Where the reader was when they promoted the diagram, so leaving fullscreen
+  // puts them back on the control they left from rather than at the top of the
+  // document with no idea which diagram they were reading.
+  const promotedFrom = useRef<HTMLElement | null>(null);
+  const wasExpanded = useRef(false);
+
+  const promote = useCallback(() => {
+    const from = document.activeElement;
+    // A finger promotes by tapping the drawing, which focuses nothing — so
+    // there is no control to come back to, and none is invented.
+    promotedFrom.current =
+      from instanceof HTMLElement && from !== document.body ? from : null;
+    setExpanded(true);
+  }, []);
+
+  // Focus is restored after the fullscreen view has gone, not as it is asked to
+  // go: unmounting the control the reader is standing on drops focus to the body.
+  useEffect(() => {
+    if (wasExpanded.current && !expanded) promotedFrom.current?.focus();
+    wasExpanded.current = expanded;
+  }, [expanded]);
 
   useEffect(() => {
     let cancelled = false;
@@ -161,174 +181,20 @@ export function Mermaid({
         svg={svg}
         title={title}
         repoFiles={repoFiles}
-        onExpand={() => setExpanded(true)}
+        selection={selection}
+        promoted={expanded}
+        onExpand={promote}
       />
       {expanded ? (
-        <DiagramLightbox
+        <DiagramCanvas
           svg={svg}
           title={title}
+          repoFiles={repoFiles}
+          selection={selection}
+          presentation="fullscreen"
           onClose={() => setExpanded(false)}
         />
       ) : null}
     </>
-  );
-}
-
-const FIT_MARGIN = 32; // px of breathing room around the fitted diagram
-const CONTENT_PAD = 16; // matches the p-4 on the lightbox content card
-// Never fit above 2x — tiny diagrams shouldn't balloon — but always fit down
-// so the whole diagram is visible on open.
-const MAX_FIT_SCALE = 2;
-
-/**
- * Fullscreen diagram viewer: renders the already-produced SVG at its natural
- * size on a theme-matching card, fitted and centred in the viewport, with
- * cursor-anchored wheel zoom, drag panning, and button controls.
- */
-function DiagramLightbox({
-  svg,
-  title,
-  onClose,
-}: {
-  svg: string;
-  title?: string;
-  onClose: () => void;
-}) {
-  const contentRef = useRef<HTMLDivElement>(null);
-  const html = useInjectedSvg(svg);
-  const closeRef = useRef<HTMLButtonElement>(null);
-  const [natural, setNatural] = useState<{
-    width: number;
-    height: number;
-  } | null>(null);
-  // Fullscreen and modal: nothing is behind it, so a plain wheel zooms.
-  const {
-    ref: viewportRef,
-    element: viewportEl,
-    transform,
-    isPanning,
-    zoomAtClient,
-    zoomBy,
-    fitToContent,
-    beginPan,
-    updatePan,
-    endPan,
-  } = useViewport<HTMLDivElement>({ minScale: 0.2, maxScale: 8 });
-
-  // Read the diagram's natural size, the same way the inline canvas does. The
-  // wrapper div is then sized declaratively from this state and CSS makes the
-  // SVG fill it — no imperative styling of Mermaid's SVG.
-  useLayoutEffect(() => {
-    const svgEl = contentRef.current?.querySelector("svg");
-    if (svgEl) setNatural(svgContentSize(svgEl));
-  }, [svg]);
-
-  // Scale to fit the viewport and centre the diagram.
-  const fit = useCallback(() => {
-    if (!natural) return;
-    fitToContent(
-      natural.width + CONTENT_PAD * 2,
-      natural.height + CONTENT_PAD * 2,
-      { margin: FIT_MARGIN, maxScale: MAX_FIT_SCALE },
-    );
-  }, [natural, fitToContent]);
-
-  useLayoutEffect(() => {
-    fit();
-  }, [fit]);
-
-  // Scroll lock, Escape-to-close, and refit on window resize.
-  useEffect(() => {
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("resize", fit);
-    closeRef.current?.focus();
-    return () => {
-      document.body.style.overflow = prevOverflow;
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("resize", fit);
-    };
-  }, [onClose, fit]);
-
-  const onPointerUp = (e: React.PointerEvent) => {
-    const pan = endPan();
-    // A plain click (no drag) on the backdrop — not on the diagram — closes.
-    if (pan && !pan.moved && e.target === viewportEl) onClose();
-  };
-
-  const onDoubleClick = (e: React.MouseEvent) => {
-    zoomAtClient(e.clientX, e.clientY, 1.6);
-  };
-
-  return createPortal(
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={title ? `Diagram: ${title}` : "Diagram"}
-      className="fixed inset-0 z-50 flex flex-col bg-[#0f1216]/80 backdrop-blur-sm"
-    >
-      {/* Toolbar */}
-      <div className="flex items-center justify-between gap-3 px-4 py-3">
-        <span className="min-w-0 truncate text-sm font-medium text-[#e9edf2]/90">
-          {title ?? "Diagram"}
-        </span>
-        <div className="flex shrink-0 items-center gap-1">
-          <ViewportControls
-            zoomBy={zoomBy}
-            orientation="horizontal"
-            tone="overlay"
-            resetVariant="fit"
-            onReset={fit}
-          />
-          <ViewportButton
-            tone="overlay"
-            label="Close"
-            onClick={onClose}
-            ref={closeRef}
-          >
-            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden>
-              <path
-                d="M4 4l8 8M12 4l-8 8"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-              />
-            </svg>
-          </ViewportButton>
-        </div>
-      </div>
-
-      {/* Pan/zoom viewport */}
-      <div
-        ref={viewportRef}
-        className="relative flex-1 touch-none select-none overflow-hidden"
-        style={{ cursor: isPanning ? "grabbing" : "grab" }}
-        onPointerDown={beginPan}
-        onPointerMove={updatePan}
-        onPointerUp={onPointerUp}
-        onPointerLeave={onPointerUp}
-        onDoubleClick={onDoubleClick}
-      >
-        <div
-          ref={contentRef}
-          className="diagram-lightbox absolute left-0 top-0 origin-top-left rounded-lg bg-surface p-4 shadow-2xl"
-          style={{
-            transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.k})`,
-            width: natural ? natural.width + CONTENT_PAD * 2 : undefined,
-            height: natural ? natural.height + CONTENT_PAD * 2 : undefined,
-            visibility: natural ? "visible" : "hidden",
-          }}
-          dangerouslySetInnerHTML={html}
-        />
-        <p className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-[#0f1216]/70 px-3 py-1 text-[0.7rem] text-[#e9edf2]/75">
-          Scroll to zoom · drag to pan · double-click to zoom in · Esc to close
-        </p>
-      </div>
-    </div>,
-    document.body,
   );
 }

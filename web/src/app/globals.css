@@ -452,12 +452,11 @@ p {
   }
 }
 
-/* Inline and fullscreen alike, the wrapper div carries the diagram's natural
-   (viewBox) size and the SVG fills it, so the transform is the only thing that
-   scales it. !important beats Mermaid's inline max-width, which would otherwise
-   shrink the diagram inside its own wrapper. */
-.diagram-canvas svg,
-.diagram-lightbox svg {
+/* Inline and fullscreen alike — both are diagram canvases — the wrapper div
+   carries the diagram's natural (viewBox) size and the SVG fills it, so the
+   transform is the only thing that scales it. !important beats Mermaid's inline
+   max-width, which would otherwise shrink the diagram inside its own wrapper. */
+.diagram-canvas svg {
   width: 100% !important;
   height: 100% !important;
   max-width: none !important;

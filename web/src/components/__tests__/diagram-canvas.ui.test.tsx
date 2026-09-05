@@ -55,8 +55,17 @@ function fixtureNames() {
  * the same ResizeObserver it uses in a browser — and how big its own box ends up.
  * Height is reported back from the inline style the canvas set, so the canvas
  * sizing itself is what the fit then works against, exactly as in a browser.
+ * A fullscreen canvas sets no height of its own: it is as tall as the viewport.
  */
 let canvasWidth = 600;
+const FULLSCREEN_HEIGHT = 700;
+
+function boxHeight(el: Element) {
+  const box = el.closest<HTMLElement>("[data-diagram-addressable]");
+  if (!box) return 0;
+  if (box.closest('[role="dialog"]')) return FULLSCREEN_HEIGHT;
+  return Number.parseFloat(box.style.height) || 0;
+}
 
 function stubLayout(width: number) {
   canvasWidth = width;
@@ -67,26 +76,46 @@ function stubLayout(width: number) {
   Object.defineProperty(HTMLElement.prototype, "clientHeight", {
     configurable: true,
     get(this: HTMLElement) {
-      const box = this.closest<HTMLElement>("[data-diagram-addressable]");
-      return Number.parseFloat(box?.style.height ?? "") || 0;
+      return boxHeight(this);
     },
   });
 }
 
+/** Every box a live canvas is watching, so a test can change one and re-report. */
+let watched: Array<{ observer: ResizeObserverStub; target: Element }> = [];
+
 class ResizeObserverStub {
   constructor(private readonly notify: ResizeObserverCallback) {}
   observe(target: Element) {
+    watched.push({ observer: this, target });
+    this.report(target);
+  }
+  report(target: Element) {
     this.notify(
-      [{ contentRect: { width: canvasWidth } } as ResizeObserverEntry],
+      [
+        {
+          contentRect: { width: canvasWidth, height: boxHeight(target) },
+        } as ResizeObserverEntry,
+      ],
       this as unknown as ResizeObserver,
     );
-    void target;
   }
-  disconnect() {}
+  disconnect() {
+    watched = watched.filter((entry) => entry.observer !== this);
+  }
   unobserve() {}
 }
 
+/** The reader resizing the window, which a canvas hears through its observer. */
+function resizeCanvasTo(width: number) {
+  canvasWidth = width;
+  act(() => {
+    for (const { observer, target } of watched) observer.report(target);
+  });
+}
+
 beforeEach(() => {
+  watched = [];
   stubLayout(600);
   vi.stubGlobal("ResizeObserver", ResizeObserverStub);
 });
@@ -116,8 +145,26 @@ async function showRendered(
   mermaidMocks.render.mockResolvedValue({ svg });
   render(<Mermaid source="flowchart TD" title={title} repoFiles={repoFiles} />);
   const drawing = await screen.findByRole("img", { name: title });
+  return canvasAround(drawing);
+}
+
+/** The three nested boxes a canvas is, found from the drawing inside them. */
+function canvasAround(drawing: HTMLElement) {
   const surface = drawing.parentElement as HTMLElement;
   return { canvas: surface.parentElement as HTMLElement, surface, drawing };
+}
+
+/**
+ * The fullscreen view of a diagram. While it is open the canvas it was promoted
+ * from is hidden from the accessibility tree behind it, so a role query finds
+ * the one the reader is actually looking at.
+ */
+function fullscreenCanvas() {
+  const dialog = screen.getByRole("dialog");
+  return {
+    ...canvasAround(within(dialog).getByRole("img")),
+    dialog,
+  };
 }
 
 /** What the reader is looking at: how far the diagram moved, and how big it is. */
@@ -157,6 +204,78 @@ function dragAcross(target: Element, dx: number, dy: number) {
     clientY: 100 + dy,
   });
   fireEvent.pointerUp(target, { pointerId: 1, pointerType: "mouse" });
+}
+
+/** A finger that arrives, stays put and lifts. A browser follows it with a click. */
+function tapOn(target: Element) {
+  // A tap arrives as a pointerover first, so a preview would flash across the
+  // diagram before the press even lands.
+  fireEvent.pointerOver(target, { pointerId: 2, pointerType: "touch" });
+  fireEvent.pointerDown(target, {
+    pointerId: 2,
+    pointerType: "touch",
+    clientX: 100,
+    clientY: 100,
+  });
+  fireEvent.pointerUp(target, {
+    pointerId: 2,
+    pointerType: "touch",
+    clientX: 100,
+    clientY: 100,
+  });
+  fireEvent.click(target);
+}
+
+/**
+ * A finger travelling across the surface — which in the page is the page
+ * scrolling under it. The click at the end is deliberate: a browser suppresses
+ * it after a scroll, and the canvas must not need it to, since what the press
+ * did is what decides.
+ */
+function touchDragAcross(target: Element, dx: number, dy: number) {
+  fireEvent.pointerDown(target, {
+    pointerId: 2,
+    pointerType: "touch",
+    clientX: 100,
+    clientY: 100,
+  });
+  fireEvent.pointerMove(target, {
+    pointerId: 2,
+    pointerType: "touch",
+    clientX: 100 + dx,
+    clientY: 100 + dy,
+  });
+  fireEvent.pointerUp(target, {
+    pointerId: 2,
+    pointerType: "touch",
+    clientX: 100 + dx,
+    clientY: 100 + dy,
+  });
+  fireEvent.click(target);
+}
+
+/** Two fingers moving from one spread apart to another. */
+function pinchOn(target: Element, from: number, to: number) {
+  const touch = (pointerId: number, clientX: number) => ({
+    pointerId,
+    pointerType: "touch",
+    clientX,
+    clientY: 200,
+  });
+  fireEvent.pointerDown(target, touch(1, 200));
+  fireEvent.pointerDown(target, touch(2, 200 + from));
+  fireEvent.pointerMove(target, touch(2, 200 + to));
+  fireEvent.pointerUp(target, touch(2, 200 + to));
+  fireEvent.pointerUp(target, touch(1, 200));
+}
+
+function expandControl() {
+  return screen.getByRole("button", { name: /^Expand diagram/ });
+}
+
+async function promote() {
+  await userEvent.click(expandControl());
+  return fullscreenCanvas();
 }
 
 describe("a diagram canvas in the page", () => {
@@ -297,6 +416,23 @@ describe("how tall a diagram canvas is", () => {
     const { drawing } = await showDiagram(TALL_DIAGRAM);
 
     expect(viewOf(drawing).scale).toBeLessThan(1);
+  });
+
+  test("a diagram already at natural size is re-centred when the column narrows", async () => {
+    // Its canvas is as tall as the diagram is drawn, so a width change that
+    // does not change the scale does not change the height either — and a fit
+    // that was not redone would leave the diagram centred on a width the canvas
+    // no longer has, hanging off the side of it.
+    stubLayout(2000);
+    const { canvas, drawing } = await showDiagram(SMALL_DIAGRAM);
+    const wide = viewOf(drawing);
+    const height = canvas.style.height;
+
+    resizeCanvasTo(1600);
+
+    expect(canvas.style.height).toBe(height);
+    expect(viewOf(drawing).scale).toBe(wide.scale);
+    expect(viewOf(drawing).x).toBeCloseTo(wide.x - 200, 5);
   });
 
   test("the canvas is not padded with empty space around the diagram", async () => {
@@ -581,16 +717,11 @@ describe("clearing a selection", () => {
     expect(litElements(canvas)).toEqual([]);
   });
 
-  test("a tap selects nothing, because touch belongs to the page", async () => {
+  test("a tap selects nothing in the page, because touch belongs to it", async () => {
     const { canvas } = await showDiagram("sample-0-flowchart");
     const node = elementIn(canvas, "HTTP");
 
-    // A tap arrives as pointerover first, so a preview would flash across the
-    // diagram before the press even lands.
-    fireEvent.pointerOver(node, { pointerId: 2, pointerType: "touch" });
-    fireEvent.pointerDown(node, { pointerId: 2, pointerType: "touch" });
-    fireEvent.pointerUp(node, { pointerId: 2, pointerType: "touch" });
-    fireEvent.click(node);
+    tapOn(node);
 
     expect(litElements(canvas)).toEqual([]);
     expect(dimmedElements(canvas)).toEqual([]);
@@ -657,19 +788,19 @@ describe("connections between elements whose names contain the joining separator
  * region rather than a dialog: it never takes focus off the canvas, and a
  * reader goes on panning and selecting with it on screen.
  */
-function inspectorCard() {
-  return screen.queryByRole("region", { name: "Selected element" });
+function inspectorCard(root: HTMLElement = document.body) {
+  return within(root).queryByRole("region", { name: "Selected element" });
 }
 
-function openInspectorCard() {
-  const card = inspectorCard();
+function openInspectorCard(root?: HTMLElement) {
+  const card = inspectorCard(root);
   if (!card) throw new Error("no card is open on this canvas");
   return card;
 }
 
 /** What the open card says the selection connects to, in the order it lists them. */
-function connectionsListed() {
-  const list = within(openInspectorCard()).getByRole("list", {
+function connectionsListed(root?: HTMLElement) {
+  const list = within(openInspectorCard(root)).getByRole("list", {
     name: "Connects to",
   });
   return within(list)
@@ -677,8 +808,8 @@ function connectionsListed() {
     .map((button) => button.textContent);
 }
 
-function connectionListed(name: string) {
-  return within(openInspectorCard()).getByRole("button", { name });
+function connectionListed(name: string, root?: HTMLElement) {
+  return within(openInspectorCard(root)).getByRole("button", { name });
 }
 
 /**
@@ -827,6 +958,238 @@ describe("dismissing the card", () => {
     // Clicking the space around the drawing clears the selection too.
     await userEvent.click(surface);
     expect(inspectorCard()).toBeNull();
+  });
+});
+
+/**
+ * Promotion. A diagram too large for the reading column is opened at the size of
+ * the viewport, and what the reader has done to it comes along: the fullscreen
+ * view is the same canvas, so moving between the two is a change of size and not
+ * a change of tool.
+ */
+describe("promoting a diagram canvas to fullscreen", () => {
+  test("a control on the canvas toolbar opens the fullscreen view", async () => {
+    await showDiagram("sample-0-flowchart");
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    const { dialog } = await promote();
+
+    expect(dialog).toHaveAccessibleName("Diagram: How it fits together");
+    expect(
+      within(dialog).getByRole("button", { name: "Zoom in" }),
+    ).toBeVisible();
+    expect(
+      within(dialog).getByRole("button", { name: "Fit to screen" }),
+    ).toBeVisible();
+  });
+
+  test("clicking the diagram body selects, and no longer opens it", async () => {
+    const { canvas } = await showDiagram("sample-0-flowchart");
+
+    await userEvent.click(elementIn(canvas, "HTTP"));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(selectedIn(canvas)).toEqual(["HTTP"]);
+  });
+
+  test("carries the selection, the highlight and the card into it", async () => {
+    const { canvas } = await showDiagram("sample-0-flowchart");
+    await userEvent.click(elementIn(canvas, "HTTP"));
+
+    const { canvas: full, dialog } = await promote();
+
+    expect(selectedIn(full)).toEqual(["HTTP"]);
+    expect(litElements(full)).toEqual(["CMD", "HTTP", "QRY"]);
+    expect(dimmedElements(full)).toHaveLength(7);
+    expect(
+      within(openInspectorCard(dialog)).getByText("HTTP API (Fastify)"),
+    ).toBeVisible();
+    expect(connectionsListed(dialog)).toEqual([
+      "command handlers",
+      "query handlers",
+    ]);
+  });
+
+  test("carries what the reader did in it back out to the page", async () => {
+    const { canvas } = await showDiagram("sample-0-flowchart");
+    const { canvas: full, dialog } = await promote();
+
+    // Walking the diagram in fullscreen — pick one element, then step from its
+    // card to the next — is the reading the page should come back to.
+    await userEvent.click(elementIn(full, "HTTP"));
+    await userEvent.click(connectionListed("command handlers", dialog));
+    await userEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(selectedIn(canvas)).toEqual(["CMD"]);
+    expect(litElements(canvas)).toEqual(["CMD", "HTTP", "LEDGER", "PORTS"]);
+    expect(within(openInspectorCard()).getByText("command handlers")).toBeVisible();
+  });
+
+  test("carries a dismissed card across too, still holding its selection", async () => {
+    const { canvas } = await showDiagram("sample-0-flowchart");
+    await userEvent.click(elementIn(canvas, "HTTP"));
+    await userEvent.click(
+      within(openInspectorCard()).getByRole("button", { name: "Dismiss" }),
+    );
+
+    const { canvas: full, dialog } = await promote();
+
+    expect(inspectorCard(dialog)).toBeNull();
+    expect(litElements(full)).toEqual(["CMD", "HTTP", "QRY"]);
+  });
+
+  test("Escape closes it, keeping the selection and the page's place", async () => {
+    const { canvas } = await showDiagram("sample-0-flowchart");
+    await userEvent.click(elementIn(canvas, "HTTP"));
+    await promote();
+    expect(document.body.style.overflow).toBe("hidden");
+
+    await userEvent.keyboard("{Escape}");
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    // The page scrolls again, and the reader is back on the control they left
+    // from rather than at the top of the document.
+    expect(document.body.style.overflow).toBe("");
+    expect(expandControl()).toHaveFocus();
+    // One press left the view; it did not also clear what the reader had picked.
+    expect(selectedIn(canvas)).toEqual(["HTTP"]);
+    expect(openInspectorCard()).toBeVisible();
+  });
+
+  test("keeps the keyboard inside it, as aria-modal says the page is not there", async () => {
+    await showDiagram("sample-0-flowchart");
+    const { dialog } = await promote();
+    const closeControl = within(dialog).getByRole("button", { name: "Close" });
+
+    // The reader arrives on the way out, which is also the last stop in the
+    // view — so the next tab comes round to the first rather than walking into
+    // the page behind, where the controls cannot be seen.
+    expect(closeControl).toHaveFocus();
+    await userEvent.tab();
+    expect(within(dialog).getByRole("button", { name: "Zoom out" })).toHaveFocus();
+
+    await userEvent.tab({ shift: true });
+    expect(closeControl).toHaveFocus();
+  });
+
+  test("a second Escape then clears the selection, as it does in the page", async () => {
+    const { canvas } = await showDiagram("sample-0-flowchart");
+    await userEvent.click(elementIn(canvas, "HTTP"));
+    await promote();
+
+    await userEvent.keyboard("{Escape}");
+    await userEvent.keyboard("{Escape}");
+
+    expect(selectedIn(canvas)).toEqual([]);
+    expect(inspectorCard()).toBeNull();
+  });
+
+  test("names the gestures the fullscreen view has, not the page's", async () => {
+    await showDiagram("sample-0-flowchart");
+    expect(screen.getByText(/Ctrl \+ scroll to zoom/)).toBeInTheDocument();
+
+    const { dialog } = await promote();
+
+    // No page behind it to keep the wheel for, and a way out that the canvas in
+    // the page does not have.
+    expect(
+      within(dialog).getByText(
+        "Click to highlight · scroll to zoom · drag to pan · Esc to close",
+      ),
+    ).toBeVisible();
+  });
+
+  test("the fullscreen view zooms on a plain wheel, having no page behind it", async () => {
+    await showDiagram("sample-0-flowchart");
+    const { surface, drawing } = await promote();
+    const before = viewOf(drawing);
+
+    const event = wheelOver(surface, { deltaY: -120 });
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(viewOf(drawing).scale).toBeGreaterThan(before.scale);
+  });
+});
+
+describe("a diagram canvas met with a finger", () => {
+  test("takes no gesture in the page, so the page scrolls through it", async () => {
+    const { canvas, surface, drawing } = await showDiagram("sample-0-flowchart");
+    const before = viewOf(drawing);
+
+    touchDragAcross(surface, 60, -25);
+
+    // Nothing moved, nothing was picked, and nothing was promoted: the diagram
+    // is exactly the picture it used to be while a finger is on the page.
+    expect(viewOf(drawing)).toEqual(before);
+    expect(litElements(canvas)).toEqual([]);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  test("a tap in the page opens the fullscreen view", async () => {
+    const { canvas } = await showDiagram("sample-0-flowchart");
+
+    tapOn(elementIn(canvas, "HTTP"));
+
+    const { canvas: full } = fullscreenCanvas();
+    // The tap opened the view; it did not also pick what it landed on.
+    expect(selectedIn(full)).toEqual([]);
+    expect(litElements(full)).toEqual([]);
+  });
+
+  test("a tap opens it on a diagram with nothing to select, too", async () => {
+    const { surface } = await showDiagram(UNMODELLED_DIAGRAM);
+
+    tapOn(surface);
+
+    expect(screen.getByRole("dialog")).toBeVisible();
+  });
+
+  test("a finger that travelled was the page scrolling, and opens nothing", async () => {
+    const { canvas } = await showDiagram("sample-0-flowchart");
+
+    touchDragAcross(elementIn(canvas, "HTTP"), 80, 40);
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  test("in fullscreen a drag pans, because nothing is under it to scroll", async () => {
+    await showDiagram("sample-0-flowchart");
+    const { canvas: full, surface, drawing } = await promote();
+    const before = viewOf(drawing);
+
+    touchDragAcross(surface, 60, -25);
+
+    const after = viewOf(drawing);
+    expect(after.x).toBeCloseTo(before.x + 60, 5);
+    expect(after.y).toBeCloseTo(before.y - 25, 5);
+    // A pan is not a selection, however the drag ends.
+    expect(litElements(full)).toEqual([]);
+  });
+
+  test("in fullscreen a pinch zooms", async () => {
+    await showDiagram("sample-0-flowchart");
+    const { surface, drawing } = await promote();
+    const before = viewOf(drawing);
+
+    pinchOn(surface, 100, 200);
+    expect(viewOf(drawing).scale).toBeCloseTo(before.scale * 2, 5);
+
+    pinchOn(surface, 200, 100);
+    expect(viewOf(drawing).scale).toBeCloseTo(before.scale, 5);
+  });
+
+  test("in fullscreen a tap selects", async () => {
+    await showDiagram("sample-0-flowchart");
+    const { canvas: full, dialog } = await promote();
+
+    tapOn(elementIn(full, "HTTP"));
+
+    expect(selectedIn(full)).toEqual(["HTTP"]);
+    expect(litElements(full)).toEqual(["CMD", "HTTP", "QRY"]);
+    expect(
+      within(openInspectorCard(dialog)).getByText("HTTP API (Fastify)"),
+    ).toBeVisible();
   });
 });
 

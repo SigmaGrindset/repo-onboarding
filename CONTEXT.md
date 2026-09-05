@@ -72,6 +72,14 @@ of what a diagram contains.
 _Avoid_: viewer, lightbox, image, editor — "editor" is actively misleading, since nothing
 here edits
 
+**Promotion**:
+Opening a diagram canvas at the size of the viewport, and the way back out of it. The
+promoted canvas is the same canvas — one selection, one highlight, one inspector card
+across both — so promoting changes how much room a diagram has and nothing else.
+_Avoid_: lightbox, modal, overlay, full screen as two words. The control the reader
+presses is still labelled "Expand diagram", which says what will happen rather than
+naming the concept.
+
 **Addressable element**:
 A part of a rendered diagram that carries identity and can therefore be selected: a node,
 an entity, a participant, and — in a sequence diagram, whose arrows are its content — a

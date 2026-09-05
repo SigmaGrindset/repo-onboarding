@@ -203,7 +203,7 @@ export function DependencyGraph({ data }: { data: DependencyGraphData }) {
     updatePan(e);
   };
 
-  const endInteraction = () => {
+  const endInteraction = (e: React.PointerEvent) => {
     if (dragState.current) {
       const node = nodesRef.current.find((n) => n.id === dragState.current);
       if (node) {
@@ -213,7 +213,9 @@ export function DependencyGraph({ data }: { data: DependencyGraphData }) {
       simRef.current?.alphaTarget(0);
       dragState.current = null;
     }
-    endPan();
+    // Named, so that lifting one finger out of a pinch hands the gesture to the
+    // other rather than ending it under a finger still on the screen.
+    endPan(e);
   };
 
   // --- Highlight computation ---------------------------------------------
