@@ -109,7 +109,10 @@ the diagram does not have is left inert rather than attached to nothing.
 Reading the drawing and marking it are the same knowledge, so they live in the same module.
 `markDiagram` writes our own attributes onto what `deriveDiagramModel` read, and every
 selector that knows what Mermaid stamps is in `web/src/lib/diagram-model.ts` — a version that
-changes the drawing has one file to answer to. Marking also *adds* to the drawing in one
+changes the drawing has one file to answer to. There is one deliberate second copy, and only
+one: the browser contract spec below restates the table instead of importing the module,
+because a spec that read its selectors out of the code under test would move with them and
+assert nothing. Marking also *adds* to the drawing in one
 place: a message arrow is two pixels of stroke, so each gets an invisible twin with a stroke
 wide enough to point at. Mermaid styles its own drawing through id-scoped rules that outrank
 any presentation attribute, so the twin states its width inline and `!important` — without
@@ -137,12 +140,20 @@ belt-and-braces:
   model whose connections all failed to resolve degrades the same way, because a diagram with
   no connections has no neighbourhood to light — so an upgrade that moved only the edge
   identity costs the reader selection rather than giving them a broken half of it.
-- **A browser contract spec**, which renders through the real Mermaid and asserts the table
-  above. It does not exist yet — it is the last ticket of this feature, because it has to
-  assert the whole table, not the part read first. Until it lands, an upgrade that moves the
-  identity degrades every canvas to pan and zoom without failing a build. Whoever upgrades
-  Mermaid before then should regenerate the fixtures and read the diff. Afterwards, expect
-  that spec to be the thing that goes red.
+- **A browser contract spec.** `web/e2e/diagram-contract.spec.ts` renders this repository's
+  own diagrams through the real Mermaid in a real browser, and asserts the rows of the table
+  above that the canvas cannot do without: element identity for each of the three families,
+  the connection endpoints that resolve against it, and the mirrored foot of a lifeline —
+  plus one live selection proving the derived model still reaches the drawing. It is the only
+  test of this feature that is never handed a fixture, which is the whole reason it exists.
+  **On a Mermaid upgrade, run it first** (`npm run test:e2e`): it is what should go red, it
+  names the row that moved, and each failure carries the installed version and what to do
+  next — where the fixtures would only show a diff to be read.
+
+  It deliberately leaves out the label rows and the decoration list. Those are read by the
+  component suite against the fixtures, so they go red on the regeneration an upgrade calls
+  for — whereas identity that moves leaves the canvas with nothing to say at all, which is
+  the failure no other test can see.
 
 **The derived model is also the diagram's accessible content.** A canvas that can read its
 diagram presents the outline generated from that model — every addressable element and what

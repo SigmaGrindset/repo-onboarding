@@ -16,7 +16,8 @@
  *
  * The fixtures are a photograph of the pinned Mermaid version, so they cannot
  * notice a library upgrade that breaks the identity contract. That is the job of
- * the browser contract spec (see docs/adr/0003-*.md).
+ * the browser contract spec, `e2e/diagram-contract.spec.ts` — run it before
+ * regenerating these, because it names the row that moved (see docs/adr/0003-*.md).
  */
 import { chromium } from "@playwright/test";
 import type { Analysis } from "@schema/analysis";
