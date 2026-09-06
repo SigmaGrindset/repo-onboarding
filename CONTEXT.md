@@ -28,6 +28,20 @@ One named division of an analysis document, with its own key in the document and
 own route in the viewer. The mapping is one-to-one in both directions.
 _Avoid_: tab, page, panel
 
+**Core section**:
+A section every analysis document is expected to carry, whatever the repository is. One
+missing from a document is a gap: the viewer still shows it, and says the document
+predates it.
+_Avoid_: required section — several are optional in the schema and still core
+
+**Specialized section**:
+A section only some repositories have anything to put in. It is present exactly when the
+repository has the substance for it, and the viewer shows nothing at all when it is
+absent — a repository with no design system has no Design System to be missing.
+_Avoid_: optional section (that is a core section a document predates), conditional
+section, and anything naming a project type — nothing anywhere records what type a
+repository is
+
 **Tech stack entry**:
 One technology this repository is built on, named with the role it plays *in this
 repository specifically*. The curated shortlist, not an inventory of dependencies.
@@ -117,3 +131,12 @@ anything, which is what a pointer's hover does — and like a hover it goes when
 does, leaving whatever they had actually selected.
 _Avoid_: focus, focused element, active element. Focus belongs to the canvas as a whole,
 which is one tab stop however many elements its diagram draws.
+
+## API surface
+
+**Actor**:
+A class of caller the API surface distinguishes between — an administrator, a signed-in
+reader, an unauthenticated visitor, a service account, a scheduled job. Named with what
+it can do in this repository, and joined by name to the routes that require it.
+_Avoid_: role — taken by tech stack entries, which name the role a technology plays —
+user, persona, permission

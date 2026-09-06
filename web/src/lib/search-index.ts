@@ -1,6 +1,6 @@
 import type { Analysis } from "@schema/analysis";
 import { slugify } from "./format";
-import { ANALYSIS_SECTIONS } from "./sections";
+import { visibleSections } from "./sections";
 
 /**
  * One jumpable target in the Cmd+K palette. Built server-side from the
@@ -34,7 +34,7 @@ export interface SearchItem {
 export function buildSearchIndex(analysis: Analysis, base: string): SearchItem[] {
   const items: SearchItem[] = [];
 
-  for (const s of ANALYSIS_SECTIONS) {
+  for (const s of visibleSections(analysis)) {
     items.push({
       group: "Sections",
       label: s.label,

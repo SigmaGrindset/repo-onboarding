@@ -10,6 +10,7 @@ import { ShareDialog } from "@/components/ShareDialog";
 import { CommandPalette } from "@/components/CommandPalette";
 import { buildSearchIndex } from "@/lib/search-index";
 import { buildSuggestedQuestions } from "@/lib/suggested-questions";
+import { visibleSections } from "@/lib/sections";
 import { isCloudMode } from "@/lib/mode";
 import { isCloudId, uuidFromCloudId, isShareId } from "@/lib/ids";
 import { isChatEnabled } from "@/lib/chat/config";
@@ -237,7 +238,7 @@ export default async function AnalysisLayout({
 
           <OnboardingSidebarCard analysisId={id} />
 
-          <SectionNav id={id} />
+          <SectionNav id={id} sections={visibleSections(analysis)} />
         </div>
       </aside>
 

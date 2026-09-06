@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 const navigationMocks = vi.hoisted(() => ({
@@ -10,6 +10,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { SectionNav } from "@/components/SectionNav";
+import { ANALYSIS_SECTIONS, type AnalysisSection } from "@/lib/sections";
 
 const layoutProperties = [
   "clientWidth",
@@ -26,7 +27,7 @@ const originalLayoutDescriptors = new Map(
   ]),
 );
 
-describe("SectionNav mobile overflow", () => {
+describe("SectionNav", () => {
   let scrollLeft = 0;
   const scrollTo = vi.fn((options: ScrollToOptions) => {
     scrollLeft = options.left ?? 0;
@@ -100,7 +101,7 @@ describe("SectionNav mobile overflow", () => {
 
   test("centers a late active section and updates the edge cues", async () => {
     navigationMocks.pathname = "/analysis/sample/tasks";
-    const { container } = render(<SectionNav id="sample" />);
+    const { container } = render(<SectionNav id="sample" sections={ANALYSIS_SECTIONS} />);
 
     expect(screen.getByRole("link", { name: "First Tasks" })).toHaveAttribute(
       "aria-current",
@@ -120,7 +121,7 @@ describe("SectionNav mobile overflow", () => {
   });
 
   test("shows and hides fades as the tab strip scrolls", () => {
-    const { container } = render(<SectionNav id="sample" />);
+    const { container } = render(<SectionNav id="sample" sections={ANALYSIS_SECTIONS} />);
     const nav = screen.getByRole("navigation", { name: "Analysis sections" });
     const leftFade = container.querySelector('[data-scroll-edge="left"]');
     const rightFade = container.querySelector('[data-scroll-edge="right"]');
@@ -138,13 +139,38 @@ describe("SectionNav mobile overflow", () => {
     expect(rightFade).toHaveAttribute("data-visible", "false");
   });
 
+  test("renders only the sections the document yields", () => {
+    navigationMocks.pathname = "/analysis/sample/tasks";
+    // A document that yields a shorter list — a specialized section its
+    // repository has nothing to put in never reaches the rail at all.
+    const sections: AnalysisSection[] = [
+      { slug: "", label: "Overview", class: "core" },
+      { slug: "guide", label: "Contributor Guide", class: "core" },
+      { slug: "tasks", label: "First Tasks", class: "core" },
+    ];
+
+    render(<SectionNav id="sample" sections={sections} />);
+
+    const nav = screen.getByRole("navigation", { name: "Analysis sections" });
+    expect(
+      within(nav)
+        .getAllByRole("link")
+        .map((link) => link.textContent),
+    ).toEqual(["Overview", "Contributor Guide", "First Tasks"]);
+    expect(screen.queryByRole("link", { name: "Hotspots" })).toBeNull();
+    expect(screen.getByRole("link", { name: "First Tasks" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  });
+
   test("avoids animated scrolling when reduced motion is requested", async () => {
     navigationMocks.pathname = "/analysis/sample/tasks";
     vi.mocked(window.matchMedia).mockReturnValue({
       matches: true,
     } as MediaQueryList);
 
-    render(<SectionNav id="sample" />);
+    render(<SectionNav id="sample" sections={ANALYSIS_SECTIONS} />);
 
     await waitFor(() =>
       expect(scrollTo).toHaveBeenCalledWith({ left: 600, behavior: "auto" }),

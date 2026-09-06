@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { ANALYSIS_SECTIONS } from "@/lib/sections";
+import type { AnalysisSection, SectionSlug } from "@/lib/sections";
 
-const ICONS: Record<string, ReactNode> = {
+/** One per slug — the type makes a section added without an icon a build error. */
+const ICONS: Record<SectionSlug, ReactNode> = {
   "": <IconOverview />,
   architecture: <IconArchitecture />,
   graph: <IconGraph />,
@@ -19,7 +20,18 @@ const ICONS: Record<string, ReactNode> = {
   versions: <IconVersions />,
 };
 
-export function SectionNav({ id }: { id: string }) {
+/**
+ * The section rail. `sections` is the list derived from the analysis document
+ * by `visibleSections` and resolved on the server, so the nav never needs the
+ * document itself — only the slugs and labels it should show.
+ */
+export function SectionNav({
+  id,
+  sections,
+}: {
+  id: string;
+  sections: AnalysisSection[];
+}) {
   const pathname = usePathname();
   const base = `/analysis/${id}`;
   const navRef = useRef<HTMLElement>(null);
@@ -102,7 +114,7 @@ export function SectionNav({ id }: { id: string }) {
         aria-label="Analysis sections"
         className="flex gap-1.5 overflow-x-auto px-1 pb-1 lg:flex-col lg:gap-0.5 lg:overflow-visible lg:px-0 lg:pb-0"
       >
-        {ANALYSIS_SECTIONS.map((s) => {
+        {sections.map((s) => {
           const href = s.slug ? `${base}/${s.slug}` : base;
           const active =
             s.slug === ""

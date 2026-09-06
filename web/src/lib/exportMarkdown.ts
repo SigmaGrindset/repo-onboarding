@@ -13,15 +13,21 @@
  * byte-identical to the canonical `.mjs` for every fixture. If you change one,
  * change both and keep the output identical.
  *
+ * ONE STRUCTURAL DIVERGENCE, deliberate: the sections this renders and their
+ * order come from `visibleSections` (the shared registry), where the canonical
+ * `.mjs` keeps a literal list — it is vendored standalone into the CLI and may
+ * have zero imports. Parity is checked per fixture, so it catches the two
+ * disagreeing about a section some fixture carries and NOT about a section none
+ * of them does: when you add a specialized section, add a fixture that carries
+ * it, or the mirror can render it while the `.mjs` silently does not.
+ *
  * Hard constraints (a drift test and a determinism test depend on them):
- *   - Self-contained, pure, deterministic.
+ *   - Pure and deterministic. Self-contained but for the section registry —
+ *     the canonical `.mjs` has no imports at all.
  *   - No Date.now(), Math.random(), or locale-dependent APIs. Number and date
  *     formatting are hand-rolled so output never varies by host locale.
  *   - LF (`\n`) line endings only. Output is normalized to LF as a final safety
  *     net.
- *
- * Section order mirrors `web/src/lib/sections.ts` (minus the viewer-only
- * "Versions" tab, which is not part of an analysis document).
  */
 
 import type {
@@ -29,26 +35,13 @@ import type {
   FileRef,
   SetupStep,
 } from "@schema/analysis";
+import { visibleSections, type SectionSlug } from "./sections";
 
 const DEFAULT_SITE_URL = "https://repo-onboarding-tau.vercel.app";
 
 const MONTHS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
-
-/** Rendered sections, in order — drives both the body and the Contents TOC. */
-const SECTIONS = [
-  "Overview",
-  "Architecture",
-  "Dependency Graph",
-  "Codebase Map",
-  "Contributor Guide",
-  "Guided Tour",
-  "Hotspots",
-  "Setup",
-  "Learn",
-  "First Tasks",
 ];
 
 // ---------------------------------------------------------------------------
@@ -165,9 +158,9 @@ function renderPitch(analysis: Analysis): string[] {
   ];
 }
 
-function renderContents(): string[] {
+function renderContents(labels: string[]): string[] {
   const lines = ["## Contents", ""];
-  for (const label of SECTIONS) {
+  for (const label of labels) {
     lines.push(`- [${label}](#${slugify(label)})`);
   }
   return lines;
@@ -498,6 +491,29 @@ function renderFooter(
 // ---------------------------------------------------------------------------
 
 /**
+ * The body each section slug renders as. The section list and its order come
+ * from the shared registry; `null` marks a slug that is a viewer-only tab
+ * rather than a division of an analysis document, and so has no body to export.
+ * Renderers of core sections a document predates say so in place of a body.
+ *
+ * One entry per slug, so a section added to the registry cannot quietly go
+ * missing from the export — it fails the build until this map answers for it.
+ */
+const RENDERERS: Record<SectionSlug, ((analysis: Analysis) => string[]) | null> = {
+  "": renderOverview,
+  architecture: renderArchitecture,
+  graph: renderDependencyGraph,
+  map: renderCodebaseMap,
+  guide: renderContributorGuide,
+  tour: renderTour,
+  hotspots: renderHotspots,
+  setup: renderSetup,
+  learn: renderLearn,
+  tasks: renderFirstTasks,
+  versions: null,
+};
+
+/**
  * Render a validated analysis document as an ONBOARDING.md Markdown string.
  * @returns Markdown with LF line endings and a single trailing newline
  */
@@ -508,20 +524,16 @@ export function renderOnboardingMarkdown(
   const siteUrl = options.siteUrl || DEFAULT_SITE_URL;
   const generatorVersion = options.generatorVersion;
 
+  const sections = visibleSections(analysis).flatMap((s) => {
+    const render = RENDERERS[s.slug];
+    return render ? [{ label: s.label, render }] : [];
+  });
+
   const blocks = [
     renderHeader(analysis, siteUrl),
     renderPitch(analysis),
-    renderContents(),
-    renderOverview(analysis),
-    renderArchitecture(analysis),
-    renderDependencyGraph(analysis),
-    renderCodebaseMap(analysis),
-    renderContributorGuide(analysis),
-    renderTour(analysis),
-    renderHotspots(analysis),
-    renderSetup(analysis),
-    renderLearn(analysis),
-    renderFirstTasks(analysis),
+    renderContents(sections.map((s) => s.label)),
+    ...sections.map((s) => s.render(analysis)),
     renderFooter(analysis, siteUrl, generatorVersion),
   ];
 

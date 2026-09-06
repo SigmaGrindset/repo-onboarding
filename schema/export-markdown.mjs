@@ -12,8 +12,14 @@
  *   - LF (`\n`) line endings only. This file is authored with LF and the output
  *     is normalized to LF as a final safety net.
  *
- * Section order mirrors `web/src/lib/sections.ts` (minus the viewer-only
- * "Versions" tab, which is not part of an analysis document).
+ * Section order is owned by the registry in `web/src/lib/sections.ts` (minus
+ * the viewer-only "Versions" tab, which is not part of an analysis document).
+ * The TypeScript mirror derives its order from that registry; this file cannot,
+ * because it may have zero imports, so it restates the order literally. The
+ * mirror's parity test compares the two per fixture, so it catches a reordered
+ * or relabelled section every fixture carries — and cannot catch a section none
+ * of them does. Add a specialized section here and to the mirror together, and
+ * give a fixture that section, or the two can disagree unnoticed.
  */
 
 const DEFAULT_SITE_URL = "https://repo-onboarding-tau.vercel.app";
