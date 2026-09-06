@@ -357,3 +357,210 @@ test("validate: a stray property on a route is rejected", { skip: skipNoSample }
     res.stdout,
   );
 });
+
+// --- API surface: the actor coverage join ------------------------------------
+//
+// `actors` is optional within the section, but a document that carries one is
+// making a claim about its own routes — so the claim is checked rather than
+// trusted, the same shape as the learning-resource coverage rule above and for
+// the reason recorded in ADR 0001. The join has four outcomes, and each has a
+// test below: described and used (valid), described and unused, used and
+// undescribed, and neither (nothing to say either way).
+
+/** One entry per distinct actor in ROUTES — the fully covered case. */
+const ACTORS = [
+  {
+    name: "public",
+    summary: "Anyone on the internet, with no account and no token — reads only.",
+  },
+  {
+    name: "signed-in reader",
+    summary: "A caller with an account of their own, who may create new items.",
+  },
+  {
+    name: "item owner",
+    summary: "The signed-in caller who created an item, and the only one who may delete it.",
+  },
+];
+
+test("validate: an actor described and required by a route is valid", { skip: skipNoSample }, async () => {
+  const { res } = await validateMutated((doc) => {
+    doc.apiSurface = { routes: ROUTES, actors: ACTORS };
+  }, "api-actors-ok");
+  assert.equal(res.status, 0, res.stdout);
+});
+
+test("validate: actors are optional — routes alone remain valid", { skip: skipNoSample }, async () => {
+  const { res } = await validateMutated((doc) => {
+    doc.apiSurface = { routes: ROUTES };
+  }, "api-actors-absent");
+  assert.equal(res.status, 0, res.stdout);
+});
+
+test("validate: an actor no route requires => actor-coverage (exit 1)", { skip: skipNoSample }, async () => {
+  const { res, parsed } = await validateMutated((doc) => {
+    doc.apiSurface = {
+      routes: ROUTES,
+      actors: [
+        ...ACTORS,
+        {
+          name: "___nobody_calls_this___",
+          summary: "An actor the route list never requires, which is the failure.",
+        },
+      ],
+    };
+  }, "api-actor-orphan");
+  assert.equal(res.status, 1);
+  const issue = parsed.issues.find((i) => i.keyword === "actor-coverage");
+  assert.ok(issue, `no actor-coverage issue: ${res.stdout}`);
+  assert.equal(issue.path, "/apiSurface/actors/3/name");
+  assert.ok(issue.got.includes("___nobody_calls_this___"), issue.got);
+  // The same structured shape as the learning-resource coverage rule.
+  assert.ok(issue.message.length > 0);
+  assert.ok(issue.expected.length > 0);
+});
+
+test("validate: a route requiring an undescribed actor => actor-coverage (exit 1)", { skip: skipNoSample }, async () => {
+  const { res, parsed } = await validateMutated((doc) => {
+    doc.apiSurface = { routes: ROUTES, actors: ACTORS.slice(0, 2) };
+  }, "api-actor-gap");
+  assert.equal(res.status, 1);
+  const issue = parsed.issues.find((i) => i.keyword === "actor-coverage");
+  assert.ok(issue, `no actor-coverage issue: ${res.stdout}`);
+  assert.equal(issue.path, "/apiSurface/actors");
+  assert.match(issue.message, /item owner/);
+  // Names the route that requires it, so the gap is locatable from the message.
+  assert.match(issue.message, /DELETE \/items\/:id/);
+  assert.ok(issue.expected.length > 0);
+  assert.equal(issue.got, "undefined");
+});
+
+test("validate: an actor neither described nor required is not an issue", { skip: skipNoSample }, async () => {
+  // The fourth cell of the join. Renaming an actor on both sides at once leaves
+  // the old name undescribed AND unrequired — and that has to be silent, or the
+  // rule would be reporting on names it has no reason to know about.
+  const { res, parsed } = await validateMutated((doc) => {
+    doc.apiSurface = {
+      routes: ROUTES.map((r) =>
+        r.actor === "item owner" ? { ...r, actor: "item author" } : { ...r },
+      ),
+      actors: ACTORS.map((a) =>
+        a.name === "item owner" ? { ...a, name: "item author" } : { ...a },
+      ),
+    };
+  }, "api-actor-renamed");
+  assert.equal(res.status, 0, res.stdout);
+  assert.deepEqual(parsed.issues, []);
+  // Silence about the retired name specifically is what separates this cell
+  // from "described and used", which is silent too.
+  assert.ok(
+    !res.stdout.includes("item owner"),
+    `the validator reported on a name in neither list: ${res.stdout}`,
+  );
+});
+
+test("validate: the same actor described twice => actor-coverage (exit 1)", { skip: skipNoSample }, async () => {
+  const { res, parsed } = await validateMutated((doc) => {
+    doc.apiSurface = { routes: ROUTES, actors: [...ACTORS, { ...ACTORS[0] }] };
+  }, "api-actor-duplicate");
+  assert.equal(res.status, 1);
+  const issue = parsed.issues.find((i) => i.keyword === "actor-coverage");
+  assert.ok(issue, `no actor-coverage issue: ${res.stdout}`);
+  assert.equal(issue.path, "/apiSurface/actors/3/name");
+  assert.match(issue.message, /duplicate/);
+});
+
+test("validate: an actor summary must say what the actor can do", { skip: skipNoSample }, async () => {
+  const { res, parsed } = await validateMutated((doc) => {
+    doc.apiSurface = {
+      routes: ROUTES,
+      actors: ACTORS.map((a, i) => (i === 0 ? { ...a, summary: "reads" } : a)),
+    };
+  }, "api-actor-thin-summary");
+  assert.equal(res.status, 1);
+  assert.ok(
+    parsed.issues.some(
+      (i) => i.path === "/apiSurface/actors/0/summary" && i.keyword === "minLength",
+    ),
+    res.stdout,
+  );
+});
+
+test("validate: an empty actor list is rejected rather than shipped as a hollow claim", { skip: skipNoSample }, async () => {
+  const { res, parsed } = await validateMutated((doc) => {
+    doc.apiSurface = { routes: ROUTES, actors: [] };
+  }, "api-actors-empty");
+  assert.equal(res.status, 1);
+  assert.ok(
+    parsed.issues.some(
+      (i) => i.path === "/apiSurface/actors" && i.keyword === "minItems",
+    ),
+    res.stdout,
+  );
+});
+
+test("validate: an actor must carry a summary", { skip: skipNoSample }, async () => {
+  const { res, parsed } = await validateMutated((doc) => {
+    doc.apiSurface = {
+      routes: ROUTES,
+      actors: ACTORS.map((a, i) => (i === 1 ? { name: a.name } : a)),
+    };
+  }, "api-actor-no-summary");
+  assert.equal(res.status, 1);
+  const issue = parsed.issues.find(
+    (i) => i.path === "/apiSurface/actors/1" && i.keyword === "required",
+  );
+  assert.ok(issue, res.stdout);
+  assert.equal(issue.expected, 'property "summary"');
+});
+
+test("validate: a stray property on an actor is rejected", { skip: skipNoSample }, async () => {
+  const { res, parsed } = await validateMutated((doc) => {
+    doc.apiSurface = {
+      routes: ROUTES,
+      actors: ACTORS.map((a, i) => (i === 2 ? { ...a, scope: "admin" } : a)),
+    };
+  }, "api-actor-stray-key");
+  assert.equal(res.status, 1);
+  assert.ok(
+    parsed.issues.some(
+      (i) =>
+        i.path === "/apiSurface/actors/2" && i.keyword === "additionalProperties",
+    ),
+    res.stdout,
+  );
+});
+
+test("validate: the actor join is offline and deterministic (ADR 0002)", { skip: skipNoSample }, async () => {
+  // In-process on purpose: the promise is about the check itself, so the test
+  // takes the network away from it and runs it twice on the same document.
+  const { validateAnalysisDocument } = await import("../vendor/validate-core.mjs");
+  const doc = JSON.parse(readFileSync(SAMPLE, "utf8"));
+  doc.apiSurface = {
+    routes: ROUTES,
+    actors: [
+      ...ACTORS.slice(0, 2),
+      {
+        name: "___nobody_calls_this___",
+        summary: "An actor the route list never requires, which is the failure.",
+      },
+    ],
+  };
+
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = () => {
+    throw new Error("the validator must not reach the network");
+  };
+  try {
+    const first = validateAnalysisDocument(doc, { crossRefs: true });
+    const second = validateAnalysisDocument(JSON.parse(JSON.stringify(doc)), {
+      crossRefs: true,
+    });
+    assert.deepEqual(first, second, "two runs of the same document disagree");
+    const coverage = first.issues.filter((i) => i.keyword === "actor-coverage");
+    // Both directions of the broken join, reported without a single request.
+    assert.equal(coverage.length, 2, JSON.stringify(first.issues, null, 2));
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});

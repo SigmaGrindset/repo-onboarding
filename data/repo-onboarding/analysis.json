@@ -1953,6 +1953,32 @@
         "actor": "token-bearing CLI",
         "note": "The published CLI's publishing endpoint, and the only route that authenticates itself. It is listed as public in `proxy.ts` precisely so Clerk does not redirect it to a sign-in page before its own `Authorization: Bearer roa_…` check can run."
       }
+    ],
+    "actors": [
+      {
+        "name": "public",
+        "summary": "Anyone on the internet, with no account at all: the landing page, the bring-your-own-model pitch, and the Open Graph images that let a link unfurl."
+      },
+      {
+        "name": "any signed-in account",
+        "summary": "A signed-in caller with no relationship to any particular analysis. It can publish a document of its own and mint or revoke its own API tokens, and nothing else."
+      },
+      {
+        "name": "analysis reader",
+        "summary": "Whoever the analysis itself lets in: a committed fixture in local mode, an account holding an access row, or a visitor holding the unlisted st_ link. Reads only."
+      },
+      {
+        "name": "analysis owner",
+        "summary": "The account that uploaded an analysis. The only actor that can delete it, rotate or revoke its unlisted link, and grant or withdraw another account's access."
+      },
+      {
+        "name": "signed-in analysis reader",
+        "summary": "An analysis reader who also has an account — which an unlisted-link visitor does not. The routes that spend money or remember a reader's progress refuse without one."
+      },
+      {
+        "name": "token-bearing CLI",
+        "summary": "A machine: the published command-line package presenting a personal API token instead of a session, publishing an analysis on behalf of the account that minted it."
+      }
     ]
   },
   "firstTasks": [

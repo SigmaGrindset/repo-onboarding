@@ -379,13 +379,35 @@ export interface ApiRoute {
 }
 
 /**
+ * One class of caller the API surface distinguishes between, joined by name to
+ * the routes that require it.
+ */
+export interface ApiActor {
+  /** Matches the `actor` of every route requiring it, character for character. */
+  name: string;
+  /**
+   * What this actor can do in THIS repository, in a line. Machine callers get
+   * one too — a service account, a scheduled job or a webhook sender is an
+   * actor.
+   */
+  summary: string;
+}
+
+/**
  * What this repository exposes over the network. `routes` is exhaustive rather
  * than curated on purpose: a reader must be able to conclude that a route not
  * listed does not exist. Curation applies to `ApiRoute.note`, where attention
  * is scarce.
+ *
+ * `actors` is optional — a repository that only separates public callers from
+ * authenticated ones says so in the routes alone. When present it is a claim
+ * about the routes, and the two must agree exactly: the `actor-coverage` rule
+ * fails a document where an actor is described but required by no route, or
+ * required by a route and described nowhere.
  */
 export interface ApiSurface {
   routes: ApiRoute[];
+  actors?: ApiActor[];
 }
 
 // ---------------------------------------------------------------------------
@@ -441,7 +463,8 @@ export interface ValidationIssue {
    * `additionalProperties`, `minItems`, `minLength`, `minimum`, `maximum`,
    * `pattern`, `format`, `contains`, …) or one of the optional cross-reference
    * keywords: `"edge-integrity"` (dependency-graph nodes/edges),
-   * `"resource-coverage"` and `"resource-origin"` (learning resources).
+   * `"resource-coverage"` and `"resource-origin"` (learning resources), and
+   * `"actor-coverage"` (the API surface's actor-to-route join).
    */
   keyword: string;
   /**

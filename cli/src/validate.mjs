@@ -3,8 +3,9 @@
  *
  * Validates an analysis document against the vendored schema AND the
  * cross-reference rules the schema cannot express — dependency-graph edge
- * integrity, plus learning-resource coverage and origin. Human
- * output mirrors schema/validate.mjs; `--json` emits `{ valid, issues }`.
+ * integrity, learning-resource coverage and origin, and the API surface's
+ * actor coverage. Human output mirrors schema/validate.mjs; `--json` emits
+ * `{ valid, issues }`.
  *
  * Exit codes: 0 valid · 1 invalid · 2 usage / IO / parse error.
  */

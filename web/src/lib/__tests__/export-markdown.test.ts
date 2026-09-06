@@ -134,6 +134,23 @@ test("a document with an API surface exports it, in its nav position", () => {
   }
 });
 
+test("the exported API surface carries the actor summaries", () => {
+  const doc = fixture("repo-onboarding");
+  const md = renderOnboardingMarkdown(doc);
+
+  const actors = doc.apiSurface?.actors ?? [];
+  assert.ok(actors.length > 0, "the fixture describes its actors");
+  assert.ok(md.includes("### Actors"));
+  for (const actor of actors) {
+    assert.ok(
+      md.includes(`- **${actor.name}** — ${actor.summary}`),
+      `the summary for ${actor.name} is missing`,
+    );
+  }
+  // The key to the table, so it reads after the rows it explains.
+  assert.ok(md.indexOf("| Method | Path | Actor | File |") < md.indexOf("### Actors"));
+});
+
 test("a document without an API surface exports no such section", () => {
   const md = renderOnboardingMarkdown(fixture("sample"));
   assert.ok(!md.includes("## API Surface"));

@@ -19,8 +19,9 @@
  * @property {string}  path      JSON Pointer to the offending location; the
  *   root (empty instancePath) is normalized to the literal string `"(root)"`.
  * @property {string}  message   Human-readable problem (Ajv `message`).
- * @property {string}  keyword   Failing rule: an Ajv keyword or
- *   `"edge-integrity"`.
+ * @property {string}  keyword   Failing rule: an Ajv keyword or one of the
+ *   cross-reference keywords (`"edge-integrity"`, `"resource-coverage"`,
+ *   `"resource-origin"`, `"actor-coverage"`).
  * @property {string} [expected] Short rendering of what was expected, derived
  *   from `keyword` + Ajv `params`. Omitted when not meaningful.
  * @property {string} [got]      Short (<=80 char) rendering of the offending
@@ -386,6 +387,86 @@ function learningResourceIssues(doc) {
 }
 
 // ---------------------------------------------------------------------------
+// API-surface checks (optional; the actor join the schema cannot express)
+// ---------------------------------------------------------------------------
+
+/**
+ * `apiSurface.actors` is optional — a repository that only distinguishes public
+ * callers from authenticated ones expresses that in the route entries alone —
+ * but a document that carries the list is making a claim about its own routes.
+ * The schema can shape each entry and cannot check that claim, because it is a
+ * cross-reference:
+ *
+ *   - `"actor-coverage"` — every actor described is required by at least one
+ *     route, every actor a route requires is described, and no actor is
+ *     described twice.
+ *
+ * The same shape as `resource-coverage` above, and for the reason recorded in
+ * ADR 0001: a join by name drifts unless something checks it. String comparison
+ * only — no network, no clock — per ADR 0002. An absent list produces no
+ * issues; structural problems are left to the schema.
+ * @returns {ValidationIssue[]}
+ */
+function apiSurfaceIssues(doc) {
+  /** @type {ValidationIssue[]} */
+  const issues = [];
+  const actors = doc?.apiSurface?.actors;
+  if (!Array.isArray(actors)) return issues;
+
+  const routes = Array.isArray(doc?.apiSurface?.routes)
+    ? doc.apiSurface.routes
+    : [];
+
+  // Each required actor mapped to the FIRST route requiring it, in document
+  // order, so a gap can be reported with somewhere to go and look at it.
+  const requiredBy = new Map();
+  for (const route of routes) {
+    const actor = route?.actor;
+    if (typeof actor !== "string" || requiredBy.has(actor)) continue;
+    requiredBy.set(actor, `${route?.method ?? "?"} ${route?.path ?? "?"}`);
+  }
+
+  const described = new Set();
+  actors.forEach((actor, i) => {
+    const name = actor?.name;
+    if (typeof name !== "string") return;
+    if (described.has(name)) {
+      issues.push({
+        path: `/apiSurface/actors/${i}/name`,
+        message: `duplicate actor entry for ${renderValue(name)}`,
+        keyword: "actor-coverage",
+        expected: "exactly one entry per actor",
+        got: renderValue(name),
+      });
+      return;
+    }
+    described.add(name);
+    if (!requiredBy.has(name)) {
+      issues.push({
+        path: `/apiSurface/actors/${i}/name`,
+        message: "an actor described here that no route requires",
+        keyword: "actor-coverage",
+        expected: "an actor named by at least one apiSurface.routes[].actor",
+        got: renderValue(name),
+      });
+    }
+  });
+
+  for (const [name, route] of requiredBy) {
+    if (described.has(name)) continue;
+    issues.push({
+      path: "/apiSurface/actors",
+      message: `no actor entry for ${renderValue(name)}, required by ${route}`,
+      keyword: "actor-coverage",
+      expected: "one entry per actor a route requires",
+      got: "undefined",
+    });
+  }
+
+  return issues;
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -395,9 +476,10 @@ function learningResourceIssues(doc) {
  * @param {unknown} doc  The parsed JSON value to validate.
  * @param {{ crossRefs?: boolean, checkEdges?: boolean }} [opts]  When
  *   `crossRefs` is true, also run every cross-reference check the schema cannot
- *   express — dependency-graph edge integrity, plus learning-resource coverage
- *   and origin — and fold them into `issues`. `checkEdges` is the original name
- *   for the same switch, still honoured so vendored copies keep working.
+ *   express — dependency-graph edge integrity, learning-resource coverage and
+ *   origin, and the API surface's actor coverage — and fold them into `issues`.
+ *   `checkEdges` is the original name for the same switch, still honoured so
+ *   vendored copies keep working.
  * @returns {ValidationResult}
  */
 export function validateAnalysisDocument(doc, opts = {}) {
@@ -407,6 +489,7 @@ export function validateAnalysisDocument(doc, opts = {}) {
   if (opts.crossRefs ?? opts.checkEdges) {
     for (const extra of edgeIntegrityIssues(doc)) issues.push(extra);
     for (const extra of learningResourceIssues(doc)) issues.push(extra);
+    for (const extra of apiSurfaceIssues(doc)) issues.push(extra);
   }
   return { valid: issues.length === 0, issues };
 }

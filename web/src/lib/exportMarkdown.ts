@@ -454,6 +454,21 @@ function renderApiSurface(analysis: Analysis): string[] {
     );
   }
 
+  // The key to the Actor column above, when the document carries one. Optional
+  // in the schema, and joined to the table by name at validate time.
+  //
+  // Below the table, where the section page puts the same list above it: an
+  // `### Actors` heading ahead of an unheaded table would read as if the table
+  // belonged to it. `cell` flattens each line exactly as the rows above it are
+  // flattened, so a summary cannot break the list open.
+  const actors = analysis.apiSurface?.actors ?? [];
+  if (actors.length) {
+    lines.push("", "### Actors", "");
+    for (const actor of actors) {
+      lines.push(`- **${cell(actor.name)}** — ${cell(actor.summary)}`);
+    }
+  }
+
   const explained = routes.filter((r) => r.note);
   if (explained.length) {
     lines.push("", "### Routes worth explaining");

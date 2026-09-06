@@ -73,8 +73,10 @@ what to notice, and the files where it actually shows up.
 _Avoid_: example, usage, local docs
 
 **Coverage**:
-The property that every tech stack entry has exactly one learning-resources entry —
-no gaps, no orphans. A partially covered document is not valid.
+The property that a join by name has no gaps and no orphans on either side: every tech
+stack entry has exactly one learning-resources entry, and — where an API surface names
+its actors — every actor a route requires is described exactly once, and every actor
+described is required by a route. A partially covered document is not valid.
 _Avoid_: completeness, parity
 
 ## Diagrams
@@ -160,6 +162,8 @@ exactly the failure
 **Actor**:
 A class of caller the API surface distinguishes between — an administrator, a signed-in
 reader, an unauthenticated visitor, a service account, a scheduled job. Named with what
-it can do in this repository, and joined by name to the routes that require it.
+it can do in this repository, and joined by name to the routes that require it. The list
+is optional; where it exists it is a claim about the routes, so it carries the same
+coverage property as learning resources and is checked rather than trusted.
 _Avoid_: role — taken by tech stack entries, which name the role a technology plays —
 user, persona, permission

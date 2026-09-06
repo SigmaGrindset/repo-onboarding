@@ -649,6 +649,30 @@
           "type": "array",
           "minItems": 3,
           "items": { "$ref": "#/$defs/ApiRoute" }
+        },
+        "actors": {
+          "description": "The classes of caller this API distinguishes between, so a reader gets the permission model without assembling it from every route row. OPTIONAL: a repository that only separates public from authenticated says so in the routes alone and omits this. When present it is a claim about the routes, and the two must agree exactly — every actor here is required by at least one route, and every actor a route requires is described here. Checked at validate time as `actor-coverage`, so a partial list fails rather than misleading a reader.",
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/ApiActor" }
+        }
+      }
+    },
+    "ApiActor": {
+      "description": "One class of caller the API surface distinguishes between, joined by name to the routes that require it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "summary"],
+      "properties": {
+        "name": {
+          "description": "The actor's name, matching the `actor` of every route that requires it character for character — the join is by name.",
+          "type": "string",
+          "minLength": 1
+        },
+        "summary": {
+          "description": "What this actor can do in THIS repository, in a line: the shape of what it reaches, and what it may not. Machine callers get one too — a service account, a scheduled job or a webhook sender is an actor. Forced to be substantive, so an entry cannot restate its own name.",
+          "type": "string",
+          "minLength": 40
         }
       }
     },

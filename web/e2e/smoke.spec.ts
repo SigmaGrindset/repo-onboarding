@@ -1,4 +1,7 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { expect, test } from "@playwright/test";
+import type { Analysis } from "@schema/analysis";
 import { collectBrowserErrors, CORE_ROUTES, waitForPageReady } from "./helpers";
 
 test("home lists local analysis fixtures", async ({ page }) => {
@@ -42,6 +45,34 @@ test("the command palette finds a route by its path", async ({ page }) => {
   await hit.click();
   await expect(page).toHaveURL(/\/analysis\/repo-onboarding\/api\?route=/);
   await expect(page.getByRole("heading", { name: "What this repository exposes" })).toBeVisible();
+});
+
+test("the API surface says what each actor can do", async ({ page }) => {
+  // Read from the document rather than restated here: the promise is that the
+  // permission model is on the page as a handful of lines, not that this
+  // fixture happens to word an actor a particular way.
+  // Resolved from the project's own testDir, so the run works from wherever it
+  // was started — the same way the diagram contract spec locates a file.
+  const file = join(
+    test.info().project.testDir,
+    "..",
+    "..",
+    "data",
+    "repo-onboarding",
+    "analysis.json",
+  );
+  const doc = JSON.parse(readFileSync(file, "utf8")) as Analysis;
+  const actors = doc.apiSurface?.actors ?? [];
+  expect(actors.length).toBeGreaterThan(0);
+
+  const path = "/analysis/repo-onboarding/api";
+  await page.goto(path);
+  await waitForPageReady(page, path);
+
+  await expect(page.getByRole("heading", { name: "Actors" })).toBeVisible();
+  for (const actor of actors) {
+    await expect(page.getByText(actor.summary, { exact: true })).toBeVisible();
+  }
 });
 
 test("mobile section nav reveals a late active tab", async ({ page }, testInfo) => {

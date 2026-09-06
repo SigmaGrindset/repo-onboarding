@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { notFound } from "next/navigation";
 import { resolveDataSource } from "@/lib/datasource";
 import { githubBlobUrl } from "@/lib/github";
@@ -26,7 +27,8 @@ export default async function ApiPage({
 
   const { routes } = surface;
   const { repoUrl, commitSha } = analysis.metadata;
-  const actors = [...new Set(routes.map((r) => r.actor))];
+  const actorNames = [...new Set(routes.map((r) => r.actor))];
+  const actors = surface.actors ?? [];
 
   return (
     <div>
@@ -40,8 +42,37 @@ export default async function ApiPage({
       <Card className="p-5">
         <p className="text-[0.83rem] text-faint">
           {routes.length} {routes.length === 1 ? "route" : "routes"} ·{" "}
-          {actors.length} {actors.length === 1 ? "actor" : "actors"}
+          {actorNames.length} {actorNames.length === 1 ? "actor" : "actors"}
         </p>
+
+        {/* The permission model, above the rows it governs — a reader after it
+            reads a handful of lines here instead of assembling it from every
+            route row. Optional in the document: a repository that only
+            separates public from signed-in says so in the rows alone, and then
+            this is simply absent. Validation keeps the two in step, so every
+            name here appears in the Actor column below and vice versa.
+
+            The Markdown export puts the same list AFTER its table, and that
+            disagreement is deliberate: there a heading ahead of an unheaded
+            table would read as if the table belonged to it, while here a
+            legend under dozens of scrolling rows is a legend nobody finds. */}
+        {actors.length > 0 ? (
+          <div className="mt-5 border-t border-border pt-4">
+            <h2 className="kicker text-accent">Actors</h2>
+            <dl className="mt-3 grid gap-x-5 gap-y-2.5 sm:grid-cols-[max-content_1fr] sm:items-baseline">
+              {actors.map((actor) => (
+                <Fragment key={actor.name}>
+                  <dt>
+                    <Badge className={labelTint(actor.name)}>{actor.name}</Badge>
+                  </dt>
+                  <dd className="max-w-[68ch] text-[0.83rem] leading-relaxed text-muted">
+                    {actor.summary}
+                  </dd>
+                </Fragment>
+              ))}
+            </dl>
+          </div>
+        ) : null}
 
         {/* Four columns of unbreakable content — a method, a path, an actor
             name and a repo-relative file — do not fit a phone and often do not

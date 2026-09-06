@@ -197,6 +197,21 @@ Reading order:
     surprising permission, the one everything else goes through. Most routes
     carry none. A note on every route is a wall of text with nothing emphasised,
     which is the failure this two-tier shape exists to avoid.
+  - `actors[]` is OPTIONAL and gives the reader the permission model without
+    making them assemble it from every route row: one entry per class of caller,
+    each a `name` and a `summary` (≥ 40 chars) of what that caller can do *here*.
+    Omit the key for a repository that only separates public from signed-in —
+    the route rows already say that — and emit it when the distinctions are
+    worth summarising.
+  - **The actor list and the route requirements must agree, exactly and both
+    ways.** Every `actors[].name` must be the `actor` of at least one route, and
+    every route's `actor` must appear as a `name`, character for character. Both
+    directions are checked at validation time (`actor-coverage`), so an actor
+    you describe but no route requires fails the document, and so does a route
+    requiring an actor you never described.
+  - Machine callers get an entry like anyone else: a service account, a
+    scheduled job or a webhook sender is an actor, and dropping it is how a
+    permission summary quietly loses its most dangerous caller.
 - **`firstTasks[]`** (≥ 2, aim for 3–4) — concrete, real tasks referencing real
   files, each with a `difficulty` (`easy` / `medium` / `hard`) and a `rationale`
   for why it's a good newcomer task. Range easy → hard.
@@ -226,15 +241,18 @@ Run:
 ```
 
 This checks the JSON Schema **and** the cross-reference rules — dependency-graph
-edge integrity, plus learning-resource coverage and origin — in one pass.
+edge integrity, learning-resource coverage and origin, and the API surface's
+actor coverage — in one pass.
 Exit `0` means both pass. On failure it prints each issue with its JSON path,
 what was expected, and what it got. Common failures: a missing required field, a
 stray key (`additionalProperties`), a string under its `minLength`, an `enum`
 mismatch (`recentActivity` must be `active` / `moderate` / `dormant`;
 `difficulty` `easy` / `medium` / `hard`), a bad `commitSha` / `repoUrl` format,
 a dangling edge that references a non-existent node id, a `learningResources`
-entry missing for a tech-stack entry (or naming one that does not exist), or a
-resource URL that is not on the same documentation domain as its `official`.
+entry missing for a tech-stack entry (or naming one that does not exist), a
+resource URL that is not on the same documentation domain as its `official`, or
+an `apiSurface.actors` entry no route requires (or a route requiring an actor no
+entry describes).
 
 **Fix every issue and re-run until it exits `0`.** Do not stop early.
 
@@ -261,4 +279,7 @@ When it passes, publish with a token from `{{SITE_URL}}/account`:
 - [ ] No generic filler that would be true of any repo.
 - [ ] `apiSurface` is present only if this repo really serves routes — and if it
       is, every route it serves is listed, not a selection.
+- [ ] If `apiSurface.actors` is present, the join holds both ways: every actor
+      described is required by a route, every actor a route requires is
+      described, machine callers included.
 - [ ] `{{VALIDATE_COMMAND}}` exits `0`.
