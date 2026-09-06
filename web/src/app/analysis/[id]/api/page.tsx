@@ -43,8 +43,13 @@ export default async function ApiPage({
           {actors.length} {actors.length === 1 ? "actor" : "actors"}
         </p>
 
-        <div className="mt-4 -mx-5 overflow-x-auto px-5">
-          <table className="w-full min-w-[44rem] border-collapse text-left">
+        {/* Four columns of unbreakable content — a method, a path, an actor
+            name and a repo-relative file — do not fit a phone and often do not
+            fit a laptop either. The minimum is wide enough that the longest
+            file path is never clipped, and the table scrolls inside this
+            container rather than truncating or widening the page. */}
+        <div className="-mx-5 mt-4 overflow-x-auto px-5">
+          <table className="w-full min-w-[66rem] border-collapse text-left">
             <caption className="sr-only">
               Every route this repository exposes, with its method, path, the
               actor permitted to call it, and the file implementing it.
@@ -65,45 +70,58 @@ export default async function ApiPage({
                 </th>
               </tr>
             </thead>
-            <tbody>
-              {routes.map((route) => {
-                const method = methodStyle(route.method);
-                return (
-                  <tr
-                    key={`${route.method} ${route.path} ${route.file}`}
-                    id={`route-${routeAnchor(route)}`}
-                    className="scroll-mt-20 border-b border-border/60 align-top last:border-0"
-                  >
-                    <td className="py-3 pr-4">
+            {/* One tbody per route, so a note is a second row that still
+                belongs to the route above it. Keeping the note out of the Path
+                cell is what lets the Path and File columns size to their own
+                content instead of to a paragraph — with 35 routes, a note
+                widening the Path column truncates every file path in the
+                table. */}
+            {routes.map((route) => {
+              const method = methodStyle(route.method);
+              return (
+                <tbody
+                  key={`${route.method} ${route.path} ${route.file}`}
+                  className="border-b border-border/60 align-top last:border-0"
+                >
+                  <tr id={`route-${routeAnchor(route)}`} className="scroll-mt-20">
+                    <td className="whitespace-nowrap pb-2 pr-4 pt-3">
                       <Badge className={`font-mono ${method.className}`}>
                         {method.label}
                       </Badge>
                     </td>
-                    <td className="py-3 pr-4">
+                    <td className="whitespace-nowrap pb-2 pr-4 pt-3">
                       <code className="font-mono text-[0.85rem] text-text">
                         {route.path}
                       </code>
-                      {route.note ? (
-                        <p className="mt-1.5 max-w-[52ch] text-[0.83rem] leading-relaxed text-muted">
-                          {route.note}
-                        </p>
-                      ) : null}
                     </td>
-                    <td className="py-3 pr-4">
+                    {/* An actor name is several words and the same words on
+                        every row it governs, so it has to read as one label
+                        rather than a paragraph. The table scrolls instead. */}
+                    <td className="whitespace-nowrap pb-2 pr-4 pt-3">
                       <Badge className={roleTint(route.actor)}>
                         {route.actor}
                       </Badge>
                     </td>
-                    <td className="py-3">
+                    <td className="pb-2 pt-3">
                       <FileChip
                         path={route.file}
                         href={githubBlobUrl(repoUrl, commitSha, route.file)}
                       />
                     </td>
                   </tr>
-                );
-              })}
-            </tbody>
+                  {route.note ? (
+                    <tr>
+                      <td />
+                      <td colSpan={3} className="pb-3 pr-4">
+                        <p className="max-w-[68ch] text-[0.83rem] leading-relaxed text-muted">
+                          {route.note}
+                        </p>
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              );
+            })}
           </table>
         </div>
       </Card>

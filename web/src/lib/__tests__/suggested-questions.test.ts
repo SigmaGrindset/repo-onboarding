@@ -96,3 +96,38 @@ test("sparse analysis pads every section from the defaults", () => {
   // Versions has no derivation at all: it is exactly the defaults.
   assert.deepEqual(questions["versions"], DEFAULT_QUESTIONS);
 });
+
+// --- API Surface -----------------------------------------------------------
+
+test("the api section asks about a real route and the commonest actor", () => {
+  const doc: Analysis = JSON.parse(
+    readFileSync(
+      path.join(process.cwd(), "..", "data", "repo-onboarding", "analysis.json"),
+      "utf8",
+    ),
+  );
+  const questions = buildSuggestedQuestions(doc)["api"];
+  assert.equal(questions.length, 3);
+
+  const routes = doc.apiSurface?.routes ?? [];
+  const explained = routes.find((r) => r.note);
+  assert.ok(explained, "the fixture explains at least one route");
+  assert.ok(
+    questions[0].includes(`${explained.method} ${explained.path}`),
+    `"${questions[0]}" does not name the explained route`,
+  );
+
+  const counts = new Map<string, number>();
+  for (const route of routes) counts.set(route.actor, (counts.get(route.actor) ?? 0) + 1);
+  const commonest = [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+  assert.ok(
+    questions[1].includes(commonest),
+    `"${questions[1]}" does not name the commonest actor`,
+  );
+});
+
+test("a document with no API surface still gets three api starter questions", () => {
+  const questions = buildSuggestedQuestions(fixture)["api"];
+  assert.equal(questions.length, 3);
+  assert.equal(new Set(questions).size, 3);
+});

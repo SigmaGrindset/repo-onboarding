@@ -154,3 +154,11 @@ test("the API section is only ever added, never reordered around", () => {
     TODAYS_SECTIONS,
   );
 });
+
+test("the real document that carries an API surface shows the section", () => {
+  // `repo-onboarding` is this repository analysed by its own engine — the one
+  // document in the repository with a real API surface rather than a built one.
+  const doc = fixture("repo-onboarding");
+  assert.ok((doc.apiSurface?.routes.length ?? 0) >= 3);
+  assert.ok(visibleSections(doc).some((s) => s.slug === "api"));
+});

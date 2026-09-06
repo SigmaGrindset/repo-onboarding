@@ -39,7 +39,12 @@ function canonicalRenderer(): Promise<Renderer> {
   return canonicalPromise.then((m) => m.renderOnboardingMarkdown);
 }
 
-const FIXTURE_IDS = ["sample", "express"] as const;
+/**
+ * `repo-onboarding` is here for a specific reason: parity is compared per
+ * fixture, so a section no fixture carries could diverge between the mirror and
+ * the canonical `.mjs` unnoticed. It is the only document with an `apiSurface`.
+ */
+const FIXTURE_IDS = ["sample", "express", "repo-onboarding"] as const;
 
 function fixture(id: string): Analysis {
   const file = fileURLToPath(
@@ -88,3 +93,49 @@ for (const id of FIXTURE_IDS) {
     assert.ok(!md.endsWith("\n\n"), "has exactly one trailing newline");
   });
 }
+
+// --- API Surface -----------------------------------------------------------
+
+test("a document with an API surface exports it, in its nav position", () => {
+  const doc = fixture("repo-onboarding");
+  const md = renderOnboardingMarkdown(doc);
+
+  assert.ok(md.includes("## API Surface"), "the section has a heading");
+  assert.ok(
+    md.includes("- [API Surface](#api-surface)"),
+    "the section is in the table of contents",
+  );
+  // After the codebase map, before the contributor guide — the registry order.
+  assert.ok(
+    md.indexOf("## Codebase Map") <
+      md.indexOf("## API Surface") &&
+      md.indexOf("## API Surface") < md.indexOf("## Contributor Guide"),
+    "the section sits between the codebase map and the contributor guide",
+  );
+
+  // Exhaustive rows, curated prose: every route is a table row, and only the
+  // routes carrying a note appear beneath.
+  const routes = doc.apiSurface?.routes ?? [];
+  assert.ok(routes.length > 0);
+  for (const route of routes) {
+    assert.ok(
+      md.includes(`| ${route.method} | \`${route.path}\``),
+      `${route.method} ${route.path} is missing from the table`,
+    );
+  }
+  const explained = routes.filter((r) => r.note);
+  assert.ok(explained.length > 0 && explained.length < routes.length);
+  assert.ok(md.includes("### Routes worth explaining"));
+  for (const route of explained) {
+    assert.ok(
+      md.includes(`**\`${route.method} ${route.path}\`** — ${route.note}`),
+      `the note for ${route.method} ${route.path} is missing`,
+    );
+  }
+});
+
+test("a document without an API surface exports no such section", () => {
+  const md = renderOnboardingMarkdown(fixture("sample"));
+  assert.ok(!md.includes("## API Surface"));
+  assert.ok(!md.includes("- [API Surface]"));
+});

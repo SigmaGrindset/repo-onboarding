@@ -1,0 +1,1062 @@
+{
+  "schemaVersion": "1.2.0",
+  "metadata": {
+    "repoName": "repo-onboarding",
+    "repoUrl": "https://github.com/SigmaGrindset/repo-onboarding",
+    "analyzedAt": "2026-09-06T14:49:30Z",
+    "analyzerVersion": "onboard/0.2.0",
+    "commitSha": "5ded1b1722e7c37b69b8e729c6fd121d662e0e92",
+    "primaryLanguage": "TypeScript",
+    "stats": {
+      "totalFiles": 294,
+      "totalLoc": 56288,
+      "languages": [
+        { "language": "TypeScript", "files": 147, "loc": 20566, "percentage": 36.5 },
+        { "language": "JSON", "files": 19, "loc": 18359, "percentage": 32.6 },
+        { "language": "Markdown", "files": 51, "loc": 12331, "percentage": 21.9 },
+        { "language": "JavaScript", "files": 25, "loc": 4337, "percentage": 7.7 },
+        { "language": "CSS", "files": 1, "loc": 469, "percentage": 0.8 },
+        { "language": "YAML", "files": 1, "loc": 77, "percentage": 0.1 },
+        { "language": "SQL", "files": 7, "loc": 64, "percentage": 0.1 },
+        { "language": "Config", "files": 3, "loc": 60, "percentage": 0.1 },
+        { "language": "TOML", "files": 2, "loc": 25, "percentage": 0 }
+      ]
+    }
+  },
+  "pitch": {
+    "summary": "Repo Onboarding turns a codebase into a guided onboarding site. It is built around one artefact: an analysis document (`analysis.json`) that fully describes a repository at one commit — its pitch, its architecture with Mermaid diagrams, its module graph, an annotated directory map, an ordered reading tour, churn hotspots, a setup guide, learning resources and, now, the routes it exposes. Two halves meet at that document and nowhere else. A generator — an AI coding agent following a prompt in this repository, running on the reader's own machine and their own model — produces it; a Next.js viewer renders it. The viewer is a pure function of the document, so the analysis IS the product and the JSON Schema is the whole contract between the halves. The repository is a small monorepo: `schema/` holds the contract and the validator, `.claude/skills/onboard/` holds the deterministic pre-pass and the generator prompt, `web/` is the viewer (which also serves the upload and chat APIs), and `cli/` is the published npm package that carries byte-exact copies of the first two so a stranger can run the whole pipeline without cloning this repo.",
+    "audience": "Contributors to the viewer or the contract, and anyone extending the analysis document with a new section. Reading it also pays off if you are building anything where a model writes structured output and a UI renders it: the schema floors, the mirroring doctrine and the deterministic pre-pass are all answers to that problem, and they are the parts of this repository with the most thought behind them.",
+    "techStack": [
+      { "name": "TypeScript", "category": "language", "role": "Types the viewer, and — in `schema/analysis.ts` — is the hand-maintained mirror of the JSON Schema that gives the generator side compile-time safety. Union types are used as guards rather than documentation: `SectionSlug` makes the nav's icon map and the Markdown export's renderer map exhaustive, so adding a section fails the build until both answer for it." },
+      { "name": "Next.js", "category": "framework", "role": "The viewer, on the App Router. Every analysis section is a route segment under `web/src/app/analysis/[id]/`, which is why the section registry and the filesystem have to agree. Its middleware lives in `web/src/proxy.ts` (Next 16's renamed convention), and the upload, chat, markdown-export and token endpoints are route handlers in the same app." },
+      { "name": "React", "category": "library", "role": "Server components do the rendering — every section page is an async server component that reads the document and returns markup. Client components are reserved for the parts that genuinely need a browser: the diagram canvas, the dependency graph, the command palette and the chat panel. `cache()` from React is what stops one analysis page fetching the same document three times." },
+      { "name": "Ajv", "category": "library", "role": "Compiles `schema/analysis.schema.json` and is the only gate a document must pass. It runs in three places with an identical configuration that is duplicated on purpose — the CLI validator, the upload endpoint and the repo-root script — and the derived error shape (`ValidationIssue`) is the contract every one of those surfaces reports in." },
+      { "name": "Tailwind CSS", "category": "library", "role": "All the styling, v4 with no config file. Because v4 scans source for literal class strings, every colour decision is written out in full in `web/src/lib/styles.ts` rather than composed at runtime — that file is where badge, node-kind, difficulty, churn and HTTP-method colours actually live." },
+      { "name": "Clerk", "category": "platform", "role": "Authentication in cloud mode only. `proxy.ts` imports it dynamically so local mode never evaluates Clerk code and needs no keys, and every route handler repeats the same guard ladder — cloud gate, then `auth()`, then an ownership check from `access.ts`." },
+      { "name": "Drizzle ORM", "category": "library", "role": "The cloud-mode data model in `web/src/db/schema.ts`: five tables and the SQL migrations under `web/drizzle/`. Analyses store only metadata; the document itself lives in Blob. Version numbers are deliberately not columns — they are read-time ordinals over a lineage." },
+      { "name": "Vercel Blob", "category": "infra", "role": "Holds the uploaded `analysis.json` payloads, keyed by owner and analysis id. The split is the point: Postgres answers listing and access questions cheaply, and the multi-hundred-kilobyte document is only fetched when someone actually opens it." },
+      { "name": "Vercel AI SDK", "category": "library", "role": "Powers \"Ask this repo\" — the streaming chat grounded in the analysis document, with tools that can fetch the repository's files at the analyzed commit. Model access goes through the AI Gateway with a plain provider/model string, so the feature is one environment variable away from off." },
+      { "name": "Mermaid", "category": "library", "role": "Renders the diagrams an analysis document carries as source text. It is loaded in the browser rather than pre-rendered, which is why the diagram canvas reads the SVG Mermaid produced to build its interaction model, and why the generator prompt bans semicolons inside diagram labels." },
+      { "name": "Playwright", "category": "tooling", "role": "The end-to-end suites: a smoke pass over every section page, an axe accessibility pass over the same list, visual baselines in both themes, and a contract test that pins what a rendered diagram is allowed to look like. Baselines are generated on Windows and CI runs that job on `windows-latest` so the platform suffix and the system fonts match." },
+      { "name": "Vitest", "category": "tooling", "role": "The component suites under `web/src/components/__tests__/`, in jsdom. The split is deliberate and visible in `package.json`: pure functions of a document are tested with plain `node:test` under `tsx`, and only genuinely interactive components get a Vitest suite." }
+    ]
+  },
+  "architecture": [
+    {
+      "title": "One document between two engines",
+      "body": "Everything in this repository is arranged around a single artefact and the schema that defines it. `schema/analysis.schema.json` is the contract; `schema/analysis.ts` is its hand-maintained TypeScript mirror. On one side of the contract is an analysis engine — an AI coding agent following `.claude/skills/onboard/SKILL.md` (in this repo) or the rendered `cli/templates/PROMPT.md` (on a stranger's machine). On the other is the viewer in `web/`, which renders the document and nothing else.\n\nThe engine is not trusted with facts it can get wrong. `.claude/skills/onboard/prepass.mjs` is a deterministic, offline pre-pass that walks the tree, counts lines by language, parses every manifest ecosystem it recognises, and reads git churn straight out of `git log`. Its numbers are copied verbatim into the document and are never re-derived by a model. The model supplies only what a model is actually good at: the reading, the ordering, the reasons. That division has just been extended to specialized sections — the pre-pass emits `signals.apiSurface` naming server frameworks and route-shaped files, and the engine decides whether an API Surface section is warranted.\n\nWhat stops an eager model shipping a hollow document is the schema itself. Prose fields carry `minLength` floors, list fields carry `minItems`, and the specialized sections carry substance floors of their own — an API surface needs three real routes or it is rejected outright. Two rules the schema cannot express are checked in code beside it, in `schema/validate-core.mjs`: dependency-graph edge integrity, and the coverage join that requires exactly one learning-resources entry per tech-stack entry.",
+      "diagram": {
+        "type": "flowchart",
+        "title": "From a repository to a rendered onboarding site",
+        "source": "flowchart LR\n  repo[\"A repository\"] --> prepass[\"prepass.mjs, deterministic facts\"]\n  prepass --> facts[\"prepass.json: stats, churn, manifests, signals\"]\n  facts --> agent[\"AI coding agent following SKILL.md or PROMPT.md\"]\n  repo --> agent\n  schema[\"analysis.schema.json, the contract\"] --> agent\n  agent --> doc[\"analysis.json, the analysis document\"]\n  doc --> validate[\"validate-core.mjs: schema + cross-references\"]\n  validate -->|rejected| agent\n  validate -->|accepted| viewer[\"Next.js viewer in web/\"]\n  schema --> validate\n  viewer --> reader([\"A newcomer\"])"
+      }
+    },
+    {
+      "title": "The viewer is a pure function of the document",
+      "body": "There is no database of sections and no configuration deciding what a reader sees. `web/src/lib/sections.ts` holds the registry — one entry per section, each carrying a slug, a label and a class — and `visibleSections(analysis)` turns a document into the ordered list of sections it shows. Three consumers derive from that one function: the section rail in `SectionNav`, the command palette's search index in `search-index.ts`, and the Markdown export in `exportMarkdown.ts`. Before that function existed the export kept its own copy of the section order, which is exactly the kind of second source of truth this codebase now goes out of its way to delete.\n\nThe class on each entry is what makes absence mean two different things. A **core** section is one every document is expected to carry, so a document that predates it still shows the tab with an empty state inviting the reader to regenerate — that is what an analysis written before learning resources existed does today. A **specialized** section is one only some repositories have anything to put in: it is shown exactly when its key is present in the document, and when it is absent there is no tab, no empty state and no hint that anything is missing. A Rust command-line tool has no design system to be missing. The reasoning, and the two designs rejected on the way — a `projectType` enum and an explicit `sections[]` manifest — are recorded in `docs/adr/0004-sections-are-declared-by-presence.md`.\n\n`SectionSlug` is a union type rather than a string, and that is load-bearing. The nav's icon map and the export's renderer map are both keyed by it, so adding a section to the registry fails `tsc --noEmit` until both have answered for it. Adding the API Surface section produced exactly those two errors and nothing else."
+    },
+    {
+      "title": "Two modes behind one interface",
+      "body": "The app runs in one of two modes and the difference is invisible above `web/src/lib/datasource.ts`. In **local** mode it reads fixtures from `data/<id>/analysis.json` and needs no environment variables at all — a fresh clone runs. In **cloud** mode it reads uploaded analyses from Neon and Vercel Blob behind Clerk authentication. `isCloudMode()` in `web/src/lib/mode.ts` decides, from an explicit `APP_MODE` or by auto-detecting that all four cloud keys are present.\n\nThe seam is `resolveDataSource()`, which returns the filesystem source or dynamically imports the cloud one. The dynamic import is not a performance nicety — it is what guarantees local mode never evaluates Clerk, Drizzle or Blob code. The same discipline runs through the route handlers, which import every cloud-only module inside the function body, and through `web/src/proxy.ts`, which imports Clerk's middleware only after `isCloudMode()` has said yes.\n\nAuthorization has exactly one chokepoint. `web/src/lib/access.ts` owns every question about who may read what, against the `analysis_access` table: `canReadAnalysis` for reads, `isOwner` for destructive actions, `listVersionsFor` for lineage. The doctrine is written into the file's header — no other module may join on `repo_key`. Ids carry their own routing: a bare segment is a fixture, `db_<uuid>` is an owned analysis, and `st_<token>` is an unlisted link that resolves *without* an access check, because the secret token is itself the capability.",
+      "diagram": {
+        "type": "flowchart",
+        "title": "One data source, two modes",
+        "source": "flowchart TD\n  page[\"A section page under app/analysis\"] --> resolve[\"resolveDataSource()\"]\n  layout[\"layout.tsx: nav, palette, chat\"] --> resolve\n  md[\"GET /api/analyses/:id/markdown\"] --> resolve\n  resolve -->|local mode| fs[\"fsDataSource, reads ../data\"]\n  resolve -->|cloud keys present| cloud[\"cloudDataSource\"]\n  cloud --> access[\"access.ts, the one authorization chokepoint\"]\n  access --> neon[(\"Neon Postgres: metadata + access rows\")]\n  cloud --> blob[(\"Vercel Blob: analysis.json payloads\")]\n  proxy[\"proxy.ts\"] -->|cloud only| clerk([\"Clerk\"])\n  fs --> data[(\"data/*/analysis.json, committed fixtures\")]"
+      }
+    },
+    {
+      "title": "Publishing from your own machine",
+      "body": "Generation is deliberately not hosted. The reader runs their own agent on their own model, which is what keeps the project free to operate, and the published npm package `repo-onboarding` is how that works without cloning this repository. `cli/scripts/sync.mjs` copies five canonical files — the pre-pass, the edge checker, the schema, the validator core and the Markdown exporter — into `cli/vendor/` byte for byte, and `cli/test/vendor.test.mjs` fails if any copy has drifted. `npm run sync` is how you fix drift, never an edit inside `vendor/`.\n\n`repo-onboarding init` runs the pre-pass over the target repository and writes `.repo-onboarding/` containing the facts, the schema and a `PROMPT.md` rendered from `cli/templates/PROMPT.md` with the real paths and commands substituted in. The reader points their own agent at that prompt. When the agent has written `analysis.json`, `repo-onboarding validate` runs the same Ajv configuration the server will run, and `repo-onboarding upload` publishes it with a personal token.\n\nThe upload endpoint is the one place where the two authentication styles meet. `POST /api/analyses` takes a Clerk session from the browser; `POST /api/v1/analyses` takes an `Authorization: Bearer roa_…` token from the CLI and is listed as public in `proxy.ts` precisely so Clerk does not intercept it before its own bearer check runs. Both then hand off to the same `performUpload` in `web/src/lib/uploadAnalysis.ts`, so a document is validated, stored and recorded identically whichever door it came through.",
+      "diagram": {
+        "type": "sequence",
+        "title": "Publishing an analysis with a personal token",
+        "source": "sequenceDiagram\n  actor Dev as Developer\n  participant CLI as repo-onboarding CLI\n  participant Agent as Their AI agent\n  participant API as POST /api/v1/analyses\n  participant Tok as tokens.ts\n  participant Up as performUpload\n  participant Blob as Vercel Blob\n  participant DB as Neon Postgres\n  Dev->>CLI: repo-onboarding init .\n  CLI->>CLI: run the vendored pre-pass\n  CLI-->>Dev: .repo-onboarding with facts, schema, PROMPT\n  Dev->>Agent: read the PROMPT and the repo\n  Agent-->>Dev: analysis.json\n  Dev->>CLI: repo-onboarding validate analysis.json\n  CLI-->>Dev: VALID\n  Dev->>CLI: repo-onboarding upload analysis.json\n  CLI->>API: POST with a Bearer roa_ token\n  API->>Tok: resolveTokenUser(header)\n  Tok-->>API: a userId, or null\n  API->>Up: performUpload(userId, body)\n  Up->>Up: Ajv validate, reject on any issue\n  Up->>Blob: put the payload\n  Up->>DB: batch insert analyses and analysis_access\n  Up-->>API: the new id and version\n  API-->>CLI: 201 with the viewer URL\n  CLI-->>Dev: open this link"
+      }
+    },
+    {
+      "title": "Nothing is copied by hand without a test that says so",
+      "body": "Three constraints force duplication in this repository, and each duplicate is machine-checked rather than trusted. Next.js cannot import a module outside `web/` at build time, so the Markdown exporter exists twice: canonical at `schema/export-markdown.mjs` (zero imports, so it can be vendored standalone) and mirrored at `web/src/lib/exportMarkdown.ts`. The parity test renders every fixture through both and asserts byte equality. Its limit is written into both file headers: parity is checked per fixture, so a section no fixture carries could diverge unnoticed — which is why adding a specialized section means adding a fixture that carries it.\n\nThe validator is duplicated for the same reason and checked differently. `schema/validate-core.mjs` is canonical and `web/src/lib/validateAnalysis.ts` mirrors its Ajv configuration and error derivation; there is no parity test there, so the mirror notice at the top of both files carries the instruction instead. The third duplicate is `cli/vendor/`, and that one is byte-exact and fully asserted.\n\nThe surrounding documents are part of the design rather than commentary on it. `CONTEXT.md` fixes the vocabulary the schema, the prompts and the UI all use — including, for each term, the words to avoid — and `docs/adr/` records the decisions that would otherwise be re-litigated: learning resources as a top-level key, validation staying offline by construction, diagram interaction derived from rendered output, and sections declared by presence."
+    }
+  ],
+  "dependencyGraph": {
+    "nodes": [
+      { "id": "schema-json", "label": "analysis.schema.json", "kind": "internal-module", "path": "schema/analysis.schema.json", "description": "The contract. Every consumer validates against this file and nothing else." },
+      { "id": "schema-ts", "label": "analysis.ts", "kind": "internal-module", "path": "schema/analysis.ts", "description": "Hand-maintained TypeScript mirror of the JSON Schema, imported by the viewer as @schema/analysis." },
+      { "id": "validate-core", "label": "validate-core.mjs", "kind": "internal-module", "path": "schema/validate-core.mjs", "description": "Ajv compilation plus the cross-reference rules the schema cannot express, and the source of the ValidationIssue shape." },
+      { "id": "export-md", "label": "export-markdown.mjs", "kind": "internal-module", "path": "schema/export-markdown.mjs", "description": "Canonical ONBOARDING.md generator. Zero imports on purpose so it can be vendored standalone." },
+      { "id": "prepass", "label": "prepass.mjs", "kind": "internal-module", "path": ".claude/skills/onboard/prepass.mjs", "description": "The deterministic pre-pass: tree walk, LOC by language, manifests, git churn, and the specialized-section signals." },
+      { "id": "skill", "label": "SKILL.md", "kind": "entrypoint", "path": ".claude/skills/onboard/SKILL.md", "description": "The generator prompt used inside this repository — the /onboard analysis engine." },
+      { "id": "cli-bin", "label": "repo-onboarding CLI", "kind": "entrypoint", "path": "cli/bin/repo-onboarding.mjs", "description": "Command dispatcher for the published npm package: init, prepass, validate, export, upload." },
+      { "id": "cli-sync", "label": "sync.mjs", "kind": "internal-module", "path": "cli/scripts/sync.mjs", "description": "Copies the five canonical files into cli/vendor byte for byte, and owns the drift contract." },
+      { "id": "cli-upload", "label": "upload.mjs", "kind": "internal-module", "path": "cli/src/upload.mjs", "description": "Sends a validated document to the viewer with a personal bearer token." },
+      { "id": "prompt-template", "label": "PROMPT.md template", "kind": "internal-module", "path": "cli/templates/PROMPT.md", "description": "The generator prompt rendered into a stranger's repo by `repo-onboarding init`." },
+      { "id": "web-layout", "label": "analysis layout", "kind": "entrypoint", "path": "web/src/app/analysis/[id]/layout.tsx", "description": "Where the document meets the shell: nav, palette, chat, sharing and progress all resolve here." },
+      { "id": "sections", "label": "sections.ts", "kind": "internal-module", "path": "web/src/lib/sections.ts", "description": "The section registry and visibleSections — the single source of truth for which sections exist and in what order." },
+      { "id": "search-index", "label": "search-index.ts", "kind": "internal-module", "path": "web/src/lib/search-index.ts", "description": "Flattens a document into command-palette entries, including one per route." },
+      { "id": "suggested-questions", "label": "suggested-questions.ts", "kind": "internal-module", "path": "web/src/lib/suggested-questions.ts", "description": "Per-section chat starter prompts, derived from the document." },
+      { "id": "export-md-ts", "label": "exportMarkdown.ts", "kind": "internal-module", "path": "web/src/lib/exportMarkdown.ts", "description": "The web-side mirror of the canonical exporter, kept byte-identical by a parity test." },
+      { "id": "api-surface-lib", "label": "api-surface.ts", "kind": "internal-module", "path": "web/src/lib/api-surface.ts", "description": "How a route is named and anchored, shared so the section page and the palette agree." },
+      { "id": "api-page", "label": "API Surface page", "kind": "internal-module", "path": "web/src/app/analysis/[id]/api/page.tsx", "description": "Renders the exhaustive route table, or 404s when the document declares no API surface." },
+      { "id": "datasource", "label": "datasource.ts", "kind": "internal-module", "path": "web/src/lib/datasource.ts", "description": "The DataSource interface, the filesystem implementation, and resolveDataSource — the mode seam." },
+      { "id": "cloud-datasource", "label": "cloud-datasource.ts", "kind": "internal-module", "path": "web/src/lib/cloud-datasource.ts", "description": "The cloud implementation of DataSource, loaded only by dynamic import." },
+      { "id": "access", "label": "access.ts", "kind": "internal-module", "path": "web/src/lib/access.ts", "description": "The single authorization chokepoint: every read, every ownership check and every lineage query." },
+      { "id": "validate-analysis", "label": "validateAnalysis.ts", "kind": "internal-module", "path": "web/src/lib/validateAnalysis.ts", "description": "The web-side mirror of the validator core, used by the upload pipeline." },
+      { "id": "upload-analysis", "label": "uploadAnalysis.ts", "kind": "internal-module", "path": "web/src/lib/uploadAnalysis.ts", "description": "The shared post-auth upload pipeline: validate, store, record, on behalf of both upload endpoints." },
+      { "id": "api-v1", "label": "POST /api/v1/analyses", "kind": "entrypoint", "path": "web/src/app/api/v1/analyses/route.ts", "description": "The CLI's publishing endpoint, authenticated by a personal bearer token rather than a session." },
+      { "id": "api-upload", "label": "POST /api/analyses", "kind": "entrypoint", "path": "web/src/app/api/analyses/route.ts", "description": "The browser's upload endpoint, authenticated by a Clerk session." },
+      { "id": "api-chat", "label": "POST /api/analyses/[id]/chat", "kind": "entrypoint", "path": "web/src/app/api/analyses/[id]/chat/route.ts", "description": "Streaming Ask this repo chat, grounded in the document and the repo's files." },
+      { "id": "tokens", "label": "tokens.ts", "kind": "internal-module", "path": "web/src/lib/tokens.ts", "description": "Personal API tokens: creation, listing, revocation, and bearer resolution." },
+      { "id": "proxy", "label": "proxy.ts", "kind": "internal-module", "path": "web/src/proxy.ts", "description": "Next 16 middleware. A pass-through locally, Clerk protection with a public matcher in cloud mode." },
+      { "id": "db-schema", "label": "db/schema.ts", "kind": "internal-module", "path": "web/src/db/schema.ts", "description": "Drizzle table definitions: analyses, analysis_access, tour_progress, chat_quota, api_tokens." },
+      { "id": "styles", "label": "styles.ts", "kind": "internal-module", "path": "web/src/lib/styles.ts", "description": "Every colour decision as a literal Tailwind class string, because v4 scans source for them." },
+      { "id": "diagram-canvas", "label": "DiagramCanvas.tsx", "kind": "internal-module", "path": "web/src/components/DiagramCanvas.tsx", "description": "The interactive diagram surface: selection, neighbourhood highlighting, inspector card, keyboard cursor." },
+      { "id": "next", "label": "next", "kind": "external-package", "description": "App Router, route handlers and the proxy convention." },
+      { "id": "ajv", "label": "ajv", "kind": "external-package", "description": "The only validator, configured identically in three places." },
+      { "id": "drizzle", "label": "drizzle-orm", "kind": "external-package", "description": "Typed queries and the migration set under web/drizzle." },
+      { "id": "mermaid", "label": "mermaid", "kind": "external-package", "description": "Renders diagram source in the browser." },
+      { "id": "ai-sdk", "label": "ai", "kind": "external-package", "description": "Vercel AI SDK: streaming, tool loops and message conversion for the chat." },
+      { "id": "clerk", "label": "Clerk", "kind": "external-service", "description": "Authentication in cloud mode." },
+      { "id": "neon", "label": "Neon Postgres", "kind": "datastore", "description": "Analysis metadata, access rows, progress, quota and token hashes." },
+      { "id": "blob", "label": "Vercel Blob", "kind": "datastore", "description": "The analysis.json payloads themselves." },
+      { "id": "ai-gateway", "label": "Vercel AI Gateway", "kind": "external-service", "description": "Model access for the chat, addressed as a provider/model string." },
+      { "id": "github", "label": "GitHub", "kind": "external-service", "description": "Read for staleness checks and for the chat's file-fetching tool, at the analyzed commit." }
+    ],
+    "edges": [
+      { "from": "skill", "to": "prepass", "relationship": "runs" },
+      { "from": "skill", "to": "schema-json", "relationship": "targets" },
+      { "from": "skill", "to": "validate-core", "relationship": "validates with" },
+      { "from": "cli-bin", "to": "cli-upload", "relationship": "dispatches to" },
+      { "from": "cli-bin", "to": "prompt-template", "relationship": "renders" },
+      { "from": "cli-sync", "to": "prepass", "relationship": "vendors" },
+      { "from": "cli-sync", "to": "schema-json", "relationship": "vendors" },
+      { "from": "cli-sync", "to": "validate-core", "relationship": "vendors" },
+      { "from": "cli-sync", "to": "export-md", "relationship": "vendors" },
+      { "from": "cli-upload", "to": "api-v1", "relationship": "posts to" },
+      { "from": "validate-core", "to": "schema-json", "relationship": "reads" },
+      { "from": "validate-core", "to": "ajv", "relationship": "imports" },
+      { "from": "validate-analysis", "to": "schema-json", "relationship": "reads" },
+      { "from": "validate-analysis", "to": "ajv", "relationship": "imports" },
+      { "from": "schema-ts", "to": "schema-json", "relationship": "mirrors" },
+      { "from": "export-md-ts", "to": "export-md", "relationship": "mirrors" },
+      { "from": "export-md-ts", "to": "sections", "relationship": "imports" },
+      { "from": "web-layout", "to": "sections", "relationship": "imports" },
+      { "from": "web-layout", "to": "search-index", "relationship": "imports" },
+      { "from": "web-layout", "to": "suggested-questions", "relationship": "imports" },
+      { "from": "web-layout", "to": "datasource", "relationship": "imports" },
+      { "from": "web-layout", "to": "access", "relationship": "imports" },
+      { "from": "search-index", "to": "sections", "relationship": "imports" },
+      { "from": "search-index", "to": "api-surface-lib", "relationship": "imports" },
+      { "from": "suggested-questions", "to": "api-surface-lib", "relationship": "imports" },
+      { "from": "api-page", "to": "api-surface-lib", "relationship": "imports" },
+      { "from": "api-page", "to": "datasource", "relationship": "imports" },
+      { "from": "api-page", "to": "styles", "relationship": "imports" },
+      { "from": "sections", "to": "schema-ts", "relationship": "imports types from" },
+      { "from": "datasource", "to": "cloud-datasource", "relationship": "dynamically imports" },
+      { "from": "cloud-datasource", "to": "access", "relationship": "imports" },
+      { "from": "cloud-datasource", "to": "blob", "relationship": "reads from" },
+      { "from": "access", "to": "db-schema", "relationship": "imports" },
+      { "from": "access", "to": "neon", "relationship": "queries" },
+      { "from": "db-schema", "to": "drizzle", "relationship": "imports" },
+      { "from": "api-v1", "to": "tokens", "relationship": "authenticates with" },
+      { "from": "api-v1", "to": "upload-analysis", "relationship": "delegates to" },
+      { "from": "api-upload", "to": "upload-analysis", "relationship": "delegates to" },
+      { "from": "api-upload", "to": "clerk", "relationship": "authenticates with" },
+      { "from": "upload-analysis", "to": "validate-analysis", "relationship": "validates with" },
+      { "from": "upload-analysis", "to": "blob", "relationship": "writes to" },
+      { "from": "upload-analysis", "to": "neon", "relationship": "writes to" },
+      { "from": "tokens", "to": "neon", "relationship": "reads from" },
+      { "from": "proxy", "to": "clerk", "relationship": "dynamically imports" },
+      { "from": "api-chat", "to": "ai-sdk", "relationship": "imports" },
+      { "from": "api-chat", "to": "ai-gateway", "relationship": "streams from" },
+      { "from": "api-chat", "to": "datasource", "relationship": "imports" },
+      { "from": "api-chat", "to": "github", "relationship": "fetches files from" },
+      { "from": "diagram-canvas", "to": "mermaid", "relationship": "renders with" },
+      { "from": "web-layout", "to": "next", "relationship": "imports" }
+    ]
+  },
+  "codebaseMap": [
+    {
+      "path": "schema/",
+      "purpose": "The contract and everything that enforces it. `analysis.schema.json` is the source of truth for what an analysis document may contain; `analysis.ts` is the hand-maintained TypeScript mirror the viewer imports as `@schema/analysis`. `validate-core.mjs` compiles the schema with Ajv and adds the two cross-reference rules the schema cannot express, and it defines the `ValidationIssue` error shape every validation surface reports in. `export-markdown.mjs` renders a document to a committable ONBOARDING.md and is written with zero imports so it can be vendored standalone.",
+      "role": "core domain",
+      "keyFiles": [
+        { "path": "schema/analysis.schema.json", "note": "Draft 2020-12 schema. Read the $defs before adding a field anywhere else." },
+        { "path": "schema/analysis.ts", "note": "The TS mirror. Must agree with the JSON Schema exactly — nothing checks it for you." },
+        { "path": "schema/validate-core.mjs", "note": "Ajv config, edge integrity, learning-resource coverage and origin, and the issue shape." },
+        { "path": "schema/export-markdown.mjs", "note": "Canonical Markdown export. Zero imports, LF only, no locale-dependent formatting." },
+        { "path": "schema/validate.mjs", "note": "The CLI wrapper: `node schema/validate.mjs <file> --cross-refs`." }
+      ]
+    },
+    {
+      "path": ".claude/skills/onboard/",
+      "purpose": "The analysis engine as it runs inside this repository. `SKILL.md` is the generator prompt an agent follows; `prepass.mjs` is the deterministic, offline fact-finder whose numbers a model may never re-derive; `edges-check.mjs` is the standalone dependency-graph integrity gate. These are canonical: `cli/scripts/sync.mjs` vendors the two scripts into the published package byte for byte.",
+      "role": "core domain",
+      "keyFiles": [
+        { "path": ".claude/skills/onboard/SKILL.md", "note": "The prompt. Step 4 is where each schema section's quality bar is written down." },
+        { "path": ".claude/skills/onboard/prepass.mjs", "note": "Tree walk, LOC by language, manifest parsing for nine ecosystems, git churn, and the specialized-section signals." },
+        { "path": ".claude/skills/onboard/edges-check.mjs", "note": "Exits non-zero on a dangling edge or a duplicate node id." }
+      ]
+    },
+    {
+      "path": "web/src/app/",
+      "purpose": "The App Router tree. `analysis/[id]/layout.tsx` is the shell every section renders inside, and each section slug is a directory beside it — which is why the section registry and this directory listing have to agree. The `api/` subtree holds the route handlers: upload, chat, markdown export, sharing, progress and tokens. `api/v1/` is the versioned surface the published CLI talks to, and it is the only API route that authenticates itself rather than relying on the proxy.",
+      "role": "entrypoint",
+      "keyFiles": [
+        { "path": "web/src/app/analysis/[id]/layout.tsx", "note": "Resolves the document once and derives the nav, palette, chat starters, sharing and progress from it." },
+        { "path": "web/src/app/analysis/[id]/api/page.tsx", "note": "The API Surface section — 404s outright when the document declares none." },
+        { "path": "web/src/app/api/v1/analyses/route.ts", "note": "Bearer-token publishing for the CLI. Public in the proxy matcher because it does its own auth." },
+        { "path": "web/src/app/api/analyses/[id]/chat/route.ts", "note": "The streaming chat, with its guard ladder documented in order at the top." }
+      ]
+    },
+    {
+      "path": "web/src/lib/",
+      "purpose": "Everything the pages are a thin skin over. Pure functions of an analysis document live here — the section registry, the search index, the chat starters, the Markdown mirror, the diff engine, the diagram model — and so do the cloud-side concerns: the data-source seam, the authorization chokepoint, the upload pipeline, tokens and blob access. If a behaviour is worth testing, it is almost always here rather than in a component.",
+      "role": "core domain",
+      "keyFiles": [
+        { "path": "web/src/lib/sections.ts", "note": "The section registry, the core/specialized class, and visibleSections." },
+        { "path": "web/src/lib/datasource.ts", "note": "The DataSource interface, the fixture implementation, and the local/cloud seam." },
+        { "path": "web/src/lib/access.ts", "note": "The single authorization chokepoint. Its header states the doctrine — read it before adding a query." },
+        { "path": "web/src/lib/exportMarkdown.ts", "note": "Mirror of schema/export-markdown.mjs, held byte-identical by a parity test." },
+        { "path": "web/src/lib/styles.ts", "note": "Literal Tailwind class strings for every badge and chart colour in the app." }
+      ]
+    },
+    {
+      "path": "web/src/components/",
+      "purpose": "The client-side half. Only genuinely interactive things live here — the diagram canvas, the force-directed dependency graph, the command palette, the chat panel, the tour stepper, the onboarding journey — plus `ui.tsx`, the small shared vocabulary of Badge, Card, SectionHeader, FileChip and EmptyState that every section page composes from. Section pages themselves are server components and are not in this directory.",
+      "role": "adapter",
+      "keyFiles": [
+        { "path": "web/src/components/ui.tsx", "note": "Badge, Card, SectionHeader, FileChip, EmptyState — the shared primitives, each with its design rationale in the docstring." },
+        { "path": "web/src/components/SectionNav.tsx", "note": "The section rail. Its icon map is keyed by SectionSlug, so a new section fails the build here first." },
+        { "path": "web/src/components/DiagramCanvas.tsx", "note": "Selection, neighbourhood highlighting, the inspector card and the keyboard cursor, all derived from the rendered SVG." }
+      ]
+    },
+    {
+      "path": "cli/",
+      "purpose": "The published npm package `repo-onboarding`, which is how someone generates an analysis without cloning this repository. `bin/repo-onboarding.mjs` dispatches init, prepass, validate, export and upload. `vendor/` holds byte-exact copies of five canonical files and must never be edited in place — `scripts/sync.mjs` refreshes it and `test/vendor.test.mjs` fails when it has drifted. `templates/PROMPT.md` is the generator prompt rendered into the target repo at init time.",
+      "role": "entrypoint",
+      "keyFiles": [
+        { "path": "cli/bin/repo-onboarding.mjs", "note": "Command dispatcher and the usage text a stranger reads first." },
+        { "path": "cli/scripts/sync.mjs", "note": "VENDOR_MAP is the drift contract; the test imports it rather than restating it." },
+        { "path": "cli/templates/PROMPT.md", "note": "The other generator prompt. Keep it in step with SKILL.md — nothing checks that they agree." },
+        { "path": "cli/src/constants.mjs", "note": "SUPPORTED_SCHEMA_VERSION and the analyzerVersion stamped into generated documents." }
+      ]
+    },
+    {
+      "path": "data/",
+      "purpose": "Committed analysis documents, served in local mode as `/analysis/<directory name>`. They are fixtures with a second job: the unit, parity and end-to-end suites all read them, so they are the closest thing this repository has to golden files. `sample` is a fictional demo, `express` is a real 1.2.0 document written before the contributor guide existed, `fer-mentor` is a real FastAPI application, and `repo-onboarding` is this repository analysed by its own engine.",
+      "role": "tests",
+      "keyFiles": [
+        { "path": "data/sample/analysis.json", "note": "The demo document, and the base every validator test mutates a copy of." },
+        { "path": "data/express/analysis.json", "note": "A genuine pre-1.2.0 document — the one that proves a core section a document predates still renders." }
+      ]
+    },
+    {
+      "path": "docs/",
+      "purpose": "The decisions, kept out of commit messages so they can be found. `adr/` holds four architecture decision records, each written as the choice plus the alternatives that were rejected and why. `agents/` records how this repository is worked on — where issues live, what the triage labels mean, and which files are the domain vocabulary.",
+      "role": "supporting",
+      "keyFiles": [
+        { "path": "docs/adr/0002-offline-by-construction.md", "note": "Why validation never touches the network, which constrains every rule added since." },
+        { "path": "docs/adr/0004-sections-are-declared-by-presence.md", "note": "Why there is no project type: a section exists because its key does." },
+        { "path": "docs/agents/issue-tracker.md", "note": "Issues are markdown files under .scratch/<feature>/issues/." }
+      ]
+    },
+    {
+      "path": "CONTEXT.md",
+      "purpose": "The domain vocabulary, and the single most useful file to read before writing anything here. Each term gets a definition and an explicit list of words to avoid, because the schema, the two generator prompts and the UI all have to use the same nouns for the same things. When a name in this repository looks oddly specific — actor rather than role, promotion rather than lightbox — this file is where the reason is.",
+      "role": "core domain",
+      "keyFiles": [
+        { "path": "CONTEXT.md", "note": "Read the API surface and Diagrams sections before touching either area." },
+        { "path": "AGENTS.md", "note": "The working agreement, including the requirement to hand off a running local server." }
+      ]
+    }
+  ],
+  "tour": [
+    {
+      "order": 1,
+      "title": "Learn the vocabulary before the code",
+      "files": [{ "path": "CONTEXT.md" }],
+      "why": "Every other file in this repository assumes these words. The schema, both generator prompts and the UI were written to use one noun per concept, and the file lists — for each term — the near-synonyms that are deliberately not used. Reading it first turns several later files from puzzling into obvious.",
+      "notice": "Notice that each entry has an `_Avoid_` line, and that some of them explain a choice you would otherwise misread as fussiness: actor rather than role, because tech stack entries already have a role and because a scheduled job is not a role in the human sense."
+    },
+    {
+      "order": 2,
+      "title": "Read the contract",
+      "files": [
+        { "path": "schema/analysis.ts", "startLine": 16, "endLine": 50 },
+        { "path": "schema/analysis.schema.json", "startLine": 1, "endLine": 70 }
+      ],
+      "why": "This is the whole interface between the two halves of the product, so it is the only file you must hold in your head. Read the TypeScript first because it is shorter and commented, then the JSON Schema for the constraints the types cannot carry.",
+      "notice": "Notice which keys are optional and why they differ: `contributorGuide` and `learningResources` are optional because older documents predate them, while `apiSurface` is optional because most repositories genuinely have no API. Those two kinds of absence are handled completely differently by the viewer, which is the subject of step 4."
+    },
+    {
+      "order": 3,
+      "title": "See where the facts come from",
+      "files": [{ "path": ".claude/skills/onboard/prepass.mjs", "startLine": 871, "endLine": 930 }],
+      "why": "Before reading anything a model writes, see what a model is not allowed to write. `main()` is the whole shape of the pre-pass on one screen: walk, manifests, git, notable files, signals, output. Everything above it is the detail of those six steps.",
+      "notice": "Notice that `signals` is assembled separately from `notable` and is the newest idea in the file: it proposes that a repository might warrant a specialized section and refuses to decide, because deciding is the analysis engine's job and the schema's floors are the backstop if it decides wrongly."
+    },
+    {
+      "order": 4,
+      "title": "Watch a document become a navigation",
+      "files": [{ "path": "web/src/lib/sections.ts", "startLine": 34, "endLine": 111 }],
+      "why": "This is the spine of the viewer and the file the last two features both turned on. Read it after the contract, because it is meaningless until you know that a section is a top-level key, and before any page, because three of them derive from it.",
+      "notice": "Notice `isSectionVisible`: a core section is always shown and a specialized one only when its key is present, and an explicit `null` counts as absent. That one-line difference is why a document written before the contributor guide still shows the tab with a regenerate prompt while a repository with no API shows nothing at all."
+    },
+    {
+      "order": 5,
+      "title": "Follow one section from key to page",
+      "files": [
+        { "path": "web/src/app/analysis/[id]/api/page.tsx" },
+        { "path": "web/src/lib/api-surface.ts" }
+      ],
+      "why": "Now that you know how a section is declared, read the newest one end to end. It is the smallest complete example of the pattern every section page follows, and the only one that can refuse to exist.",
+      "notice": "Notice the `notFound()` when `apiSurface` is absent, and that there is no empty state anywhere in the file — a page for a repository with no API is not a page. Notice too that the route anchor is shared with the command palette rather than computed twice, because the two have to agree on how a route is addressed."
+    },
+    {
+      "order": 6,
+      "title": "Find the seam between the two modes",
+      "files": [{ "path": "web/src/lib/datasource.ts", "startLine": 119, "endLine": 157 }],
+      "why": "Every page you have read so far calls `resolveDataSource()` and none of them knows which mode it is in. This is where that stops being magic, and it is the file to understand before touching anything that reads an analysis.",
+      "notice": "Notice that the cloud source is reached by dynamic import rather than a top-level one. That is not lazy-loading for speed — it is the guarantee that a checkout with no environment variables never evaluates Clerk, Drizzle or Blob code at all."
+    },
+    {
+      "order": 7,
+      "title": "Read the one place that answers who may see what",
+      "files": [
+        { "path": "web/src/lib/access.ts", "startLine": 1, "endLine": 62 },
+        { "path": "web/src/proxy.ts", "startLine": 28, "endLine": 60 }
+      ],
+      "why": "Authorization is the part of this codebase where a wrong guess is expensive, and it is deliberately concentrated. Read the chokepoint's header first — it states a rule about where queries may live — then the proxy, which is the layer above it.",
+      "notice": "Notice the public matcher in the proxy, and in particular why `/api/v1` is on it: that route authenticates itself with a bearer token, so Clerk must not redirect it first. Notice too that an `st_` share id resolves without an access check, because there the secret in the URL is itself the capability."
+    },
+    {
+      "order": 8,
+      "title": "See how a document gets in",
+      "files": [{ "path": "web/src/lib/uploadAnalysis.ts", "startLine": 52, "endLine": 128 }],
+      "why": "You have now read the contract, the generator, the viewer and the access rules. This is the pipeline that joins them, and it is shared by the browser upload and the CLI upload so the two can never diverge.",
+      "notice": "Notice the ordering: validate before anything is stored, store the blob before the database rows, and clean the blob up if the database write fails. Notice also that the two inserts go through `db.batch` — Neon's HTTP driver has no interactive transactions, so that is how an analysis row and its ownership row stay atomic."
+    },
+    {
+      "order": 9,
+      "title": "Understand why some files exist twice",
+      "files": [
+        { "path": "web/src/lib/exportMarkdown.ts", "startLine": 1, "endLine": 40 },
+        { "path": "cli/scripts/sync.mjs", "startLine": 24, "endLine": 35 }
+      ],
+      "why": "This is the last thing that will look like a mistake until it is explained, and it is the pattern you must follow rather than fix. Leave it until the end, because it only makes sense once you know the three places a document is consumed.",
+      "notice": "Notice that each duplicate is checked differently: the Markdown mirror by a byte-equality parity test, `cli/vendor/` by a byte-identity drift test, and the validator mirror by nothing but a header comment. Notice the parity test's stated limit — it compares per fixture, so a section no fixture carries could diverge silently, which is why `data/repo-onboarding/analysis.json` carries an API surface."
+    }
+  ],
+  "hotspots": {
+    "entries": [
+      {
+        "path": "web/src/app/analysis/[id]/layout.tsx",
+        "commits": 14,
+        "recentActivity": "active",
+        "insight": "The busiest file in the repository because it is where every cross-cutting feature has to land: the nav, the command palette, the share dialog, the staleness badge, the chat panel, onboarding progress and the version links all resolve here. If a feature is visible on every section page, this file changed for it. Expect to touch it, and expect the diff to be small."
+      },
+      {
+        "path": "web/src/app/globals.css",
+        "commits": 14,
+        "recentActivity": "active",
+        "insight": "The whole design system in one file — Tailwind v4 needs no config, so tokens, themes and the handful of custom utilities live here instead. Its churn is theme work rather than churn from complexity, and it is the file to read before adding a colour anywhere, together with `web/src/lib/styles.ts`."
+      },
+      {
+        "path": "web/src/components/Mermaid.tsx",
+        "commits": 11,
+        "recentActivity": "active",
+        "insight": "Rendering someone else's Mermaid source in a browser is the least predictable thing this app does, and the commit count shows it. It is the reason the generator prompts ban semicolons inside diagram labels and the reason diagram interaction is derived from the rendered SVG rather than from the source — a decision recorded as ADR 0003."
+      },
+      {
+        "path": "web/src/components/SectionNav.tsx",
+        "commits": 9,
+        "recentActivity": "active",
+        "insight": "Every new section touches this file, because its icon map is keyed by `SectionSlug` and the build fails until the new slug has an icon. That is the guard working as designed rather than friction — the churn here is a symptom of sections being added, not of the nav being unstable."
+      },
+      {
+        "path": "CONTEXT.md",
+        "commits": 8,
+        "recentActivity": "active",
+        "insight": "A prose file among the top ten most-changed, which tells you something real about how this repository is worked on: naming is settled in writing before the code is written. A feature that introduces a concept adds its entry here first, and the API surface work added three."
+      },
+      {
+        "path": "web/src/lib/sections.ts",
+        "commits": 6,
+        "recentActivity": "active",
+        "insight": "Small, central and recently rewritten. It went from a constant list to a function of the analysis document, and that change is what let the API Surface section appear for one repository and stay invisible for another. Read it before any work that adds or reorders a section."
+      },
+      {
+        "path": "web/src/db/schema.ts",
+        "commits": 7,
+        "recentActivity": "moderate",
+        "insight": "Seven commits and seven migrations under `web/drizzle/`, then quiet for weeks — the shape of a data model that was extended feature by feature and has settled. Its dormancy is the useful signal: schema changes here are rare and always paired with a generated migration, so treat one as a deliberate act rather than a routine edit."
+      }
+    ],
+    "interpretation": "The churn concentrates in exactly two places, and neither is a warning sign. The first is the viewer's shell — the analysis layout, the global stylesheet, the section nav — where every cross-cutting feature necessarily lands; touching those files is normal and the diffs are usually small. The second is the Mermaid rendering path, which is genuinely the hardest thing here and is where you should read the surrounding ADR before changing anything. What is striking is what is *not* hot: `schema/analysis.schema.json` and `web/src/lib/access.ts` barely move. The contract and the authorization chokepoint are the two files where a mistake is expensive, and their stillness is deliberate — changes there go through an ADR or a schema version rather than through a routine commit."
+  },
+  "setup": {
+    "prerequisites": [
+      "Node.js 22 (the version every CI job pins with actions/setup-node)",
+      "npm (three separate lockfiles: the repo root, web/ and cli/ each install independently)",
+      "git (the pre-pass reads churn straight out of git log, and a checkout with no history degrades to structural reasoning)",
+      "No environment variables at all for local mode — a fresh clone runs against the committed fixtures in data/"
+    ],
+    "setup": [
+      {
+        "title": "Install the root dependencies (ajv, for the schema tooling)",
+        "commands": ["npm install"],
+        "notes": "The root package only exists to run the validators — its whole dependency list is ajv and ajv-formats."
+      },
+      {
+        "title": "Install the viewer",
+        "commands": ["cd web", "npm install"],
+        "notes": "This is the large install. Everything below that mentions `npm run` in web/ assumes it has finished."
+      },
+      {
+        "title": "Install the CLI package (only if you are working on it)",
+        "commands": ["cd cli", "npm install"],
+        "notes": "Also ajv only. Run `npm run sync` here after changing any canonical file under schema/ or .claude/skills/onboard/, or the vendor drift test will fail."
+      }
+    ],
+    "run": [
+      {
+        "title": "Run the viewer in development",
+        "commands": ["cd web", "npm run dev"],
+        "notes": "http://localhost:3000. Local mode is automatic when the cloud keys are absent, so the fixtures in data/ are what you will see."
+      },
+      {
+        "title": "Serve a production build in local mode",
+        "commands": ["cd web", "npm run build:local", "npm run start:local"],
+        "notes": "This is the build the end-to-end suite runs against. It is pinned to port 3100 by the script, and AGENTS.md notes that 3100 belongs to a different project on the maintainer's machine — pass a different -p when that matters."
+      },
+      {
+        "title": "Analyse a repository with the published CLI",
+        "commands": [
+          "npx repo-onboarding init /path/to/repo",
+          "npx repo-onboarding validate /path/to/repo/analysis.json",
+          "npx repo-onboarding upload /path/to/repo/analysis.json"
+        ],
+        "notes": "Between init and validate you point your own AI agent at the generated .repo-onboarding/PROMPT.md. Upload needs a token from /account in REPO_ONBOARDING_TOKEN."
+      },
+      {
+        "title": "Analyse a repository from inside this checkout",
+        "commands": [
+          "node .claude/skills/onboard/prepass.mjs <repo-path> --out prepass.json --pretty",
+          "node schema/validate.mjs data/<repo>/analysis.json --cross-refs"
+        ],
+        "notes": "The pre-pass and the validator are usable on their own. The reading in between is what the /onboard skill prompt drives."
+      }
+    ],
+    "test": [
+      {
+        "title": "Validate every committed analysis document",
+        "commands": ["npm run validate:all"],
+        "notes": "From the repo root. This is the `schema` job in CI and the fastest way to know the contract still holds."
+      },
+      {
+        "title": "The viewer's unit and component suites",
+        "commands": ["cd web", "npm test"],
+        "notes": "Two runners on purpose: `test:unit` is plain node:test under tsx for pure functions of a document, `test:ui` is Vitest in jsdom for the interactive components."
+      },
+      {
+        "title": "The end-to-end suites",
+        "commands": ["cd web", "npm run test:e2e"],
+        "notes": "Builds in local mode first, then runs Playwright: smoke, accessibility, the diagram contract and visual baselines. Baselines are Windows-generated — `npm run test:e2e:update` refreshes them after a deliberate visual change."
+      },
+      {
+        "title": "The CLI package",
+        "commands": ["cd cli", "npm test"],
+        "notes": "Includes the vendor drift test. If it fails, run `npm run sync` rather than editing anything under vendor/."
+      },
+      {
+        "title": "Typecheck and lint the viewer",
+        "commands": ["cd web", "npx tsc --noEmit", "npm run lint"],
+        "notes": "The typecheck is where a newly registered section reports the maps that have not answered for it yet."
+      }
+    ]
+  },
+  "learningResources": [
+    {
+      "tech": "TypeScript",
+      "official": "https://www.typescriptlang.org/docs/",
+      "resources": [
+        {
+          "title": "Everyday Types",
+          "url": "https://www.typescriptlang.org/docs/handbook/2/everyday-types.html",
+          "kind": "guide",
+          "why": "The analysis document is one big nest of interfaces and unions, and `schema/analysis.ts` is where you will spend your first hour. This is the shortest path to reading it fluently."
+        },
+        {
+          "title": "Narrowing",
+          "url": "https://www.typescriptlang.org/docs/handbook/2/narrowing.html",
+          "kind": "guide",
+          "why": "Section entries are a discriminated union on `class`, and `isSectionVisible` only compiles because narrowing on that field reveals the `key` property. Read this before touching the registry."
+        },
+        {
+          "title": "TSConfig Reference",
+          "url": "https://www.typescriptlang.org/tsconfig/",
+          "kind": "reference",
+          "why": "The `@schema/*` path alias is what lets the viewer import types from outside `web/` while Turbopack still refuses to bundle runtime code from there — a distinction that confuses everyone once."
+        }
+      ],
+      "inRepo": {
+        "note": "Types here are used as enforcement rather than documentation. `SectionSlug` is a union so that `Record<SectionSlug, …>` maps become exhaustiveness checks — adding a section breaks the build in exactly the two places that must be updated.",
+        "files": [
+          { "path": "schema/analysis.ts", "startLine": 16, "endLine": 50 },
+          { "path": "web/src/lib/sections.ts", "startLine": 19, "endLine": 60 },
+          { "path": "web/src/components/SectionNav.tsx", "startLine": 8, "endLine": 23 }
+        ]
+      }
+    },
+    {
+      "tech": "Next.js",
+      "official": "https://nextjs.org/docs",
+      "resources": [
+        {
+          "title": "App Router",
+          "url": "https://nextjs.org/docs/app",
+          "kind": "guide",
+          "why": "Every analysis section is a route segment, so the file-to-URL mapping is not a detail here — it is the reason the section registry and the `app/analysis/[id]/` directory listing have to agree."
+        },
+        {
+          "title": "Route Handlers",
+          "url": "https://nextjs.org/docs/app/api-reference/file-conventions/route",
+          "kind": "reference",
+          "why": "The upload, chat, markdown and token endpoints are all `route.ts` files exporting named HTTP methods, which is exactly how the API Surface section's rows were derived."
+        }
+      ],
+      "inRepo": {
+        "note": "Two conventions matter more than the rest: the middleware is named `proxy.ts` (Next 16's rename) and lives at `web/src/proxy.ts`, and every cloud-only import inside a route handler is dynamic so local mode never evaluates it.",
+        "files": [
+          { "path": "web/src/proxy.ts" },
+          { "path": "web/src/app/analysis/[id]/layout.tsx" },
+          { "path": "web/src/app/api/v1/analyses/route.ts" }
+        ]
+      }
+    },
+    {
+      "tech": "React",
+      "official": "https://react.dev",
+      "resources": [
+        {
+          "title": "Server Components",
+          "url": "https://react.dev/reference/rsc/server-components",
+          "kind": "guide",
+          "why": "Every section page is an async server component that reads the document and returns markup. Knowing what may not cross into a client component explains why the nav is handed slugs rather than the analysis."
+        },
+        {
+          "title": "cache",
+          "url": "https://react.dev/reference/react/cache",
+          "kind": "reference",
+          "why": "`getAnalysisCached` is a one-line application of this, and it is what stops the layout, the page and `generateMetadata` each fetching the same document — three Neon and Blob round trips per request in cloud mode."
+        }
+      ],
+      "inRepo": {
+        "note": "The split is drawn tightly: `\"use client\"` appears only on genuinely interactive components — the diagram canvas, the graph, the palette, the chat — and never on a section page that merely renders document data.",
+        "files": [
+          { "path": "web/src/lib/datasource.ts", "startLine": 143, "endLine": 157 },
+          { "path": "web/src/components/CommandPalette.tsx" },
+          { "path": "web/src/app/analysis/[id]/hotspots/page.tsx" }
+        ]
+      }
+    },
+    {
+      "tech": "Ajv",
+      "official": "https://ajv.js.org",
+      "resources": [
+        {
+          "title": "JSON Schema support",
+          "url": "https://ajv.js.org/json-schema.html",
+          "kind": "reference",
+          "why": "The substance floors that keep hollow sections out of the product are ordinary keywords — `minItems`, `minLength`, `contains`, `pattern`. This page is where you check what a floor you are adding actually does."
+        },
+        {
+          "title": "Options",
+          "url": "https://ajv.js.org/options.html",
+          "kind": "reference",
+          "why": "`{ allErrors: true, strict: true }` is duplicated verbatim in three files and the duplication is deliberate. Knowing what those two options change is what makes the mirror notices make sense."
+        },
+        {
+          "title": "API",
+          "url": "https://ajv.js.org/api.html",
+          "kind": "reference",
+          "why": "The `ValidationIssue` shape every surface reports is derived from Ajv's error objects — `keyword`, `params`, `instancePath` — so this page is the reference for `describeExpected`."
+        }
+      ],
+      "inRepo": {
+        "note": "Ajv is the only gate a document passes, and its configuration is intentionally copied rather than shared, because Next cannot import the canonical `.mjs` from outside `web/`. Change one and you must change all three.",
+        "files": [
+          { "path": "schema/validate-core.mjs", "startLine": 44, "endLine": 60 },
+          { "path": "web/src/lib/validateAnalysis.ts", "startLine": 38, "endLine": 52 },
+          { "path": "schema/analysis.schema.json" }
+        ]
+      }
+    },
+    {
+      "tech": "Tailwind CSS",
+      "official": "https://tailwindcss.com/docs",
+      "resources": [
+        {
+          "title": "Theme variables",
+          "url": "https://tailwindcss.com/docs/theme",
+          "kind": "guide",
+          "why": "There is no config file here — the whole design system is CSS variables in `globals.css`, which is only legible once you know how v4 moved the theme into CSS."
+        },
+        {
+          "title": "Dark mode",
+          "url": "https://tailwindcss.com/docs/dark-mode",
+          "kind": "guide",
+          "why": "The viewer supports an explicit toggle *and* the system preference, and getting that pairing wrong is the failure mode this repository has already been bitten by once."
+        }
+      ],
+      "inRepo": {
+        "note": "Because v4 scans source for literal class strings, colours can never be composed at runtime. Every badge, node kind, difficulty, churn bar and HTTP method colour is written out in full in one file.",
+        "files": [
+          { "path": "web/src/lib/styles.ts" },
+          { "path": "web/src/app/globals.css" }
+        ]
+      }
+    },
+    {
+      "tech": "Clerk",
+      "official": "https://clerk.com/docs",
+      "resources": [
+        {
+          "title": "Next.js quickstart",
+          "url": "https://clerk.com/docs/quickstarts/nextjs",
+          "kind": "tutorial",
+          "why": "Shows the standard wiring this repo deliberately departs from: everything Clerk is behind a dynamic import so a keyless checkout still runs, which is easier to see once you know what the normal setup looks like."
+        }
+      ],
+      "inRepo": {
+        "note": "Clerk is never imported at the top level. `proxy.ts` loads its middleware only after `isCloudMode()` returns true, and every route handler calls `await import(\"@clerk/nextjs/server\")` inside the function body.",
+        "files": [
+          { "path": "web/src/proxy.ts", "startLine": 28, "endLine": 60 },
+          { "path": "web/src/app/api/analyses/route.ts" },
+          { "path": "web/src/lib/mode.ts" }
+        ]
+      }
+    },
+    {
+      "tech": "Drizzle ORM",
+      "official": "https://orm.drizzle.team",
+      "resources": [
+        {
+          "title": "Get started with PostgreSQL",
+          "url": "https://orm.drizzle.team/docs/get-started-postgresql",
+          "kind": "tutorial",
+          "why": "The five tables in `db/schema.ts` are plain `pgTable` declarations, and this is the shortest route to reading and extending them."
+        },
+        {
+          "title": "Migrations",
+          "url": "https://orm.drizzle.team/docs/migrations",
+          "kind": "guide",
+          "why": "There are seven generated migrations under `web/drizzle/` and applying one is a manual step in this project's deploy, so never hand-edit a schema without generating the migration beside it."
+        }
+      ],
+      "inRepo": {
+        "note": "The data model stores metadata only — the analysis document itself lives in Blob. Version numbers are deliberately not a column: they are read-time ordinals derived by ordering a lineage by `created_at`.",
+        "files": [
+          { "path": "web/src/db/schema.ts" },
+          { "path": "web/src/lib/access.ts", "startLine": 100, "endLine": 190 }
+        ]
+      }
+    },
+    {
+      "tech": "Vercel Blob",
+      "official": "https://vercel.com/docs/vercel-blob",
+      "resources": [
+        {
+          "title": "Vercel Blob SDK",
+          "url": "https://vercel.com/docs/vercel-blob/using-blob-sdk",
+          "kind": "reference",
+          "why": "`blob.ts` is a forty-line wrapper over `put`, `head` and `del`, and its whole subtlety is that payloads are private and keyed by owner — which is a store option rather than something the app enforces."
+        }
+      ],
+      "inRepo": {
+        "note": "The blob is written before the database rows and removed again if the batch insert fails, so an orphaned payload is the only failure mode the upload path can leave behind — never an analysis row pointing at nothing.",
+        "files": [
+          { "path": "web/src/lib/blob.ts" },
+          { "path": "web/src/lib/uploadAnalysis.ts", "startLine": 84, "endLine": 128 }
+        ]
+      }
+    },
+    {
+      "tech": "Vercel AI SDK",
+      "official": "https://ai-sdk.dev/docs",
+      "resources": [
+        {
+          "title": "Chatbot",
+          "url": "https://ai-sdk.dev/docs/ai-sdk-ui/chatbot",
+          "kind": "guide",
+          "why": "The chat panel is a `useChat` client talking to one streaming route, so this page maps almost one-to-one onto `ChatSession.tsx` and the handler beside it."
+        },
+        {
+          "title": "Tool calling",
+          "url": "https://ai-sdk.dev/docs/ai-sdk-core/tools-and-tool-calling",
+          "kind": "guide",
+          "why": "\"Ask this repo\" can fetch the repository's files at the analyzed commit, and the whole multi-step tool loop is billed as one message against the daily quota — a decision that only makes sense once you know how the loop works."
+        }
+      ],
+      "inRepo": {
+        "note": "The model is addressed as a plain provider/model string through the AI Gateway, so the feature switches off entirely when one environment variable is missing rather than degrading into errors.",
+        "files": [
+          { "path": "web/src/app/api/analyses/[id]/chat/route.ts" },
+          { "path": "web/src/lib/chat/prompt.ts" },
+          { "path": "web/src/lib/chat/tools.ts" }
+        ]
+      }
+    },
+    {
+      "tech": "Mermaid",
+      "official": "https://mermaid.js.org",
+      "resources": [
+        {
+          "title": "Flowchart syntax",
+          "url": "https://mermaid.js.org/syntax/flowchart.html",
+          "kind": "reference",
+          "why": "Most diagrams an analysis document carries are flowcharts, and this page is where you check a label escaping question before blaming the renderer."
+        },
+        {
+          "title": "Sequence diagram syntax",
+          "url": "https://mermaid.js.org/syntax/sequenceDiagram.html",
+          "kind": "reference",
+          "why": "The diagram canvas treats sequence diagrams specially — messages are addressable elements there, because in a sequence diagram the arrows are the content."
+        },
+        {
+          "title": "Usage",
+          "url": "https://mermaid.js.org/config/usage.html",
+          "kind": "guide",
+          "why": "Diagrams render in the browser rather than at build time, which is what makes `Mermaid.tsx` the most-changed component in the repository."
+        }
+      ],
+      "inRepo": {
+        "note": "Interaction is derived from the SVG Mermaid produced, never from the diagram source — recorded as ADR 0003. That is also why both generator prompts forbid semicolons inside labels: Mermaid reads one as a statement separator and the diagram simply fails.",
+        "files": [
+          { "path": "web/src/components/Mermaid.tsx" },
+          { "path": "web/src/lib/diagram-model.ts" },
+          { "path": "docs/adr/0003-diagram-interaction-derived-from-rendered-output.md" }
+        ]
+      }
+    },
+    {
+      "tech": "Playwright",
+      "official": "https://playwright.dev",
+      "resources": [
+        {
+          "title": "Visual comparisons",
+          "url": "https://playwright.dev/docs/test-snapshots",
+          "kind": "guide",
+          "why": "Baselines here are platform-suffixed and generated on Windows, and CI runs that job on windows-latest for exactly that reason. Read this before wondering why a screenshot differs only in CI."
+        },
+        {
+          "title": "Accessibility testing",
+          "url": "https://playwright.dev/docs/accessibility-testing",
+          "kind": "guide",
+          "why": "Every section page is asserted to have zero WCAG A/AA violations, so a new section is not finished until it passes this suite — which is the fastest feedback on a hand-rolled table or badge."
+        }
+      ],
+      "inRepo": {
+        "note": "One list of routes in `e2e/helpers.ts` drives three suites at once — smoke, accessibility and visual — so adding a section page to that array is what gives it all three kinds of coverage.",
+        "files": [
+          { "path": "web/e2e/helpers.ts" },
+          { "path": "web/e2e/accessibility.spec.ts" },
+          { "path": "web/e2e/visual.spec.ts" }
+        ]
+      }
+    },
+    {
+      "tech": "Vitest",
+      "official": "https://vitest.dev",
+      "resources": [
+        {
+          "title": "Test environment",
+          "url": "https://vitest.dev/guide/environment.html",
+          "kind": "guide",
+          "why": "The component suites run in jsdom, which is why anything that needs real layout — the diagram canvas's geometry, the nav's scroll edges — is asserted in Playwright instead."
+        }
+      ],
+      "inRepo": {
+        "note": "The two-runner split is a convention worth respecting: pure functions of an analysis document are tested with plain node:test under tsx, and only genuinely interactive components get a Vitest suite. Section pages get neither — they are covered end to end.",
+        "files": [
+          { "path": "web/vitest.config.ts" },
+          { "path": "web/src/components/__tests__/SectionNav.ui.test.tsx" },
+          { "path": "web/src/lib/__tests__/sections.test.ts" }
+        ]
+      }
+    }
+  ],
+  "apiSurface": {
+    "routes": [
+      {
+        "method": "GET",
+        "path": "/",
+        "file": "web/src/app/page.tsx",
+        "actor": "public"
+      },
+      {
+        "method": "GET",
+        "path": "/generate",
+        "file": "web/src/app/generate/page.tsx",
+        "actor": "public"
+      },
+      {
+        "method": "GET",
+        "path": "/opengraph-image",
+        "file": "web/src/app/opengraph-image.tsx",
+        "actor": "public"
+      },
+      {
+        "method": "GET",
+        "path": "/upload",
+        "file": "web/src/app/upload/page.tsx",
+        "actor": "any signed-in account"
+      },
+      {
+        "method": "GET",
+        "path": "/account",
+        "file": "web/src/app/account/page.tsx",
+        "actor": "any signed-in account",
+        "note": "Where personal API tokens are created and revoked. It renders in local mode too, but says so rather than pretending: tokens need cloud mode, because there is no database to hash them into otherwise."
+      },
+      {
+        "method": "GET",
+        "path": "/analysis/[id]",
+        "file": "web/src/app/analysis/[id]/page.tsx",
+        "actor": "analysis reader",
+        "note": "The id prefix decides everything about this request. A bare segment is a committed fixture read from data/, `db_<uuid>` is an uploaded analysis behind an access check, and `st_<token>` is an unlisted link that resolves without one because the secret in the URL is itself the capability."
+      },
+      {
+        "method": "GET",
+        "path": "/analysis/[id]/architecture",
+        "file": "web/src/app/analysis/[id]/architecture/page.tsx",
+        "actor": "analysis reader"
+      },
+      {
+        "method": "GET",
+        "path": "/analysis/[id]/graph",
+        "file": "web/src/app/analysis/[id]/graph/page.tsx",
+        "actor": "analysis reader"
+      },
+      {
+        "method": "GET",
+        "path": "/analysis/[id]/map",
+        "file": "web/src/app/analysis/[id]/map/page.tsx",
+        "actor": "analysis reader"
+      },
+      {
+        "method": "GET",
+        "path": "/analysis/[id]/api",
+        "file": "web/src/app/analysis/[id]/api/page.tsx",
+        "actor": "analysis reader",
+        "note": "The page you are reading. It is the only section route that can refuse to exist: when the document carries no `apiSurface` key it returns 404 rather than an empty state, because a repository with no API has no API surface to be missing."
+      },
+      {
+        "method": "GET",
+        "path": "/analysis/[id]/guide",
+        "file": "web/src/app/analysis/[id]/guide/page.tsx",
+        "actor": "analysis reader"
+      },
+      {
+        "method": "GET",
+        "path": "/analysis/[id]/tour",
+        "file": "web/src/app/analysis/[id]/tour/page.tsx",
+        "actor": "analysis reader"
+      },
+      {
+        "method": "GET",
+        "path": "/analysis/[id]/hotspots",
+        "file": "web/src/app/analysis/[id]/hotspots/page.tsx",
+        "actor": "analysis reader"
+      },
+      {
+        "method": "GET",
+        "path": "/analysis/[id]/setup",
+        "file": "web/src/app/analysis/[id]/setup/page.tsx",
+        "actor": "analysis reader"
+      },
+      {
+        "method": "GET",
+        "path": "/analysis/[id]/learn",
+        "file": "web/src/app/analysis/[id]/learn/page.tsx",
+        "actor": "analysis reader"
+      },
+      {
+        "method": "GET",
+        "path": "/analysis/[id]/tasks",
+        "file": "web/src/app/analysis/[id]/tasks/page.tsx",
+        "actor": "analysis reader"
+      },
+      {
+        "method": "GET",
+        "path": "/analysis/[id]/versions",
+        "file": "web/src/app/analysis/[id]/versions/page.tsx",
+        "actor": "analysis reader"
+      },
+      {
+        "method": "GET",
+        "path": "/analysis/[id]/versions/diff/[otherId]",
+        "file": "web/src/app/analysis/[id]/versions/diff/[otherId]/page.tsx",
+        "actor": "analysis reader"
+      },
+      {
+        "method": "GET",
+        "path": "/analysis/[id]/opengraph-image",
+        "file": "web/src/app/analysis/[id]/opengraph-image.tsx",
+        "actor": "analysis reader"
+      },
+      {
+        "method": "POST",
+        "path": "/api/analyses",
+        "file": "web/src/app/api/analyses/route.ts",
+        "actor": "any signed-in account",
+        "note": "The browser's upload door. It reads a Clerk session and then hands the body to `performUpload`, which is the same pipeline the CLI's endpoint uses — so a document is validated, stored and recorded identically whichever door it came through."
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/analyses/[id]",
+        "file": "web/src/app/api/analyses/[id]/route.ts",
+        "actor": "analysis owner"
+      },
+      {
+        "method": "GET",
+        "path": "/api/analyses/[id]/markdown",
+        "file": "web/src/app/api/analyses/[id]/markdown/route.ts",
+        "actor": "analysis reader",
+        "note": "Downloads the committable ONBOARDING.md. It contains no authorization code at all, deliberately: the resolved data source has already refused any id the caller may not read, so an unreadable analysis returns 404 before this handler has anything to render."
+      },
+      {
+        "method": "POST",
+        "path": "/api/analyses/[id]/chat",
+        "file": "web/src/app/api/analyses/[id]/chat/route.ts",
+        "actor": "signed-in analysis reader",
+        "note": "The one route that refuses an unlisted-link visitor outright, because it spends money. Its daily quota is consumed before any tokens stream, so a whole multi-step tool loop costs exactly one message and a mid-stream failure burns that one rather than looping free."
+      },
+      {
+        "method": "POST",
+        "path": "/api/analyses/[id]/share-link",
+        "file": "web/src/app/api/analyses/[id]/share-link/route.ts",
+        "actor": "analysis owner",
+        "note": "Creates or rotates the unlisted link by setting a fresh random share token. Rotating is also how a link is revoked from everyone at once — the old `st_` URL stops resolving the moment the token changes."
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/analyses/[id]/share-link",
+        "file": "web/src/app/api/analyses/[id]/share-link/route.ts",
+        "actor": "analysis owner"
+      },
+      {
+        "method": "GET",
+        "path": "/api/analyses/[id]/shares",
+        "file": "web/src/app/api/analyses/[id]/shares/route.ts",
+        "actor": "analysis owner"
+      },
+      {
+        "method": "POST",
+        "path": "/api/analyses/[id]/shares",
+        "file": "web/src/app/api/analyses/[id]/shares/route.ts",
+        "actor": "analysis owner"
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/analyses/[id]/shares/[userId]",
+        "file": "web/src/app/api/analyses/[id]/shares/[userId]/route.ts",
+        "actor": "analysis owner"
+      },
+      {
+        "method": "POST",
+        "path": "/api/analyses/[id]/tour-progress",
+        "file": "web/src/app/api/analyses/[id]/tour-progress/route.ts",
+        "actor": "signed-in analysis reader",
+        "note": "Records the furthest tour step reached as a monotonic GREATEST upsert, so a replayed or out-of-order request can never move a reader backwards. That is also why resetting needs its own DELETE — it is the only way down."
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/analyses/[id]/tour-progress",
+        "file": "web/src/app/api/analyses/[id]/tour-progress/route.ts",
+        "actor": "signed-in analysis reader"
+      },
+      {
+        "method": "POST",
+        "path": "/api/analyses/[id]/onboarding-progress",
+        "file": "web/src/app/api/analyses/[id]/onboarding-progress/route.ts",
+        "actor": "signed-in analysis reader"
+      },
+      {
+        "method": "GET",
+        "path": "/api/tokens",
+        "file": "web/src/app/api/tokens/route.ts",
+        "actor": "any signed-in account"
+      },
+      {
+        "method": "POST",
+        "path": "/api/tokens",
+        "file": "web/src/app/api/tokens/route.ts",
+        "actor": "any signed-in account",
+        "note": "Mints a personal API token. The plaintext is in this response and nowhere else — only a hash is stored — so the UI has one chance to show it and the caller has one chance to keep it."
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/tokens/[id]",
+        "file": "web/src/app/api/tokens/[id]/route.ts",
+        "actor": "any signed-in account"
+      },
+      {
+        "method": "POST",
+        "path": "/api/v1/analyses",
+        "file": "web/src/app/api/v1/analyses/route.ts",
+        "actor": "token-bearing CLI",
+        "note": "The published CLI's publishing endpoint, and the only route that authenticates itself. It is listed as public in `proxy.ts` precisely so Clerk does not redirect it to a sign-in page before its own `Authorization: Bearer roa_…` check can run."
+      }
+    ]
+  },
+  "firstTasks": [
+    {
+      "title": "Give the Versions tab its own chat starter questions",
+      "description": "`buildSuggestedQuestions` maps every section slug to exactly three starter prompts, but `versions` is the one slug that returns an empty array and falls back to the generic defaults — so a reader comparing two analyses is offered \"How do I run the tests?\". Write a `versionsQuestions` helper alongside the others that derives its prompts from the document, and extend the existing unit suite to assert the lead question is version-specific rather than a default.",
+      "difficulty": "easy",
+      "files": [
+        "web/src/lib/suggested-questions.ts",
+        "web/src/lib/__tests__/suggested-questions.test.ts"
+      ],
+      "rationale": "One small file, an obvious gap, and a test suite already shaped for the assertion. It also makes you read the padding helper, which is the piece of that file people get wrong first."
+    },
+    {
+      "title": "Teach the pre-pass a server framework it does not know",
+      "description": "`SERVER_FRAMEWORKS` in the pre-pass lists the dependency names that suggest a repository serves requests. It has no entry for several real ones — ASP.NET Core, Phoenix, Deno's Oak — and no manifest parser for `.csproj` or `mix.exs` either. Add one ecosystem end to end: parse its manifest in `parseManifests`, add its frameworks to the set, then run the pre-pass against a repository of that kind and check `signals.apiSurface.candidate` flips to true.",
+      "difficulty": "medium",
+      "files": [
+        ".claude/skills/onboard/prepass.mjs",
+        "cli/scripts/sync.mjs",
+        "cli/test/vendor.test.mjs"
+      ],
+      "rationale": "It is genuinely useful, it is safe — a signal is advisory, so a wrong guess costs a hint rather than a bad document — and it forces you through the vendoring loop: change a canonical file, run `npm run sync`, watch the drift test go green."
+    },
+    {
+      "title": "Report added and removed routes in the version diff",
+      "description": "Comparing two versions of an analysis already reports what changed in the core sections, but a repository that gained or lost a route between two uploads shows nothing. Extend the diff engine so routes are compared by method and path, and take care with the case that looks the same but is not: an older document with no `apiSurface` predates the section and must never be reported as an API surface being removed.",
+      "difficulty": "medium",
+      "files": [
+        "web/src/lib/diff.ts",
+        "web/src/lib/__tests__/diff.test.ts",
+        "web/src/app/analysis/[id]/versions/diff/[otherId]/page.tsx"
+      ],
+      "rationale": "A pure function of two documents with an existing test suite, so the feedback loop is immediate — and the predates-the-concept case is the sharpest illustration of why sections carry a class at all."
+    },
+    {
+      "title": "Add a second specialized section end to end",
+      "description": "The API Surface section is the first of three planned in `.scratch/specialized-sections/spec.md`. Adding the next one — Design System — means one coordinated change across the contract and both engines: an optional key with a substance floor in `analysis.schema.json` and its TypeScript mirror, a registry entry and a page in the viewer, a renderer in *both* copies of the Markdown export, a fixture that carries it so the parity test can see it, a candidate signal in the pre-pass, and a section in both generator prompts.",
+      "difficulty": "hard",
+      "files": [
+        "schema/analysis.schema.json",
+        "schema/analysis.ts",
+        "web/src/lib/sections.ts",
+        "schema/export-markdown.mjs",
+        "web/src/lib/exportMarkdown.ts",
+        ".claude/skills/onboard/prepass.mjs",
+        "cli/templates/PROMPT.md"
+      ],
+      "rationale": "It is the task that teaches this repository, because it touches every doctrine at once: the schema as the backstop, the two mirrors and how each is checked, the exhaustiveness guard in the type system, and the rule that the pre-pass proposes while the analysis engine decides."
+    }
+  ]
+}
