@@ -25,14 +25,34 @@ export const CORE_ROUTES = [
 /** Mermaid lays every diagram out in the browser, and this page stacks several. */
 const DIAGRAM_TIMEOUT = 20_000;
 
+/**
+ * The document title is in `<head>`, and was there in the first flush.
+ *
+ * Not a given: Next.js streams metadata by default, which appends the `<title>`
+ * to the `<body>` ~50KB in and lets React hoist it into `<head>` on a client
+ * re-render. That hoist is a removal and an insertion, not always in one tick,
+ * so the tour page spent up to ~300ms with no title at all and axe failed
+ * `document-title` on whichever page happened to be audited inside that gap.
+ * `next.config.ts` opts out of streaming metadata for exactly this reason.
+ *
+ * So this is a guard, not a wait: it passes on the first poll. If it ever
+ * starts timing out on every page, the opt-out has been dropped.
+ */
+async function expectTitleInHead(page: Page) {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          () => document.head.querySelector("title")?.textContent?.trim() ?? "",
+        ),
+      { message: "no <title> in <head> — has next.config.ts stopped opting out of streaming metadata?" },
+    )
+    .not.toBe("");
+}
+
 export async function waitForPageReady(page: Page, path: string) {
   await expect(page.locator("main h1").first()).toBeVisible();
-  // The title comes from an async `generateMetadata`, so React can stream the
-  // body before the head. The accessibility suite audits the whole document —
-  // `<head>` included — so waiting for the h1 alone let it read a title that
-  // had not arrived yet, and `document-title` failed on whichever pages lost
-  // that race under a fully parallel run. Wait for a non-empty title too.
-  await expect(page).toHaveTitle(/\S/);
+  await expectTitleInHead(page);
   if (path.endsWith("/architecture")) {
     // Laying out several diagrams is the slowest thing this suite asks of a
     // browser, and more than one spec asks for this page — so a fully parallel
