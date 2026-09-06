@@ -11,6 +11,7 @@ import type {
   RecentActivity,
   TechStackCategory,
 } from "@schema/analysis";
+import type { SectionPresenceKind } from "./diff";
 
 export interface BadgeStyle {
   label: string;
@@ -220,6 +221,32 @@ const DIFF_KIND_STYLES: Record<DiffKind, BadgeStyle> = {
 
 export function diffKindStyle(kind: DiffKind): BadgeStyle {
   return DIFF_KIND_STYLES[kind] ?? DIFF_KIND_STYLES.changed;
+}
+
+/**
+ * A specialized section appearing or disappearing between two runs. The first
+ * two say the repository changed and borrow the diff colours for it; the last
+ * two say only that one of the documents predates the section, so they are
+ * deliberately NOT green or red — the whole point of those cases is that
+ * nothing about the repository can be read off them.
+ */
+const SECTION_PRESENCE_STYLES: Record<SectionPresenceKind, BadgeStyle> = {
+  added: DIFF_KIND_STYLES.added,
+  removed: DIFF_KIND_STYLES.removed,
+  "newly-present": {
+    label: "Newly present",
+    className:
+      "bg-sky-500/12 text-sky-700 dark:text-sky-300 border-sky-500/25",
+  },
+  "not-stated": {
+    label: "Not stated",
+    className:
+      "bg-stone-500/12 text-stone-700 dark:text-stone-300 border-stone-500/25",
+  },
+};
+
+export function sectionPresenceStyle(kind: SectionPresenceKind): BadgeStyle {
+  return SECTION_PRESENCE_STYLES[kind] ?? SECTION_PRESENCE_STYLES["not-stated"];
 }
 
 /**

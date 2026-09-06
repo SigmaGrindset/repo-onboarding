@@ -27,13 +27,22 @@
  *     each delta array, added → changed → removed, then by magnitude descending,
  *     ties broken by ascending Unicode code-unit order of the identity key.
  *
- * This module is PURE and has ZERO runtime imports — only `import type` — so it
- * runs unchanged in a Next.js server component and in a plain `node --test`
- * process. Do not add runtime imports here.
+ *  4. Absence is read against the contract rather than taken at face value. A
+ *     specialized section is present exactly when the repository has the
+ *     substance for it, so its presence changing is normally a change to the
+ *     repository — but a document declaring a contract older than the section
+ *     itself had nowhere to put one, and its silence is the contract's. See
+ *     {@link SectionPresenceKind}.
+ *
+ * This module is PURE: it imports types, plus two modules that are themselves
+ * pure and framework-free, so it runs unchanged in a Next.js server component
+ * and in a plain `node --test` process. Nothing here may reach for React, Next,
+ * the filesystem or the network.
  */
 
 import type {
   Analysis,
+  ApiRoute,
   ArchitectureSection,
   GraphEdge,
   GraphNode,
@@ -42,6 +51,9 @@ import type {
   ChangeRoute,
   RecentActivity,
 } from "@schema/analysis";
+import type { SectionSlug, SpecializedSection } from "./sections";
+import { SPECIALIZED_SECTIONS, canExpressSection } from "./sections";
+import { routeLabel } from "./api-surface";
 
 // ---------------------------------------------------------------------------
 // Public shapes — FROZEN contract (the diff UI is built against these names).
@@ -129,6 +141,56 @@ export interface ContributorGuideDelta {
   after?: KnownRisk | ChangeRoute;
 }
 
+/**
+ * What a specialized section's presence says happened between two runs.
+ *
+ * A specialized section is present exactly when the repository has the
+ * substance for it, and a document cannot say it considered one and found
+ * nothing (ADR 0004). A presence change is therefore usually a change to the
+ * repository — except when the document lacking the section declares a
+ * contract older than the section itself, where the difference is in the
+ * contract and says nothing about the repository at all. Keeping those two out
+ * of `added`/`removed` is the point of this type: an analysis written before
+ * API surfaces existed has not lost one.
+ */
+export type SectionPresenceKind =
+  /** The newer run carries it; the older run could have carried one and did not. */
+  | "added"
+  /** The older run carries it; the newer run could have carried one and did not. */
+  | "removed"
+  /** The newer run carries it; the older run predates the section entirely. */
+  | "newly-present"
+  /** The older run carries it; the newer run predates the section entirely. */
+  | "not-stated";
+
+/** A specialized section whose presence differs between the two runs. */
+export interface SpecializedSectionDelta {
+  /** The section's slug, so a consumer can link to it. */
+  slug: SectionSlug;
+  /** The section's name, as the nav gives it. */
+  label: string;
+  kind: SectionPresenceKind;
+}
+
+/**
+ * One route that appeared, disappeared, or changed between runs. Routes are
+ * joined by `"METHOD /path"` — the address a caller uses, and the same string
+ * the section page and the command palette name a route by.
+ */
+export interface RouteDelta {
+  /** `"GET /api/analyses"` — the identity this route is joined by. */
+  label: string;
+  kind: "added" | "removed" | "changed";
+  /** The base-side route; absent for `added`. */
+  before?: ApiRoute;
+  /** The head-side route; absent for `removed`. */
+  after?: ApiRoute;
+  /** `changed` only, and only when the implementing file moved. */
+  fileChange?: { from: string; to: string };
+  /** `changed` only, and only when the permitted actor changed. */
+  actorChange?: { from: string; to: string };
+}
+
 /** The complete comparison of two analysis documents. */
 export interface AnalysisDiff {
   /** The older run. */
@@ -143,6 +205,10 @@ export interface AnalysisDiff {
   };
   architecture: { deltas: ArchitectureDelta[]; unchangedCount: number };
   contributorGuide: { deltas: ContributorGuideDelta[]; unchangedCount: number };
+  /** Presence changes among the specialized sections, in reading order. */
+  sections: { deltas: SpecializedSectionDelta[] };
+  /** Route changes — compared only when BOTH runs carry an API surface. */
+  apiSurface: { deltas: RouteDelta[]; unchangedCount: number };
   /** True iff any delta array is non-empty or a stats delta is non-zero. */
   hasChanges: boolean;
 }
@@ -531,6 +597,92 @@ function diffContributorGuide(base: Analysis, head: Analysis): {
   return { deltas, unchangedCount };
 }
 
+/**
+ * Presence changes among the specialized sections, in registry order.
+ *
+ * `sections` defaults to the whole registry, so a specialized section added
+ * there is compared without a line changing here: the rule is written once and
+ * reads every specialized section rather than the API surface in particular.
+ * Tests pass their own list to exercise it across sections the registry does
+ * not carry yet.
+ */
+export function diffSpecializedSections(
+  base: Analysis,
+  head: Analysis,
+  sections: readonly SpecializedSection[] = SPECIALIZED_SECTIONS,
+): SpecializedSectionDelta[] {
+  const deltas: SpecializedSectionDelta[] = [];
+  for (const section of sections) {
+    const inBase = base[section.key] != null;
+    const inHead = head[section.key] != null;
+    if (inBase === inHead) continue; // in both, or in neither: nothing to say
+
+    // The document WITHOUT the section is the one being read. Whether its
+    // contract could have carried one is what decides whether its silence is a
+    // fact about the repository or a fact about how old the document is.
+    const kind: SectionPresenceKind = inHead
+      ? canExpressSection(base, section)
+        ? "added"
+        : "newly-present"
+      : canExpressSection(head, section)
+        ? "removed"
+        : "not-stated";
+
+    deltas.push({ slug: section.slug, label: section.label, kind });
+  }
+  return deltas;
+}
+
+function diffRoutes(base: Analysis, head: Analysis): {
+  deltas: RouteDelta[];
+  unchangedCount: number;
+} {
+  const baseSurface = base.apiSurface;
+  const headSurface = head.apiSurface;
+  // Routes are compared only when both runs have a surface to compare. When the
+  // section itself arrived or went, `sections` says so in one line, and
+  // spelling out every route it holds would bury that line underneath them.
+  if (!baseSurface || !headSurface) return { deltas: [], unchangedCount: 0 };
+
+  const baseMap = indexByFirst(baseSurface.routes, routeLabel);
+  const headMap = indexByFirst(headSurface.routes, routeLabel);
+  const deltas: RouteDelta[] = [];
+  let unchangedCount = 0;
+
+  for (const [label, after] of headMap) {
+    const before = baseMap.get(label);
+    if (!before) {
+      deltas.push({ label, kind: "added", after });
+      continue;
+    }
+    // `note` is the curated prose on a route — narrative, regenerated every
+    // run, and never compared (design rule 1).
+    const fileMoved = before.file !== after.file;
+    const actorChanged = before.actor !== after.actor;
+    if (!fileMoved && !actorChanged) {
+      unchangedCount++;
+      continue;
+    }
+    const delta: RouteDelta = { label, kind: "changed", before, after };
+    if (fileMoved) delta.fileChange = { from: before.file, to: after.file };
+    if (actorChanged) {
+      delta.actorChange = { from: before.actor, to: after.actor };
+    }
+    deltas.push(delta);
+  }
+  for (const [label, before] of baseMap) {
+    if (!headMap.has(label)) deltas.push({ label, kind: "removed", before });
+  }
+
+  // Routes have no natural magnitude; order by address within each kind group.
+  deltas.sort((x, y) => {
+    const byKind = KIND_RANK[x.kind] - KIND_RANK[y.kind];
+    return byKind !== 0 ? byKind : compareStrings(x.label, y.label);
+  });
+
+  return { deltas, unchangedCount };
+}
+
 // ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
@@ -549,6 +701,8 @@ export function diffAnalyses(base: Analysis, head: Analysis): AnalysisDiff {
   const edges = diffEdges(base, head);
   const architecture = diffArchitecture(base, head);
   const contributorGuide = diffContributorGuide(base, head);
+  const sectionDeltas = diffSpecializedSections(base, head);
+  const apiSurface = diffRoutes(base, head);
 
   const hasChanges =
     hotspots.deltas.length > 0 ||
@@ -556,6 +710,13 @@ export function diffAnalyses(base: Analysis, head: Analysis): AnalysisDiff {
     edges.deltas.length > 0 ||
     architecture.deltas.length > 0 ||
     contributorGuide.deltas.length > 0 ||
+    // Every presence delta counts, including the two that say only that one
+    // document predates a section. They are not claims about the repository,
+    // but `hasChanges` gates whether the page renders anything at all, and a
+    // section that is here now and was not before is worth a reader's eyes
+    // whichever of the two reasons put it there.
+    sectionDeltas.length > 0 ||
+    apiSurface.deltas.length > 0 ||
     stats.filesDelta !== 0 ||
     stats.locDelta !== 0 ||
     stats.languages.length > 0;
@@ -568,6 +729,8 @@ export function diffAnalyses(base: Analysis, head: Analysis): AnalysisDiff {
     graph: { nodes, edges },
     architecture,
     contributorGuide,
+    sections: { deltas: sectionDeltas },
+    apiSurface,
     hasChanges,
   };
 }

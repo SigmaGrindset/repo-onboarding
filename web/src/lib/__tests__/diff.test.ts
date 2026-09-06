@@ -3,17 +3,20 @@
  *
  * Run with `npm test` (which invokes `tsx --test`). These tests are plain
  * `node:test` + `node:assert/strict` — no framework — because `diff.ts` is a
- * pure module with zero runtime imports and must stay runnable outside Next.js.
+ * pure module that must stay runnable outside Next.js. It reaches for the
+ * section registry and the route label at runtime, and for nothing else; this
+ * suite running under bare `tsx --test` is what keeps that honest.
  *
- * The `import type` below is erased at transpile time, so the alias never needs
- * runtime resolution; it exists only to keep the fixtures honestly typed against
- * the real `Analysis` contract.
+ * The `@schema` import below is type-only and erased at transpile time, so the
+ * alias never needs runtime resolution; it exists only to keep the fixtures
+ * honestly typed against the real `Analysis` contract.
  */
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { Analysis } from "@schema/analysis";
-import { diffAnalyses } from "../diff";
+import type { Analysis, ApiRoute } from "@schema/analysis";
+import type { SpecializedSection } from "../sections";
+import { diffAnalyses, diffSpecializedSections } from "../diff";
 
 /**
  * A complete, schema-shaped analysis document. Returns a FRESH object on every
@@ -521,4 +524,315 @@ test("duplicate hotspot path: first occurrence wins, no crash", () => {
   // 8 - 5 (first), NOT 8 - 99 (the ignored duplicate).
   assert.equal(diff.hotspots.deltas[0].commitsDelta, 3);
   assert.equal(diff.hotspots.unchangedCount, 0);
+});
+
+// --------------------------------------------------------------------------
+// 10. Specialized sections: presence, and the two cases that look like it
+// --------------------------------------------------------------------------
+
+/**
+ * A document at a given contract version, optionally carrying an API surface.
+ * `schemaVersion` is what separates "this repository has no API surface" from
+ * "this document was written before API surfaces existed", so every
+ * specialized section test sets it deliberately.
+ */
+function docAt(schemaVersion: string, routes?: ApiRoute[]): Analysis {
+  const a = baseAnalysis();
+  a.schemaVersion = schemaVersion;
+  if (routes) a.apiSurface = { routes };
+  return a;
+}
+
+/** Two routes, enough to make a surface that is plainly present. */
+function someRoutes(): ApiRoute[] {
+  return [
+    { method: "GET", path: "/api/items", file: "src/items.ts", actor: "visitor" },
+    { method: "POST", path: "/api/items", file: "src/items.ts", actor: "admin" },
+  ];
+}
+
+const apiDelta = (diff: ReturnType<typeof diffAnalyses>) =>
+  diff.sections.deltas.find((d) => d.slug === "api");
+
+test("a section present in both documents is not a presence change", () => {
+  const diff = diffAnalyses(
+    docAt("1.3.0", someRoutes()),
+    docAt("1.3.0", someRoutes()),
+  );
+  assert.deepEqual(diff.sections.deltas, []);
+});
+
+test("a section absent from both documents is not a presence change", () => {
+  const diff = diffAnalyses(docAt("1.3.0"), docAt("1.3.0"));
+  assert.deepEqual(diff.sections.deltas, []);
+});
+
+test("a section the newer document gained is reported as added", () => {
+  // The older document could have carried an API surface and did not, so its
+  // silence belongs to the repository: this repository gained one.
+  const diff = diffAnalyses(docAt("1.3.0"), docAt("1.3.0", someRoutes()));
+
+  assert.deepEqual(diff.sections.deltas, [
+    { slug: "api", label: "API Surface", kind: "added" },
+  ]);
+  assert.equal(diff.hasChanges, true);
+});
+
+test("a section the older document predates is newly present, never removed", () => {
+  // The older document is a 1.2.0 document: API surfaces did not exist when it
+  // was written. The section IS newly present, and the reader gains a tab, but
+  // nothing here says the repository gained an API surface, and nothing says
+  // it lost one.
+  const diff = diffAnalyses(docAt("1.2.0"), docAt("1.3.0", someRoutes()));
+
+  const d = apiDelta(diff);
+  assert.equal(d?.kind, "newly-present");
+  assert.notEqual(d?.kind, "removed");
+  assert.equal(diff.hasChanges, true);
+});
+
+test("a section dropped between two documents that could both carry it is removed", () => {
+  const diff = diffAnalyses(docAt("1.3.0", someRoutes()), docAt("1.3.0"));
+
+  assert.deepEqual(diff.sections.deltas, [
+    { slug: "api", label: "API Surface", kind: "removed" },
+  ]);
+});
+
+test("a section the NEWER document predates is not stated, never removed", () => {
+  // Regenerating with an older engine: the newer run has no place in its
+  // contract to put an API surface, so its silence says nothing about the
+  // repository. This is the case a naive presence comparison calls a removal.
+  const diff = diffAnalyses(docAt("1.3.0", someRoutes()), docAt("1.2.0"));
+
+  const d = apiDelta(diff);
+  assert.equal(d?.kind, "not-stated");
+  assert.notEqual(d?.kind, "removed");
+});
+
+test("a section carried by a document that predates its release still counts as present", () => {
+  // A document written while a section was still unreleased carries the key and
+  // declares the older contract. Presence wins over the version: dropping the
+  // section from the next run is a real removal, not a contract difference.
+  const diff = diffAnalyses(docAt("1.2.0", someRoutes()), docAt("1.3.0"));
+  assert.equal(apiDelta(diff)?.kind, "removed");
+
+  // The same document on the head side is an addition rather than merely newly
+  // present, because the 1.3.0 base could have carried one and did not.
+  const reverse = diffAnalyses(docAt("1.3.0"), docAt("1.2.0", someRoutes()));
+  assert.equal(apiDelta(reverse)?.kind, "added");
+});
+
+// --------------------------------------------------------------------------
+// 11. The presence rule is one rule, applied to every specialized section
+// --------------------------------------------------------------------------
+
+test("the presence rule is a function of the section registry, not of the API surface", () => {
+  // A stand-in registry: the API surface as it really is, plus a second
+  // specialized section introduced at a different contract version. Design
+  // System and Delivery are not in the real registry yet, so this is what
+  // proves the rule is written once rather than per section. The second entry
+  // borrows a real optional key so the fixture stays honestly typed.
+  const registry: SpecializedSection[] = [
+    {
+      slug: "api",
+      label: "API Surface",
+      class: "specialized",
+      key: "apiSurface",
+      since: "1.3.0",
+    },
+    {
+      slug: "learn",
+      label: "Stand-in Section",
+      class: "specialized",
+      key: "learningResources",
+      since: "1.2.0",
+    },
+  ];
+
+  const withStandIn = (a: Analysis): Analysis => {
+    a.learningResources = [
+      {
+        tech: "TypeScript",
+        official: "https://www.typescriptlang.org/docs/",
+        resources: [],
+        inRepo: { note: "Types everywhere.", files: [{ path: "src/a.ts" }] },
+      },
+    ];
+    return a;
+  };
+
+  // Both sections gained, and both documents were new enough to have said so.
+  assert.deepEqual(
+    diffSpecializedSections(
+      docAt("1.3.0"),
+      withStandIn(docAt("1.3.0", someRoutes())),
+      registry,
+    ),
+    [
+      { slug: "api", label: "API Surface", kind: "added" },
+      { slug: "learn", label: "Stand-in Section", kind: "added" },
+    ],
+  );
+
+  // A 1.1.0 base predates both, so neither is a claim about the repository.
+  assert.deepEqual(
+    diffSpecializedSections(
+      docAt("1.1.0"),
+      withStandIn(docAt("1.3.0", someRoutes())),
+      registry,
+    ),
+    [
+      { slug: "api", label: "API Surface", kind: "newly-present" },
+      { slug: "learn", label: "Stand-in Section", kind: "newly-present" },
+    ],
+  );
+
+  // A 1.2.0 head predates only the API surface: one section is not stated, the
+  // other is genuinely gone. One rule reads both.
+  assert.deepEqual(
+    diffSpecializedSections(
+      withStandIn(docAt("1.3.0", someRoutes())),
+      docAt("1.2.0"),
+      registry,
+    ),
+    [
+      { slug: "api", label: "API Surface", kind: "not-stated" },
+      { slug: "learn", label: "Stand-in Section", kind: "removed" },
+    ],
+  );
+});
+
+// --------------------------------------------------------------------------
+// 12. Routes added, removed and changed
+// --------------------------------------------------------------------------
+
+test("route deltas by method and path, with file and actor changes", () => {
+  const base = docAt("1.3.0", [
+    { method: "GET", path: "/api/items", file: "src/items.ts", actor: "visitor" },
+    { method: "POST", path: "/api/items", file: "src/items.ts", actor: "admin" },
+    {
+      method: "GET",
+      path: "/api/items/[id]",
+      file: "src/item.ts",
+      actor: "visitor",
+      note: "The one everything goes through.",
+    },
+    { method: "DELETE", path: "/api/items/[id]", file: "src/item.ts", actor: "admin" },
+  ]);
+  const head = docAt("1.3.0", [
+    // moved to another file
+    { method: "GET", path: "/api/items", file: "src/routes/items.ts", actor: "visitor" },
+    // the actor permitted to call it changed
+    { method: "POST", path: "/api/items", file: "src/items.ts", actor: "signed-in reader" },
+    // note rewritten only: narrative, so not a change
+    {
+      method: "GET",
+      path: "/api/items/[id]",
+      file: "src/item.ts",
+      actor: "visitor",
+      note: "Regenerated prose.",
+    },
+    // DELETE /api/items/[id] dropped, PATCH added
+    { method: "PATCH", path: "/api/items/[id]", file: "src/item.ts", actor: "admin" },
+  ]);
+
+  const diff = diffAnalyses(base, head);
+  const byLabel = (l: string) => diff.apiSurface.deltas.find((d) => d.label === l);
+
+  assert.equal(diff.apiSurface.unchangedCount, 1); // GET /api/items/[id]
+
+  const moved = byLabel("GET /api/items");
+  assert.equal(moved?.kind, "changed");
+  assert.deepEqual(moved?.fileChange, {
+    from: "src/items.ts",
+    to: "src/routes/items.ts",
+  });
+  assert.equal(moved?.actorChange, undefined);
+
+  const reassigned = byLabel("POST /api/items");
+  assert.equal(reassigned?.kind, "changed");
+  assert.deepEqual(reassigned?.actorChange, {
+    from: "admin",
+    to: "signed-in reader",
+  });
+  assert.equal(reassigned?.fileChange, undefined);
+
+  const added = byLabel("PATCH /api/items/[id]");
+  assert.equal(added?.kind, "added");
+  assert.equal(added?.after?.actor, "admin");
+  assert.equal(added?.before, undefined);
+
+  const removed = byLabel("DELETE /api/items/[id]");
+  assert.equal(removed?.kind, "removed");
+  assert.equal(removed?.before?.file, "src/item.ts");
+  assert.equal(removed?.after, undefined);
+
+  assert.equal(diff.hasChanges, true);
+});
+
+test("route deltas sort added, then changed, then removed, alphabetically within each", () => {
+  const base = docAt("1.3.0", [
+    { method: "GET", path: "/b", file: "b.ts", actor: "visitor" },
+    { method: "GET", path: "/gone-b", file: "x.ts", actor: "visitor" },
+    { method: "GET", path: "/gone-a", file: "x.ts", actor: "visitor" },
+  ]);
+  const head = docAt("1.3.0", [
+    { method: "GET", path: "/b", file: "b2.ts", actor: "visitor" },
+    { method: "GET", path: "/new-b", file: "n.ts", actor: "visitor" },
+    { method: "GET", path: "/new-a", file: "n.ts", actor: "visitor" },
+  ]);
+
+  assert.deepEqual(
+    diffAnalyses(base, head).apiSurface.deltas.map((d) => `${d.kind}:${d.label}`),
+    [
+      "added:GET /new-a",
+      "added:GET /new-b",
+      "changed:GET /b",
+      "removed:GET /gone-a",
+      "removed:GET /gone-b",
+    ],
+  );
+});
+
+test("routes are not enumerated when the section itself appeared or disappeared", () => {
+  // The section-level delta already says the whole surface arrived. Listing
+  // every route in it as added would bury that one line underneath them.
+  const appeared = diffAnalyses(docAt("1.3.0"), docAt("1.3.0", someRoutes()));
+  assert.deepEqual(appeared.apiSurface.deltas, []);
+  assert.equal(appeared.apiSurface.unchangedCount, 0);
+  assert.equal(apiDelta(appeared)?.kind, "added");
+
+  // And no route is reported as removed when the newer document simply
+  // predates the section.
+  const predates = diffAnalyses(docAt("1.3.0", someRoutes()), docAt("1.2.0"));
+  assert.deepEqual(predates.apiSurface.deltas, []);
+});
+
+test("an unchanged API surface is not a change", () => {
+  const diff = diffAnalyses(
+    docAt("1.3.0", someRoutes()),
+    docAt("1.3.0", someRoutes()),
+  );
+  assert.deepEqual(diff.apiSurface.deltas, []);
+  assert.equal(diff.apiSurface.unchangedCount, 2);
+  assert.deepEqual(diff.sections.deltas, []);
+  assert.equal(diff.hasChanges, false);
+});
+
+test("duplicate route identity: first occurrence wins, no crash", () => {
+  const base = docAt("1.3.0", [
+    { method: "GET", path: "/dup", file: "first.ts", actor: "visitor" },
+    { method: "GET", path: "/dup", file: "second.ts", actor: "visitor" },
+  ]);
+  const head = docAt("1.3.0", [
+    { method: "GET", path: "/dup", file: "third.ts", actor: "visitor" },
+  ]);
+
+  const diff = diffAnalyses(base, head);
+  assert.equal(diff.apiSurface.deltas.length, 1);
+  assert.deepEqual(diff.apiSurface.deltas[0].fileChange, {
+    from: "first.ts",
+    to: "third.ts",
+  });
 });

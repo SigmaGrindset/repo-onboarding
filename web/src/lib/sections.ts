@@ -8,7 +8,7 @@
  * constant — derive it with `visibleSections`.
  */
 
-import type { Analysis } from "@schema/analysis";
+import type { Analysis, SchemaVersion } from "@schema/analysis";
 
 /**
  * Every section slug there is. Naming them as a type rather than as plain
@@ -50,10 +50,18 @@ interface CoreSection extends SectionBase {
  * `key` is present in the document, and otherwise absent entirely — no tab, no
  * empty state. See `docs/adr/0004-sections-are-declared-by-presence.md`.
  */
-interface SpecializedSection extends SectionBase {
+export interface SpecializedSection extends SectionBase {
   class: "specialized";
   /** The top-level document key whose presence declares this section. */
   key: keyof Analysis;
+  /**
+   * The contract version that introduced this section. Nothing the viewer
+   * renders depends on it — presence alone decides that — but a comparison of
+   * two documents does: a document declaring an older contract could not have
+   * carried the key, so its silence is the contract's and not the
+   * repository's. See `canExpressSection`.
+   */
+  since: SchemaVersion;
 }
 
 export type AnalysisSection = CoreSection | SpecializedSection;
@@ -76,6 +84,12 @@ export const ANALYSIS_SECTIONS: AnalysisSection[] = [
     label: "API Surface",
     class: "specialized",
     key: "apiSurface",
+    // The contract is still labelled 1.2.0 until the release ticket bumps it,
+    // so documents this repository generates today carry a surface and declare
+    // 1.2.0 anyway. `canExpressSection` reads presence first for exactly that
+    // reason; until the bump lands, two 1.2.0 documents cannot be told apart
+    // from two that predate the section, and neither is called a removal.
+    since: "1.3.0",
   },
   { slug: "guide", label: "Contributor Guide", class: "core" },
   { slug: "tour", label: "Guided Tour", class: "core" },
@@ -108,4 +122,70 @@ export function isSectionVisible(
  */
 export function visibleSections(analysis: Analysis): AnalysisSection[] {
   return ANALYSIS_SECTIONS.filter((s) => isSectionVisible(s, analysis));
+}
+
+/**
+ * The specialized sections, in registry order. Anything that has to reason
+ * about specialized sections as a class — the version diff does — reads this
+ * rather than naming any one of them, so a section added to the registry above
+ * is covered without a second edit.
+ */
+export const SPECIALIZED_SECTIONS: SpecializedSection[] =
+  ANALYSIS_SECTIONS.filter(
+    (s): s is SpecializedSection => s.class === "specialized",
+  );
+
+/** `[major, minor, patch]`, or null when the string is not a plain semver. */
+function parseSchemaVersion(v: string): [number, number, number] | null {
+  const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(v.trim());
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+}
+
+/**
+ * Order two `schemaVersion` strings: negative when `a` is the older contract,
+ * positive when it is the newer, 0 when they are the same. A string this cannot
+ * parse sorts before every one it can, which is the conservative reading — see
+ * `canExpressSection`.
+ *
+ * The published command-line package carries its own comparator
+ * (`compareVersions` in `cli/src/util.mjs`), which cannot be imported from here
+ * and is deliberately lenient — it reads a malformed segment as 0. This one is
+ * strict instead, because it is answering a different question: what a document
+ * failed to say, rather than which release is newer.
+ */
+export function compareSchemaVersions(
+  a: SchemaVersion,
+  b: SchemaVersion,
+): number {
+  const pa = parseSchemaVersion(a);
+  const pb = parseSchemaVersion(b);
+  if (!pa || !pb) return pa ? 1 : pb ? -1 : 0;
+  for (let i = 0; i < 3; i++) {
+    if (pa[i] !== pb[i]) return pa[i] - pb[i];
+  }
+  return 0;
+}
+
+/**
+ * Whether a document's contract is new enough to have carried a specialized
+ * section — the difference between "this repository has no design system" and
+ * "this document was written before design systems existed". ADR 0004 rules out
+ * a document saying which of those it means, so the contract version is the
+ * only thing that can tell them apart.
+ *
+ * Presence wins over the declared version: a document carrying the key has
+ * plainly expressed the section whatever version it claims, which is what makes
+ * this safe to use on documents written while a section was still unreleased.
+ * Only absence is read against `since`, and an unparseable `schemaVersion`
+ * counts as too old, so nothing downstream claims a repository lost a section
+ * on the strength of a version string it could not read.
+ */
+export function canExpressSection(
+  analysis: Analysis,
+  section: SpecializedSection,
+): boolean {
+  return (
+    analysis[section.key] != null ||
+    compareSchemaVersions(analysis.schemaVersion, section.since) >= 0
+  );
 }

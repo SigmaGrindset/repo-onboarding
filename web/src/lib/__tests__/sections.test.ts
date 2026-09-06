@@ -16,9 +16,13 @@ import path from "node:path";
 import type { Analysis } from "@schema/analysis";
 import {
   ANALYSIS_SECTIONS,
+  SPECIALIZED_SECTIONS,
+  canExpressSection,
+  compareSchemaVersions,
   isSectionVisible,
   visibleSections,
   type AnalysisSection,
+  type SpecializedSection,
 } from "../sections";
 
 function fixture(name: string): Analysis {
@@ -48,23 +52,44 @@ const TODAYS_SECTIONS = [
   "versions",
 ];
 
-/** Every specialized section that ships, and the key each is declared by. */
-const SPECIALIZED_SECTIONS: Record<string, keyof Analysis> = {
-  api: "apiSurface",
+/**
+ * Every specialized section that ships: the key each is declared by, and the
+ * contract version that introduced it. Restated here rather than read from the
+ * registry, so that changing either in the registry has to be meant.
+ */
+const EXPECTED_SPECIALIZED: Record<
+  string,
+  { key: keyof Analysis; since: string }
+> = {
+  api: { key: "apiSurface", since: "1.3.0" },
 };
 
 test("a section is specialized exactly when it is one of the known few", () => {
   for (const s of ANALYSIS_SECTIONS) {
-    const specialized = s.slug in SPECIALIZED_SECTIONS;
+    const expected = EXPECTED_SPECIALIZED[s.slug];
     assert.equal(
       s.class,
-      specialized ? "specialized" : "core",
+      expected ? "specialized" : "core",
       `"${s.slug}" has the wrong class`,
     );
     if (s.class === "specialized") {
-      assert.equal(s.key, SPECIALIZED_SECTIONS[s.slug]);
+      assert.equal(s.key, expected.key);
+      // Absence is read against this, so a section without it would make an
+      // older document look like a repository that lost something.
+      assert.equal(s.since, expected.since);
     }
   }
+});
+
+test("the specialized sections are exactly the specialized entries of the registry", () => {
+  assert.deepEqual(
+    SPECIALIZED_SECTIONS.map((s) => s.slug),
+    ANALYSIS_SECTIONS.filter((s) => s.class === "specialized").map((s) => s.slug),
+  );
+  assert.deepEqual(
+    SPECIALIZED_SECTIONS.map((s) => s.slug),
+    Object.keys(EXPECTED_SPECIALIZED),
+  );
 });
 
 test("a document with no specialized keys yields every core section, in order", () => {
@@ -97,6 +122,7 @@ const SPECIALIZED: AnalysisSection = {
   label: "Contributor Guide",
   class: "specialized",
   key: "contributorGuide",
+  since: "1.0.0",
 };
 
 test("a specialized section is visible exactly when its key is present", () => {
@@ -161,4 +187,43 @@ test("the real document that carries an API surface shows the section", () => {
   const doc = fixture("repo-onboarding");
   assert.ok((doc.apiSurface?.routes.length ?? 0) >= 3);
   assert.ok(visibleSections(doc).some((s) => s.slug === "api"));
+});
+
+// --------------------------------------------------------------------------
+// Reading absence against the contract a document declares
+// --------------------------------------------------------------------------
+
+/** The API surface as the registry really records it. */
+const API_SECTION = ANALYSIS_SECTIONS.find(
+  (s): s is SpecializedSection => s.class === "specialized" && s.slug === "api",
+)!;
+
+test("schema versions order numerically, not as strings", () => {
+  assert.ok(compareSchemaVersions("1.2.0", "1.3.0") < 0);
+  assert.ok(compareSchemaVersions("1.10.0", "1.9.0") > 0); // not "1.10" < "1.9"
+  assert.equal(compareSchemaVersions("1.3.0", "1.3.0"), 0);
+  assert.ok(compareSchemaVersions("2.0.0", "1.99.99") > 0);
+});
+
+test("a document declaring an older contract could not have carried the section", () => {
+  const old = { ...fixture("sample"), schemaVersion: "1.2.0" };
+  assert.equal(canExpressSection(old, API_SECTION), false);
+
+  const current = { ...fixture("sample"), schemaVersion: "1.3.0" };
+  assert.equal(canExpressSection(current, API_SECTION), true);
+});
+
+test("carrying the section beats whatever version a document claims", () => {
+  // `repo-onboarding` is a real document with a real API surface, written while
+  // the section was still unreleased: it says 1.2.0 and carries one anyway.
+  const doc = fixture("repo-onboarding");
+  assert.ok(compareSchemaVersions(doc.schemaVersion, API_SECTION.since) < 0);
+  assert.equal(canExpressSection(doc, API_SECTION), true);
+});
+
+test("a schemaVersion that cannot be read counts as too old to have carried it", () => {
+  // The conservative reading: nothing downstream gets to claim a repository
+  // lost a section on the strength of a version string it could not parse.
+  const garbled = { ...fixture("sample"), schemaVersion: "not-a-version" };
+  assert.equal(canExpressSection(garbled, API_SECTION), false);
 });

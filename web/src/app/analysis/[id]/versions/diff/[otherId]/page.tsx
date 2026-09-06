@@ -7,6 +7,9 @@ import type {
   GraphEdgeDelta,
   GraphNodeDelta,
   HotspotDelta,
+  RouteDelta,
+  SectionPresenceKind,
+  SpecializedSectionDelta,
 } from "@/lib/diff";
 import { diffAnalyses } from "@/lib/diff";
 import { getAnalysisCached } from "@/lib/datasource";
@@ -18,6 +21,9 @@ import {
   activityStyle,
   diffKindStyle,
   kindStyle,
+  labelTint,
+  methodStyle,
+  sectionPresenceStyle,
   type DiffKind,
 } from "@/lib/styles";
 import { Badge, Card, EmptyState, SectionHeader } from "@/components/ui";
@@ -213,9 +219,11 @@ export default async function DiffPage({
       ) : (
         <div className="mt-6 space-y-8">
           <StatsSection diff={diff} />
+          <SectionsBlock diff={diff} />
           <HotspotsSection diff={diff} />
           <GraphSection diff={diff} />
           <ArchitectureSectionBlock diff={diff} />
+          <ApiSurfaceBlock diff={diff} />
           <ContributorGuideDiffSection diff={diff} />
         </div>
       )}
@@ -573,6 +581,126 @@ function ArchitectureSectionBlock({
           <ArchitectureCard key={`${d.kind}:${d.title}`} d={d} />
         ))}
       </div>
+      <Unchanged count={unchangedCount} />
+    </section>
+  );
+}
+
+/* -- specialized sections ---------------------------------------------- */
+
+/**
+ * What each presence change says, spelled out. The two contract cases get the
+ * longer sentence on purpose: a reader looking at a section that is here now
+ * and was not before will read it as the repository gaining something unless
+ * told otherwise, and for a document that predates the section that reading
+ * would be wrong.
+ */
+const PRESENCE_EXPLANATION: Record<SectionPresenceKind, string> = {
+  added:
+    "The earlier analysis could have carried this section and did not, so this repository gained it.",
+  removed:
+    "The later analysis could have carried this section and did not, so this repository no longer has one.",
+  "newly-present":
+    "The earlier analysis predates this section, so it had nowhere to put one. The repository may well have had this all along.",
+  "not-stated":
+    "The later analysis predates this section, so it says nothing about it either way. Nothing here has been removed.",
+};
+
+function SectionPresenceCard({ d }: { d: SpecializedSectionDelta }) {
+  const s = sectionPresenceStyle(d.kind);
+  return (
+    <Card className="p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge className={s.className}>{s.label}</Badge>
+        <h3 className="text-base font-semibold text-text">{d.label}</h3>
+      </div>
+      <p className="mt-2 max-w-[72ch] text-sm text-muted">
+        {PRESENCE_EXPLANATION[d.kind]}
+      </p>
+    </Card>
+  );
+}
+
+function SectionsBlock({ diff }: { diff: ReturnType<typeof diffAnalyses> }) {
+  const { deltas } = diff.sections;
+  if (deltas.length === 0) return null;
+  return (
+    <section>
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">
+        Sections
+      </h2>
+      <div className="space-y-3">
+        {deltas.map((d) => (
+          <SectionPresenceCard key={d.slug} d={d} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/* -- api surface ------------------------------------------------------- */
+
+function RouteRow({ d }: { d: RouteDelta }) {
+  // A removed route has only a base side, everything else a head side; either
+  // way one of them carries the method, actor and file to show.
+  const route = d.after ?? d.before;
+  const method = route ? methodStyle(route.method) : null;
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2">
+      {method ? (
+        <Badge className={`font-mono ${method.className}`}>{method.label}</Badge>
+      ) : null}
+      {/* The address is the row. A floor under it keeps the actor and the file
+          wrapping to a second line on a phone rather than squeezing the path
+          away to an ellipsis, which is what happens without one. */}
+      <span className="min-w-[10rem] flex-1 truncate font-mono text-xs text-text">
+        {route?.path}
+      </span>
+
+      {d.actorChange ? (
+        <span className="inline-flex items-center gap-1.5">
+          <Badge className={labelTint(d.actorChange.from)}>
+            {d.actorChange.from}
+          </Badge>
+          {ARROW}
+          <Badge className={labelTint(d.actorChange.to)}>
+            {d.actorChange.to}
+          </Badge>
+        </span>
+      ) : route ? (
+        <Badge className={labelTint(route.actor)}>{route.actor}</Badge>
+      ) : null}
+
+      {d.fileChange ? (
+        <span className="inline-flex items-center gap-1.5 font-mono text-[0.72rem] text-muted">
+          <span className="truncate">{d.fileChange.from}</span>
+          {ARROW}
+          <span className="truncate">{d.fileChange.to}</span>
+        </span>
+      ) : route ? (
+        <span className="truncate font-mono text-[0.72rem] text-muted">
+          {route.file}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function ApiSurfaceBlock({ diff }: { diff: ReturnType<typeof diffAnalyses> }) {
+  const { deltas, unchangedCount } = diff.apiSurface;
+  // Empty whenever only one of the two runs has a surface at all — the Sections
+  // block above has already said so in one line.
+  if (deltas.length === 0 && unchangedCount === 0) return null;
+  return (
+    <section>
+      <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-muted">
+        API surface
+      </h2>
+      <DeltaGroups
+        deltas={deltas}
+        render={(d) => <RouteRow key={d.label} d={d} />}
+      />
       <Unchanged count={unchangedCount} />
     </section>
   );
