@@ -49,6 +49,26 @@ const SECTIONS = [
   { label: "First Tasks" },
 ];
 
+/**
+ * One renderer per SECTIONS label. Keyed by label rather than by slug because
+ * this file cannot import the registry, so the label IS the join — which is why
+ * the two lists are written next to each other. The TypeScript mirror keys the
+ * same map by `SectionSlug`, where the compiler checks the join for it.
+ */
+const RENDERERS = {
+  "Overview": renderOverview,
+  "Architecture": renderArchitecture,
+  "Dependency Graph": renderDependencyGraph,
+  "Codebase Map": renderCodebaseMap,
+  "API Surface": renderApiSurface,
+  "Contributor Guide": renderContributorGuide,
+  "Guided Tour": renderTour,
+  "Hotspots": renderHotspots,
+  "Setup": renderSetup,
+  "Learn": renderLearn,
+  "First Tasks": renderFirstTasks,
+};
+
 /** The sections one document renders: every core one, plus the keys it carries. */
 function visibleSections(analysis) {
   return SECTIONS.filter((s) => !s.key || analysis?.[s.key] != null);
@@ -542,21 +562,6 @@ function renderApiSurface(analysis) {
 export function renderOnboardingMarkdown(analysis, options = {}) {
   const siteUrl = options.siteUrl || DEFAULT_SITE_URL;
   const generatorVersion = options.generatorVersion;
-
-  /** One renderer per SECTIONS label, so the two lists cannot drift apart. */
-  const RENDERERS = {
-    "Overview": renderOverview,
-    "Architecture": renderArchitecture,
-    "Dependency Graph": renderDependencyGraph,
-    "Codebase Map": renderCodebaseMap,
-    "API Surface": renderApiSurface,
-    "Contributor Guide": renderContributorGuide,
-    "Guided Tour": renderTour,
-    "Hotspots": renderHotspots,
-    "Setup": renderSetup,
-    "Learn": renderLearn,
-    "First Tasks": renderFirstTasks,
-  };
 
   const blocks = [
     renderHeader(analysis, siteUrl),

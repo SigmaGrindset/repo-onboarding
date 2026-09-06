@@ -4,21 +4,37 @@ import { slugify } from "./format";
 import { visibleSections } from "./sections";
 
 /**
+ * Every palette group, in the order the palette renders them — which follows
+ * the section order, so results read down the page the reader would.
+ *
+ * This is the ONE list. `SearchGroup` is derived from it and the palette
+ * iterates it, so a group cannot exist that the palette does not render. It
+ * used to be two lists — a union here and an order constant in the palette —
+ * and they disagreed the moment a group was added: the index built the API
+ * Surface entries correctly and the palette silently dropped every one.
+ */
+export const SEARCH_GROUPS = [
+  "Sections",
+  "Architecture",
+  "Codebase Map",
+  "API Surface",
+  "Contributor Guide",
+  "Guided Tour",
+  "Hotspots",
+  "Learn",
+] as const;
+
+/** A display group, and the order it appears in. */
+export type SearchGroup = (typeof SEARCH_GROUPS)[number];
+
+/**
  * One jumpable target in the Cmd+K palette. Built server-side from the
  * analysis document and passed to the client as plain serializable data —
  * the palette never needs the full document.
  */
 export interface SearchItem {
   /** Display group, also used for ordering. */
-  group:
-    | "Sections"
-    | "Architecture"
-    | "Codebase Map"
-    | "API Surface"
-    | "Contributor Guide"
-    | "Guided Tour"
-    | "Hotspots"
-    | "Learn";
+  group: SearchGroup;
   label: string;
   /** Secondary text shown right-aligned (role, step number, commit count). */
   hint?: string;

@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { resolveDataSource } from "@/lib/datasource";
 import { githubBlobUrl } from "@/lib/github";
 import { slugify } from "@/lib/format";
-import { roleTint } from "@/lib/styles";
+import { labelTint } from "@/lib/styles";
 import { Badge, Card, EmptyState, FileChip, SectionHeader } from "@/components/ui";
 import { JumpToParam } from "@/components/JumpToParam";
 
@@ -45,7 +45,7 @@ export default async function MapPage({
                 <code className="rounded-md border border-border bg-surface-2 px-2 py-1 font-mono text-sm text-text">
                   {entry.path}
                 </code>
-                <Badge className={roleTint(entry.role)}>{entry.role}</Badge>
+                <Badge className={labelTint(entry.role)}>{entry.role}</Badge>
               </div>
 
               <p className="mt-3 text-[0.92rem] leading-relaxed text-muted">

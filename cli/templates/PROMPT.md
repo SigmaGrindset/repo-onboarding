@@ -189,9 +189,9 @@ Reading order:
     what it can do *here* — "signed-in reader", "analysis owner", "anonymous
     share-link visitor", "token-bearing uploader", "public". Machine callers are
     actors too: service accounts, scheduled jobs and webhook senders usually hold
-    the most dangerous permissions, so never reduce the list to human roles. Read
-    the middleware or the guard in the handler rather than assuming, and use the
-    same actor name for every route that requires it.
+    the most dangerous permissions, so never reduce the list to the human ones.
+    Read the middleware or the guard in the handler rather than assuming, and use
+    the same actor name for every route that requires it.
   - `note` is OPTIONAL and belongs on the few routes a newcomer genuinely needs
     explained — the one that is not what its path suggests, the one with a
     surprising permission, the one everything else goes through. Most routes

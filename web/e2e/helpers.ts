@@ -52,13 +52,12 @@ export async function waitForPageReady(page: Page, path: string) {
       page.getByRole("status").filter({ hasText: /Rendering diagram/ }),
     ).toHaveCount(0, { timeout: DIAGRAM_TIMEOUT });
   }
-  if (path.endsWith("/api")) {
-    // The only row on a document other than `sample`, and the largest one in
-    // `data/` — roughly twice the size, which every page of it pays for twice
-    // over: the server renders the whole document and the accessibility pass
-    // then audits the biggest table the suite draws. Alone it takes a few
-    // seconds; under a fully parallel local run it has hit the default budget.
-    // Same reasoning as the architecture page above.
+  if (path.startsWith("/analysis/repo-onboarding")) {
+    // The largest document in `data/` — roughly twice the size of the others,
+    // and every page of it pays that twice over: the server renders the whole
+    // document, and the accessibility pass then audits the result. Alone each
+    // page takes a few seconds; under a fully parallel local run they have hit
+    // the default budget. Same reasoning as the architecture page above.
     test.slow();
   }
   if (path.endsWith("/graph")) {

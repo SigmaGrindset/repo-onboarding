@@ -3,17 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { SearchItem } from "@/lib/search-index";
-
-const GROUP_ORDER: SearchItem["group"][] = [
-  "Sections",
-  "Architecture",
-  "Codebase Map",
-  "Contributor Guide",
-  "Guided Tour",
-  "Hotspots",
-  "Learn",
-];
+import { SEARCH_GROUPS, type SearchItem } from "@/lib/search-index";
 
 /**
  * Rank an item against the query tokens. Every token must match somewhere;
@@ -95,7 +85,7 @@ export function CommandPalette({ items }: { items: SearchItem[] }) {
             .map((item) => ({ item, s: score(item, tokens) }))
             .filter((m) => m.s >= 0);
 
-    return GROUP_ORDER.map((group) => ({
+    return SEARCH_GROUPS.map((group) => ({
       group,
       items: matched
         .filter((m) => m.item.group === group)

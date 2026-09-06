@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { resolveDataSource } from "@/lib/datasource";
 import { githubBlobUrl } from "@/lib/github";
 import { routeAnchor } from "@/lib/api-surface";
-import { methodStyle, roleTint } from "@/lib/styles";
+import { labelTint, methodStyle } from "@/lib/styles";
 import { Badge, Card, FileChip, SectionHeader } from "@/components/ui";
 import { JumpToParam } from "@/components/JumpToParam";
 
@@ -80,7 +80,7 @@ export default async function ApiPage({
               const method = methodStyle(route.method);
               return (
                 <tbody
-                  key={`${route.method} ${route.path} ${route.file}`}
+                  key={routeAnchor(route)}
                   className="border-b border-border/60 align-top last:border-0"
                 >
                   <tr id={`route-${routeAnchor(route)}`} className="scroll-mt-20">
@@ -98,7 +98,7 @@ export default async function ApiPage({
                         every row it governs, so it has to read as one label
                         rather than a paragraph. The table scrolls instead. */}
                     <td className="whitespace-nowrap pb-2 pr-4 pt-3">
-                      <Badge className={roleTint(route.actor)}>
+                      <Badge className={labelTint(route.actor)}>
                         {route.actor}
                       </Badge>
                     </td>

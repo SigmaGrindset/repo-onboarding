@@ -227,30 +227,22 @@ export function diffKindStyle(kind: DiffKind): BadgeStyle {
  * protocol trivia: reads are cool, writes are warm, deletes are hot. ANY and WS
  * stay neutral because neither says whether the call changes anything.
  */
+/** A read: safe, and the only kind an unauthenticated caller usually gets. */
+const READS = "bg-sky-500/12 text-sky-700 dark:text-sky-300 border-sky-500/25";
+/** A write that replaces or amends something that already exists. */
+const AMENDS =
+  "bg-amber-500/12 text-amber-800 dark:text-amber-300 border-amber-500/25";
+
 const METHOD_STYLES: Record<HttpMethod, BadgeStyle> = {
-  GET: {
-    label: "GET",
-    className: "bg-sky-500/12 text-sky-700 dark:text-sky-300 border-sky-500/25",
-  },
-  HEAD: {
-    label: "HEAD",
-    className: "bg-sky-500/12 text-sky-700 dark:text-sky-300 border-sky-500/25",
-  },
+  GET: { label: "GET", className: READS },
+  HEAD: { label: "HEAD", className: READS },
   POST: {
     label: "POST",
     className:
       "bg-emerald-500/12 text-emerald-800 dark:text-emerald-300 border-emerald-500/25",
   },
-  PUT: {
-    label: "PUT",
-    className:
-      "bg-amber-500/12 text-amber-800 dark:text-amber-300 border-amber-500/25",
-  },
-  PATCH: {
-    label: "PATCH",
-    className:
-      "bg-amber-500/12 text-amber-800 dark:text-amber-300 border-amber-500/25",
-  },
+  PUT: { label: "PUT", className: AMENDS },
+  PATCH: { label: "PATCH", className: AMENDS },
   DELETE: {
     label: "DELETE",
     className:
@@ -278,10 +270,12 @@ export function methodStyle(m: HttpMethod): BadgeStyle {
 }
 
 /**
- * Free-form codebase-map roles get a stable tint chosen by hashing the label,
- * so "core domain" is always the same colour across renders.
+ * A free-form label gets a stable tint chosen by hashing it, so "core domain"
+ * is always the same colour across renders. Deliberately not named for either
+ * concept that uses it: a codebase-map entry carries a role and an API route
+ * carries an actor, and CONTEXT.md keeps those two words apart.
  */
-const ROLE_TINTS: string[] = [
+const LABEL_TINTS: string[] = [
   "bg-sky-500/12 text-sky-700 dark:text-sky-300 border-sky-500/25",
   "bg-emerald-500/12 text-emerald-800 dark:text-emerald-300 border-emerald-500/25",
   "bg-amber-500/12 text-amber-800 dark:text-amber-300 border-amber-500/25",
@@ -292,12 +286,12 @@ const ROLE_TINTS: string[] = [
   "bg-stone-500/12 text-stone-700 dark:text-stone-300 border-stone-500/25",
 ];
 
-export function roleTint(role: string): string {
+export function labelTint(label: string): string {
   let h = 0;
-  for (let i = 0; i < role.length; i++) {
-    h = (h * 31 + role.charCodeAt(i)) >>> 0;
+  for (let i = 0; i < label.length; i++) {
+    h = (h * 31 + label.charCodeAt(i)) >>> 0;
   }
-  return ROLE_TINTS[h % ROLE_TINTS.length];
+  return LABEL_TINTS[h % LABEL_TINTS.length];
 }
 
 /** Distinct language colours for the stats breakdown bar (cycled if exhausted). */

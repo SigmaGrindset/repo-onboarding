@@ -659,7 +659,7 @@
       "required": ["method", "path", "file", "actor"],
       "properties": {
         "method": {
-          "description": "HTTP method. ANY covers a handler registered for every method (an Express app.all, a catch-all middleware); WS covers a WebSocket upgrade endpoint.",
+          "description": "HTTP method. ANY covers a handler registered for every method (an Express app.all, a catch-all middleware); WS covers a WebSocket upgrade route.",
           "type": "string",
           "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "ANY", "WS"]
         },

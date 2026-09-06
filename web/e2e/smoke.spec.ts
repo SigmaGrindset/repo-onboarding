@@ -20,6 +20,30 @@ for (const route of CORE_ROUTES) {
   });
 }
 
+test("the command palette finds a route by its path", async ({ page }) => {
+  // The reader-level assertion behind "a route is findable by its path". The
+  // index building an entry is not enough: the palette renders group by group,
+  // so an entry in a group the palette does not iterate is built and then
+  // silently dropped — which is exactly what happened when the group order and
+  // the group union were two lists instead of one.
+  const path = "/analysis/repo-onboarding";
+  await page.goto(path);
+  await waitForPageReady(page, path);
+
+  await page.getByRole("button", { name: /Search analysis/ }).click();
+  const dialog = page.getByRole("dialog", { name: "Search this analysis" });
+  await expect(dialog).toBeVisible();
+
+  await dialog.getByRole("textbox", { name: "Search this analysis" }).fill("/api/v1");
+  const hit = dialog.getByRole("button", { name: /POST \/api\/v1\/analyses/ });
+  await expect(hit).toBeVisible();
+  await expect(dialog.getByText("API Surface", { exact: true })).toBeVisible();
+
+  await hit.click();
+  await expect(page).toHaveURL(/\/analysis\/repo-onboarding\/api\?route=/);
+  await expect(page.getByRole("heading", { name: "What this repository exposes" })).toBeVisible();
+});
+
 test("mobile section nav reveals a late active tab", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile", "Mobile navigation behavior only");
 

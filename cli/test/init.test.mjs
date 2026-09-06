@@ -40,7 +40,11 @@ test("init builds a working .repo-onboarding/ from a tiny fixture repo", async (
     assert.ok(existsSync(schemaPath), "schema.json exists");
 
     const prepass = JSON.parse(readFileSync(prepassPath, "utf8"));
-    assert.equal(prepass.prepassVersion, "0.1.0");
+    // Not pinned to a literal: this test is about `init` producing a working
+    // work directory, and a stamped semver proves the pre-pass ran. Which
+    // version ran is the vendor drift test's job, and pinning it here only
+    // means a legitimate bump breaks a test that is not about versioning.
+    assert.match(prepass.prepassVersion, /^\d+\.\d+\.\d+$/);
     assert.equal(prepass.git.isRepo, false);
 
     const schema = JSON.parse(readFileSync(schemaPath, "utf8"));

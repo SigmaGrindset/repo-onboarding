@@ -342,7 +342,7 @@ export interface LearningResourceEntry {
 
 /**
  * HTTP method. `ANY` covers a handler registered for every method (an Express
- * `app.all`, a catch-all middleware); `WS` covers a WebSocket upgrade endpoint.
+ * `app.all`, a catch-all middleware); `WS` covers a WebSocket upgrade route.
  */
 export type HttpMethod =
   | "GET"

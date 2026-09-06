@@ -25,7 +25,8 @@ import { join, resolve, relative, sep, basename, extname } from "node:path";
 import { execFileSync } from "node:child_process";
 import process from "node:process";
 
-const PREPASS_VERSION = "0.1.0";
+// 0.2.0 added `signals` — the candidate hints for specialized sections.
+const PREPASS_VERSION = "0.2.0";
 
 // ---------------------------------------------------------------------------
 // Configuration / knobs
