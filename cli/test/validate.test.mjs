@@ -199,3 +199,161 @@ test("validate: a null official entry point may not carry resources", { skip: sk
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// --- API surface: the substance floor ---------------------------------------
+//
+// The section is SPECIALIZED — a repository without an API omits the key
+// entirely. The floors below are what stop an over-eager analysis engine from
+// emitting the section for a repository that has nothing to put in it.
+
+/** Three real routes: the minimum an API surface can be. */
+const ROUTES = [
+  { method: "GET", path: "/health", file: "src/health.ts", actor: "public" },
+  { method: "POST", path: "/items", file: "src/items.ts", actor: "signed-in reader" },
+  { method: "DELETE", path: "/items/:id", file: "src/items.ts", actor: "item owner" },
+];
+
+/**
+ * Validate a mutated copy of the sample document, returning the parsed
+ * `--json` result. Keeps every case below to its own single mutation.
+ */
+async function validateMutated(mutate, name) {
+  const doc = JSON.parse(readFileSync(SAMPLE, "utf8"));
+  mutate(doc);
+  const dir = mkdtempSync(join(tmpdir(), "roi-val-"));
+  try {
+    const p = join(dir, `${name}.json`);
+    writeFileSync(p, JSON.stringify(doc));
+    const res = await runCli(["validate", p, "--json"]);
+    return { res, parsed: JSON.parse(res.stdout) };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+test("validate: a document with no apiSurface is valid", { skip: skipNoSample }, async () => {
+  const doc = JSON.parse(readFileSync(SAMPLE, "utf8"));
+  assert.equal(doc.apiSurface, undefined, "the sample carries no API surface");
+  const res = await runCli(["validate", SAMPLE, "--json"]);
+  assert.equal(res.status, 0, res.stdout);
+});
+
+test("validate: three real routes clear the substance floor", { skip: skipNoSample }, async () => {
+  const { res } = await validateMutated((doc) => {
+    doc.apiSurface = { routes: ROUTES };
+  }, "api-ok");
+  assert.equal(res.status, 0, res.stdout);
+});
+
+test("validate: fewer than three routes is not an API surface", { skip: skipNoSample }, async () => {
+  const { res, parsed } = await validateMutated((doc) => {
+    doc.apiSurface = { routes: ROUTES.slice(0, 2) };
+  }, "api-thin");
+  assert.equal(res.status, 1);
+  const issue = parsed.issues.find((i) => i.path === "/apiSurface/routes");
+  assert.ok(issue, `no issue at /apiSurface/routes: ${res.stdout}`);
+  assert.equal(issue.keyword, "minItems");
+  assert.equal(issue.expected, "at least 3 item(s)");
+});
+
+test("validate: an empty API surface is rejected rather than shipped as a hollow tab", { skip: skipNoSample }, async () => {
+  const { res, parsed } = await validateMutated((doc) => {
+    doc.apiSurface = { routes: [] };
+  }, "api-empty");
+  assert.equal(res.status, 1);
+  assert.ok(parsed.issues.some((i) => i.path === "/apiSurface/routes" && i.keyword === "minItems"));
+});
+
+test("validate: a route must name the actor permitted to call it", { skip: skipNoSample }, async () => {
+  const { res, parsed } = await validateMutated((doc) => {
+    doc.apiSurface = { routes: ROUTES.map((r) => ({ ...r })) };
+    delete doc.apiSurface.routes[1].actor;
+  }, "api-no-actor");
+  assert.equal(res.status, 1);
+  const issue = parsed.issues.find(
+    (i) => i.path === "/apiSurface/routes/1" && i.keyword === "required",
+  );
+  assert.ok(issue, `no required issue for the missing actor: ${res.stdout}`);
+  assert.equal(issue.expected, 'property "actor"');
+});
+
+test("validate: a route must name the file implementing it", { skip: skipNoSample }, async () => {
+  const { res, parsed } = await validateMutated((doc) => {
+    doc.apiSurface = { routes: ROUTES.map((r) => ({ ...r })) };
+    doc.apiSurface.routes[0].file = "";
+  }, "api-no-file");
+  assert.equal(res.status, 1);
+  assert.ok(
+    parsed.issues.some(
+      (i) => i.path === "/apiSurface/routes/0/file" && i.keyword === "minLength",
+    ),
+    res.stdout,
+  );
+});
+
+test("validate: a method outside the enum is rejected", { skip: skipNoSample }, async () => {
+  const { res, parsed } = await validateMutated((doc) => {
+    doc.apiSurface = { routes: ROUTES.map((r) => ({ ...r })) };
+    doc.apiSurface.routes[0].method = "get";
+  }, "api-bad-method");
+  assert.equal(res.status, 1);
+  const issue = parsed.issues.find(
+    (i) => i.path === "/apiSurface/routes/0/method" && i.keyword === "enum",
+  );
+  assert.ok(issue, res.stdout);
+  assert.equal(issue.got, '"get"');
+});
+
+test("validate: a path must be a path a caller could address", { skip: skipNoSample }, async () => {
+  const { res, parsed } = await validateMutated((doc) => {
+    doc.apiSurface = { routes: ROUTES.map((r) => ({ ...r })) };
+    doc.apiSurface.routes[0].path = "health";
+  }, "api-bad-path");
+  assert.equal(res.status, 1);
+  assert.ok(
+    parsed.issues.some(
+      (i) => i.path === "/apiSurface/routes/0/path" && i.keyword === "pattern",
+    ),
+    res.stdout,
+  );
+});
+
+test("validate: a route note must be substantive when present", { skip: skipNoSample }, async () => {
+  const { res, parsed } = await validateMutated((doc) => {
+    doc.apiSurface = { routes: ROUTES.map((r) => ({ ...r })) };
+    doc.apiSurface.routes[0].note = "reads stuff";
+  }, "api-thin-note");
+  assert.equal(res.status, 1);
+  assert.ok(
+    parsed.issues.some(
+      (i) => i.path === "/apiSurface/routes/0/note" && i.keyword === "minLength",
+    ),
+    res.stdout,
+  );
+});
+
+test("validate: most routes carry no note at all", { skip: skipNoSample }, async () => {
+  const { res } = await validateMutated((doc) => {
+    doc.apiSurface = {
+      routes: ROUTES.map((r) => ({ ...r })),
+    };
+    doc.apiSurface.routes[0].note =
+      "The only unauthenticated route, and the one the load balancer polls, so it must stay free of database work.";
+  }, "api-one-note");
+  assert.equal(res.status, 0, res.stdout);
+});
+
+test("validate: a stray property on a route is rejected", { skip: skipNoSample }, async () => {
+  const { res, parsed } = await validateMutated((doc) => {
+    doc.apiSurface = { routes: ROUTES.map((r) => ({ ...r })) };
+    doc.apiSurface.routes[2].rateLimit = "10/min";
+  }, "api-stray-key");
+  assert.equal(res.status, 1);
+  assert.ok(
+    parsed.issues.some(
+      (i) =>
+        i.path === "/apiSurface/routes/2" && i.keyword === "additionalProperties",
+    ),
+    res.stdout,
+  );
+});

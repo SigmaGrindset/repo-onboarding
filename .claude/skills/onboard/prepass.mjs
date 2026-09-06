@@ -742,6 +742,117 @@ function findNotable(repoPath, tree) {
 }
 
 // ---------------------------------------------------------------------------
+// Specialized-section signals (advisory — the analysis engine decides)
+// ---------------------------------------------------------------------------
+
+/**
+ * Dependency names that mean "this repository serves requests", by the shape a
+ * manifest writes them in. Matched against the full dependency name and, for
+ * the ecosystems that namespace them, against its last path segment — so
+ * `github.com/gin-gonic/gin` and `gin` are the same signal.
+ *
+ * Deliberately generous: a signal is a hint that a repository is WORTH LOOKING
+ * AT for an API surface, never a decision that it has one. Presence is decided
+ * by the analysis engine, and a hollow section is rejected by the schema's
+ * substance floor, so a spurious hint costs a look and a missed one costs a
+ * hint.
+ */
+const SERVER_FRAMEWORKS = new Set([
+  // npm
+  "express", "fastify", "koa", "hapi", "@hapi/hapi", "restify", "polka",
+  "connect", "micro", "h3", "hono", "elysia", "next", "nuxt", "nitropack",
+  "@nestjs/core", "@sveltejs/kit", "@remix-run/node", "@remix-run/server-runtime",
+  "@trpc/server", "@apollo/server", "apollo-server", "apollo-server-express",
+  "graphql-yoga", "socket.io", "ws", "@fastify/websocket",
+  // pip / python
+  "fastapi", "flask", "django", "djangorestframework", "django-ninja",
+  "starlette", "sanic", "tornado", "bottle", "falcon", "aiohttp", "quart",
+  "litestar", "pyramid", "connexion", "uvicorn", "gunicorn", "hypercorn",
+  // go
+  "gin", "echo", "fiber", "chi", "mux", "gorilla", "gqlgen", "buffalo",
+  // cargo
+  "axum", "actix-web", "rocket", "warp", "tide", "poem", "salvo", "hyper",
+  // rubygems
+  "rails", "sinatra", "grape", "roda", "hanami", "puma", "rack",
+  // composer
+  "laravel/framework", "symfony/framework-bundle", "slim/slim", "laminas/laminas-mvc",
+  // maven / gradle
+  "org.springframework.boot:spring-boot-starter-web",
+  "org.springframework:spring-web", "io.vertx:vertx-web",
+  "io.micronaut:micronaut-http-server-netty",
+  "io.ktor:ktor-server-core", "io.dropwizard:dropwizard-core",
+]);
+
+/** Directory names that conventionally hold route definitions. */
+const ROUTE_DIR_NAMES = new Set([
+  "routes", "route", "api", "apis", "controllers", "controller", "endpoints",
+  "handlers", "resources", "views", "resolvers",
+]);
+
+/** File basenames that are themselves a route table or a route handler. */
+const ROUTE_FILE_RE =
+  /^(routes?|urls|api|server|app|endpoints|controllers?|handlers?)\.(js|mjs|cjs|jsx|ts|tsx|py|go|rb|rs|php|java|kt)$/i;
+
+/** A framework-convention route file: Next.js `route.ts`, SvelteKit `+server.ts`. */
+const ROUTE_CONVENTION_RE = /^(route\.(js|mjs|ts|tsx)|\+server\.(js|ts))$/i;
+
+/**
+ * Does this repository show evidence of exposing an API? Two independent kinds
+ * of evidence, both cheap and both wrong sometimes: a server framework in a
+ * parsed manifest, and route-shaped directories or files in the tree.
+ *
+ * Emitted so the analysis engine is DECIDING whether an API Surface section is
+ * warranted rather than guessing whether one is possible. The pre-pass never
+ * decides — see docs/adr/0004-sections-are-declared-by-presence.md.
+ */
+function collectApiSurfaceSignal(manifests, tree) {
+  const frameworks = [];
+  for (const m of manifests) {
+    for (const dep of m.dependencies || []) {
+      const name = String(dep.name || "");
+      const tail = name.split("/").pop();
+      if (SERVER_FRAMEWORKS.has(name.toLowerCase()) || SERVER_FRAMEWORKS.has(String(tail).toLowerCase())) {
+        frameworks.push({ name, manifest: m.path, ecosystem: m.ecosystem });
+      }
+    }
+  }
+
+  const routeDirs = [];
+  const routeFiles = [];
+  // Route trees nest deeply — a Next.js handler can sit six directories below
+  // `app/` — so this walks further than the entry-point scan does.
+  (function rec(node, depth) {
+    if (!node.children || depth > 12) return;
+    for (const c of node.children) {
+      if (c.type === "dir") {
+        if (ROUTE_DIR_NAMES.has(c.name.toLowerCase())) routeDirs.push(c.path);
+        rec(c, depth + 1);
+      } else if (ROUTE_FILE_RE.test(c.name) || ROUTE_CONVENTION_RE.test(c.name)) {
+        routeFiles.push(c.path);
+      }
+    }
+  })(tree, 0);
+
+  return {
+    frameworks: frameworks.slice(0, 20),
+    routeDirs: routeDirs.slice(0, 25),
+    routeFiles: routeFiles.slice(0, 40),
+    candidate:
+      frameworks.length > 0 || routeDirs.length > 0 || routeFiles.length > 0,
+  };
+}
+
+/**
+ * Candidate signals for the specialized sections — the sections only some
+ * repositories have anything to put in. Advisory by construction: each entry
+ * names the evidence and the files it was found in, and says nothing about
+ * whether the section belongs in the document.
+ */
+function collectSignals(manifests, tree) {
+  return { apiSurface: collectApiSurfaceSignal(manifests, tree) };
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
@@ -786,6 +897,7 @@ function main() {
   const manifests = parseManifests(repoPath, walk.tree);
   const git = collectGit(repoPath, args.commits, paths);
   const notable = findNotable(repoPath, walk.tree);
+  const signals = collectSignals(manifests, walk.tree);
 
   const output = {
     prepassVersion: PREPASS_VERSION,
@@ -798,6 +910,7 @@ function main() {
     git,
     manifests,
     notable,
+    signals,
     largestFiles: walk.largestFiles,
     fileTree: walk.tree,
   };

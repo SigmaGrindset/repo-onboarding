@@ -38,6 +38,13 @@ export interface Analysis {
    * before schema 1.2.0.
    */
   learningResources?: LearningResourceEntry[];
+  /**
+   * Everything this repository exposes to callers over the network. A
+   * SPECIALIZED section: present exactly when the repository has a real API,
+   * absent entirely otherwise — the viewer shows no tab and no empty state.
+   * See `docs/adr/0004-sections-are-declared-by-presence.md`.
+   */
+  apiSurface?: ApiSurface;
   /** Suggested first tasks for a new contributor. */
   firstTasks: FirstTask[];
 }
@@ -327,6 +334,58 @@ export interface LearningResourceEntry {
   /** 1-4 pages beneath `official` on the same host; empty when `official` is null. */
   resources: LearningResource[];
   inRepo: InRepoPointer;
+}
+
+// ---------------------------------------------------------------------------
+// API surface
+// ---------------------------------------------------------------------------
+
+/**
+ * HTTP method. `ANY` covers a handler registered for every method (an Express
+ * `app.all`, a catch-all middleware); `WS` covers a WebSocket upgrade endpoint.
+ */
+export type HttpMethod =
+  | "GET"
+  | "POST"
+  | "PUT"
+  | "PATCH"
+  | "DELETE"
+  | "HEAD"
+  | "OPTIONS"
+  | "ANY"
+  | "WS";
+
+/** One route the repository exposes to callers. */
+export interface ApiRoute {
+  method: HttpMethod;
+  /**
+   * The route as a caller addresses it, with parameter placeholders in the
+   * repository's own notation (`/api/analyses/[id]`, `/users/:id`,
+   * `/items/{item_id}`).
+   */
+  path: string;
+  /** Repo-relative file implementing this route — where a reader goes to change it. */
+  file: string;
+  /**
+   * The class of caller permitted to call this route, named with what it can do
+   * in this repository. Machine callers are actors too.
+   */
+  actor: string;
+  /**
+   * Optional prose on what this route does and why a newcomer should care.
+   * Only for the routes that are genuinely instructive; most carry none.
+   */
+  note?: string;
+}
+
+/**
+ * What this repository exposes over the network. `routes` is exhaustive rather
+ * than curated on purpose: a reader must be able to conclude that a route not
+ * listed does not exist. Curation applies to `ApiRoute.note`, where attention
+ * is scarce.
+ */
+export interface ApiSurface {
+  routes: ApiRoute[];
 }
 
 // ---------------------------------------------------------------------------

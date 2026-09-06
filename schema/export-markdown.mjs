@@ -15,11 +15,12 @@
  * Section order is owned by the registry in `web/src/lib/sections.ts` (minus
  * the viewer-only "Versions" tab, which is not part of an analysis document).
  * The TypeScript mirror derives its order from that registry; this file cannot,
- * because it may have zero imports, so it restates the order literally. The
- * mirror's parity test compares the two per fixture, so it catches a reordered
- * or relabelled section every fixture carries — and cannot catch a section none
- * of them does. Add a specialized section here and to the mirror together, and
- * give a fixture that section, or the two can disagree unnoticed.
+ * because it may have zero imports, so it restates the order literally — and,
+ * for a specialized section, the document key that declares it. The mirror's
+ * parity test compares the two per fixture, so it catches a reordered or
+ * relabelled section every fixture carries — and cannot catch a section none of
+ * them does. Add a specialized section here and to the mirror together, and give
+ * a fixture that section, or the two can disagree unnoticed.
  */
 
 const DEFAULT_SITE_URL = "https://repo-onboarding-tau.vercel.app";
@@ -29,19 +30,29 @@ const MONTHS = [
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 
-/** Rendered sections, in order — drives both the body and the Contents TOC. */
+/**
+ * Rendered sections, in order — drives both the body and the Contents TOC.
+ * A `key` marks a SPECIALIZED section, rendered only when the document carries
+ * that key; a section without one is core and is always rendered.
+ */
 const SECTIONS = [
-  "Overview",
-  "Architecture",
-  "Dependency Graph",
-  "Codebase Map",
-  "Contributor Guide",
-  "Guided Tour",
-  "Hotspots",
-  "Setup",
-  "Learn",
-  "First Tasks",
+  { label: "Overview" },
+  { label: "Architecture" },
+  { label: "Dependency Graph" },
+  { label: "Codebase Map" },
+  { label: "API Surface", key: "apiSurface" },
+  { label: "Contributor Guide" },
+  { label: "Guided Tour" },
+  { label: "Hotspots" },
+  { label: "Setup" },
+  { label: "Learn" },
+  { label: "First Tasks" },
 ];
+
+/** The sections one document renders: every core one, plus the keys it carries. */
+function visibleSections(analysis) {
+  return SECTIONS.filter((s) => !s.key || analysis?.[s.key] != null);
+}
 
 // ---------------------------------------------------------------------------
 // Small, testable helpers
@@ -171,9 +182,9 @@ function renderPitch(analysis) {
   ];
 }
 
-function renderContents() {
+function renderContents(analysis) {
   const lines = ["## Contents", ""];
-  for (const label of SECTIONS) {
+  for (const { label } of visibleSections(analysis)) {
     lines.push(`- [${label}](#${slugify(label)})`);
   }
   return lines;
@@ -494,6 +505,35 @@ function renderLearn(analysis) {
 }
 
 /**
+ * The route table is exhaustive; the prose beneath it is not. Only the routes
+ * the document chose to explain get a paragraph, which is what keeps a complete
+ * list from becoming a wall of text with nothing emphasised.
+ */
+function renderApiSurface(analysis) {
+  const routes = Array.isArray(analysis.apiSurface?.routes)
+    ? analysis.apiSurface.routes
+    : [];
+
+  const lines = ["## API Surface", ""];
+  lines.push("| Method | Path | Actor | File |");
+  lines.push("| --- | --- | --- | --- |");
+  for (const route of routes) {
+    lines.push(
+      `| ${cell(route.method)} | ${code(cell(route.path))} | ${cell(route.actor)} | ${code(cell(route.file))} |`,
+    );
+  }
+
+  const explained = routes.filter((r) => r.note);
+  if (explained.length) {
+    lines.push("", "### Routes worth explaining");
+    for (const route of explained) {
+      lines.push("", `**\`${route.method} ${route.path}\`** — ${String(route.note)}`);
+    }
+  }
+  return lines;
+}
+
+/**
  * Render a validated analysis document as an ONBOARDING.md Markdown string.
  * @param {import("./analysis.ts").Analysis} analysis a validated document
  * @param {{ siteUrl?: string, generatorVersion?: string }} [options]
@@ -503,20 +543,26 @@ export function renderOnboardingMarkdown(analysis, options = {}) {
   const siteUrl = options.siteUrl || DEFAULT_SITE_URL;
   const generatorVersion = options.generatorVersion;
 
+  /** One renderer per SECTIONS label, so the two lists cannot drift apart. */
+  const RENDERERS = {
+    "Overview": renderOverview,
+    "Architecture": renderArchitecture,
+    "Dependency Graph": renderDependencyGraph,
+    "Codebase Map": renderCodebaseMap,
+    "API Surface": renderApiSurface,
+    "Contributor Guide": renderContributorGuide,
+    "Guided Tour": renderTour,
+    "Hotspots": renderHotspots,
+    "Setup": renderSetup,
+    "Learn": renderLearn,
+    "First Tasks": renderFirstTasks,
+  };
+
   const blocks = [
     renderHeader(analysis, siteUrl),
     renderPitch(analysis),
-    renderContents(),
-    renderOverview(analysis),
-    renderArchitecture(analysis),
-    renderDependencyGraph(analysis),
-    renderCodebaseMap(analysis),
-    renderContributorGuide(analysis),
-    renderTour(analysis),
-    renderHotspots(analysis),
-    renderSetup(analysis),
-    renderLearn(analysis),
-    renderFirstTasks(analysis),
+    renderContents(analysis),
+    ...visibleSections(analysis).map((s) => RENDERERS[s.label](analysis)),
     renderFooter(analysis, siteUrl, generatorVersion),
   ];
 

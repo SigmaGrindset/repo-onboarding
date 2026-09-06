@@ -437,6 +437,33 @@ function renderFirstTasks(analysis: Analysis): string[] {
   return lines;
 }
 
+/**
+ * The route table is exhaustive; the prose beneath it is not. Only the routes
+ * the document chose to explain get a paragraph, which is what keeps a complete
+ * list from becoming a wall of text with nothing emphasised.
+ */
+function renderApiSurface(analysis: Analysis): string[] {
+  const routes = analysis.apiSurface?.routes ?? [];
+
+  const lines = ["## API Surface", ""];
+  lines.push("| Method | Path | Actor | File |");
+  lines.push("| --- | --- | --- | --- |");
+  for (const route of routes) {
+    lines.push(
+      `| ${cell(route.method)} | ${code(cell(route.path))} | ${cell(route.actor)} | ${code(cell(route.file))} |`,
+    );
+  }
+
+  const explained = routes.filter((r) => r.note);
+  if (explained.length) {
+    lines.push("", "### Routes worth explaining");
+    for (const route of explained) {
+      lines.push("", `**\`${route.method} ${route.path}\`** — ${String(route.note)}`);
+    }
+  }
+  return lines;
+}
+
 function renderContributorGuide(analysis: Analysis): string[] {
   const guide = analysis.contributorGuide;
   const lines = ["## Contributor Guide"];
@@ -504,6 +531,7 @@ const RENDERERS: Record<SectionSlug, ((analysis: Analysis) => string[]) | null> 
   architecture: renderArchitecture,
   graph: renderDependencyGraph,
   map: renderCodebaseMap,
+  api: renderApiSurface,
   guide: renderContributorGuide,
   tour: renderTour,
   hotspots: renderHotspots,

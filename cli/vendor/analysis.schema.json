@@ -59,6 +59,10 @@
       "minItems": 3,
       "items": { "$ref": "#/$defs/LearningResourceEntry" }
     },
+    "apiSurface": {
+      "description": "Everything this repository exposes to callers over the network. A SPECIALIZED section: present exactly when the repository has a real API, and absent entirely otherwise — an analysis engine that finds no routes omits the key rather than emitting an empty one. See docs/adr/0004-sections-are-declared-by-presence.md.",
+      "$ref": "#/$defs/ApiSurface"
+    },
     "firstTasks": {
       "description": "Suggested first tasks for a new contributor.",
       "type": "array",
@@ -631,6 +635,54 @@
           "type": "array",
           "minItems": 1,
           "items": { "$ref": "#/$defs/FileRef" }
+        }
+      }
+    },
+    "ApiSurface": {
+      "description": "What this repository exposes to callers over the network. The route list is EXHAUSTIVE, not curated: a reader must be able to conclude that a route not listed does not exist. Curation applies to the optional per-route prose, where attention is scarce.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["routes"],
+      "properties": {
+        "routes": {
+          "description": "Every route the repository exposes, one entry each. The minimum is a substance floor: a repository that cannot fill it does not have an API surface, and the section must be omitted rather than emitted thin.",
+          "type": "array",
+          "minItems": 3,
+          "items": { "$ref": "#/$defs/ApiRoute" }
+        }
+      }
+    },
+    "ApiRoute": {
+      "description": "One route the repository exposes: the cheap facts every route carries, plus prose only where a newcomer needs it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "path", "file", "actor"],
+      "properties": {
+        "method": {
+          "description": "HTTP method. ANY covers a handler registered for every method (an Express app.all, a catch-all middleware); WS covers a WebSocket upgrade endpoint.",
+          "type": "string",
+          "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "ANY", "WS"]
+        },
+        "path": {
+          "description": "The route as a caller addresses it, including its parameter placeholders in the repository's own notation (e.g. /api/analyses/[id], /users/:id, /items/{item_id}).",
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^/"
+        },
+        "file": {
+          "description": "Repo-relative path of the file implementing this route — where a reader goes to change it.",
+          "type": "string",
+          "minLength": 1
+        },
+        "actor": {
+          "description": "The class of caller permitted to call this route, named with what it can do in this repository. Machine callers — service accounts, scheduled jobs, webhook senders — are actors too.",
+          "type": "string",
+          "minLength": 1
+        },
+        "note": {
+          "description": "Optional prose on what this route does and why a newcomer should care. Only for routes that are genuinely instructive: most routes carry none, and a note on every route is a wall of text with nothing emphasised. Forced to be substantive when present.",
+          "type": "string",
+          "minLength": 40
         }
       }
     }

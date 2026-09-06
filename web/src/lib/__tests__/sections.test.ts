@@ -48,9 +48,22 @@ const TODAYS_SECTIONS = [
   "versions",
 ];
 
-test("today's registry is entirely core sections", () => {
+/** Every specialized section that ships, and the key each is declared by. */
+const SPECIALIZED_SECTIONS: Record<string, keyof Analysis> = {
+  api: "apiSurface",
+};
+
+test("a section is specialized exactly when it is one of the known few", () => {
   for (const s of ANALYSIS_SECTIONS) {
-    assert.equal(s.class, "core", `"${s.slug}" is not core`);
+    const specialized = s.slug in SPECIALIZED_SECTIONS;
+    assert.equal(
+      s.class,
+      specialized ? "specialized" : "core",
+      `"${s.slug}" has the wrong class`,
+    );
+    if (s.class === "specialized") {
+      assert.equal(s.key, SPECIALIZED_SECTIONS[s.slug]);
+    }
   }
 });
 
@@ -76,9 +89,9 @@ test("a document predating a core section still shows that section", () => {
   assert.ok(visibleSections(withoutLearn).some((s) => s.slug === "learn"));
 });
 
-// No specialized section ships yet, so the presence rule is asserted against a
-// section of that class built here — keyed on a document key one fixture
-// carries and another does not.
+// The presence rule wants a document key one fixture carries and another does
+// not, which no shipped specialized section has while `api` is the only one and
+// the fixtures predate it. Built here rather than reached for in the registry.
 const SPECIALIZED: AnalysisSection = {
   slug: "guide",
   label: "Contributor Guide",
@@ -103,4 +116,41 @@ test("an explicitly null key counts as absent", () => {
     contributorGuide: null,
   } as unknown as Analysis;
   assert.equal(isSectionVisible(SPECIALIZED, withNull), false);
+});
+
+// --- API Surface ----------------------------------------------------------
+
+/** The routes floor is three; anything shorter is not an API surface. */
+function withApiSurface(base: Analysis): Analysis {
+  return {
+    ...base,
+    apiSurface: {
+      routes: [
+        { method: "GET", path: "/health", file: "src/health.ts", actor: "public" },
+        { method: "POST", path: "/items", file: "src/items.ts", actor: "signed-in reader" },
+        { method: "DELETE", path: "/items/:id", file: "src/items.ts", actor: "owner" },
+      ],
+    },
+  };
+}
+
+test("a document carrying an API surface shows the section after the codebase map", () => {
+  const slugs = visibleSections(withApiSurface(fixture("sample"))).map((s) => s.slug);
+  assert.ok(slugs.includes("api"));
+  assert.equal(slugs.indexOf("api"), slugs.indexOf("map") + 1);
+});
+
+test("a document with no API surface shows no API section at all", () => {
+  for (const name of FIXTURE_NAMES) {
+    const slugs = visibleSections(fixture(name)).map((s) => s.slug);
+    assert.ok(!slugs.includes("api"), `${name} shows an API Surface tab`);
+  }
+});
+
+test("the API section is only ever added, never reordered around", () => {
+  const withApi = visibleSections(withApiSurface(fixture("sample"))).map((s) => s.slug);
+  assert.deepEqual(
+    withApi.filter((slug) => slug !== "api"),
+    TODAYS_SECTIONS,
+  );
 });

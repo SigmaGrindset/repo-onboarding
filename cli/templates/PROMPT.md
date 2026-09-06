@@ -31,6 +31,9 @@ authoritative. It gives you:
   `topChurn[]` (`{ path, commits, lastCommitDate, lastCommitDaysAgo, recentActivity }`).
 - `manifests[]` — parsed dependencies per ecosystem, plus npm `scripts`.
 - `notable` — README, license, entry-point hints, CI configs, container files.
+- `signals` — candidate hints for the **specialized sections** (see Step 4). A
+  signal says a repository is worth looking at for a section, never that it has
+  one.
 - `fileTree` — the ignore-filtered tree (`node_modules` / `.git` / build dirs
   already excluded).
 
@@ -162,6 +165,38 @@ Reading order:
   - `inRepo` — the half only you can write: `note` (≥ 40 chars) on what to notice about
     how THIS repo uses the technology (the pattern it leans on, not a definition), plus
     `files[]` (≥ 1) pointing at real repo-relative paths where it actually shows up.
+- **`apiSurface`** — a SPECIALIZED section: emit the key only if this repository
+  really exposes routes over the network, and **omit it entirely otherwise**.
+  There is no empty version of this section — a repository with no API produces
+  a document with no `apiSurface` key, and the viewer shows no tab at all.
+  Start from `signals.apiSurface` in the pre-pass: it names the server
+  frameworks it found in the manifests and the route-shaped directories and
+  files in the tree. It is a hint, not a verdict — open those files and decide.
+  - Emit the section when the repository *serves* requests: an application, a
+    service, a site with route handlers. Do NOT emit it for a library or
+    framework whose users define the routes (Express itself has no API surface —
+    its users do), for a command-line tool, or for a repository whose only
+    "routes" are calls it makes to someone else's API.
+  - `routes[]` is **exhaustive, not curated**: every route the repository
+    exposes, so a reader can conclude that a route not listed does not exist. A
+    partial list is a failure even when every row in it is correct. Read the
+    routing files rather than recalling the framework's conventions.
+  - Each route carries `method`, `path` (as a caller addresses it, with the
+    repository's own parameter notation — `/api/analyses/[id]`, `/users/:id`,
+    `/items/{item_id}`), `file` (the repo-relative file implementing it), and
+    `actor`.
+  - `actor` names the class of caller permitted to call the route, in terms of
+    what it can do *here* — "signed-in reader", "analysis owner", "anonymous
+    share-link visitor", "token-bearing uploader", "public". Machine callers are
+    actors too: service accounts, scheduled jobs and webhook senders usually hold
+    the most dangerous permissions, so never reduce the list to human roles. Read
+    the middleware or the guard in the handler rather than assuming, and use the
+    same actor name for every route that requires it.
+  - `note` is OPTIONAL and belongs on the few routes a newcomer genuinely needs
+    explained — the one that is not what its path suggests, the one with a
+    surprising permission, the one everything else goes through. Most routes
+    carry none. A note on every route is a wall of text with nothing emphasised,
+    which is the failure this two-tier shape exists to avoid.
 - **`firstTasks[]`** (≥ 2, aim for 3–4) — concrete, real tasks referencing real
   files, each with a `difficulty` (`easy` / `medium` / `hard`) and a `rationale`
   for why it's a good newcomer task. Range easy → hard.
@@ -224,4 +259,6 @@ When it passes, publish with a token from `{{SITE_URL}}/account`:
       insight that helps a newcomer.
 - [ ] Setup commands actually exist (checked against manifest scripts / README / CI).
 - [ ] No generic filler that would be true of any repo.
+- [ ] `apiSurface` is present only if this repo really serves routes — and if it
+      is, every route it serves is listed, not a selection.
 - [ ] `{{VALIDATE_COMMAND}}` exits `0`.

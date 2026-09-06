@@ -134,6 +134,29 @@ which is one tab stop however many elements its diagram draws.
 
 ## API surface
 
+**API surface**:
+Everything a repository exposes to callers over the network, as one section. It is a
+specialized section: a repository that serves no requests has no API surface, and no tab
+where one would be. A library whose *users* define routes has none either — the routes
+belong to the users.
+_Avoid_: endpoints, API, REST API, public API — most of these surfaces are neither REST
+nor public
+
+**Route**:
+One address a caller can reach, named by its method and its path, carrying the file that
+implements it and the actor allowed to call it. Routes are listed **exhaustively**: the
+list is trustworthy only if a reader can conclude that a route not in it does not exist.
+_Avoid_: endpoint, handler (that is the function, not the address), path (that is one
+half of a route)
+
+**Route note**:
+The prose on a route that a newcomer needs explained — the one that is not what its path
+suggests, the one with a surprising permission, the one everything else goes through.
+Curation lives here and nowhere else in the section, because attention is the scarce
+thing and a note on every route emphasises none of them.
+_Avoid_: description, summary, docs — every route could carry one of those, which is
+exactly the failure
+
 **Actor**:
 A class of caller the API surface distinguishes between — an administrator, a signed-in
 reader, an unauthenticated visitor, a service account, a scheduled job. Named with what

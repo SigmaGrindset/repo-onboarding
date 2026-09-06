@@ -1,4 +1,5 @@
 import type { Analysis } from "@schema/analysis";
+import { routeAnchor, routeLabel } from "./api-surface";
 import { slugify } from "./format";
 import { visibleSections } from "./sections";
 
@@ -13,6 +14,7 @@ export interface SearchItem {
     | "Sections"
     | "Architecture"
     | "Codebase Map"
+    | "API Surface"
     | "Contributor Guide"
     | "Guided Tour"
     | "Hotspots"
@@ -59,6 +61,18 @@ export function buildSearchIndex(analysis: Analysis, base: string): SearchItem[]
       hint: entry.role,
       href: `${base}/map?entry=${slugify(entry.path)}`,
       keywords: entry.keyFiles?.map((f) => f.path).join(" "),
+    });
+  }
+
+  // Every route, not a selection: the palette is how a reader checks whether a
+  // path exists at all, which a curated index could not answer.
+  for (const route of analysis.apiSurface?.routes ?? []) {
+    items.push({
+      group: "API Surface",
+      label: routeLabel(route),
+      hint: route.actor,
+      href: `${base}/api?route=${routeAnchor(route)}`,
+      keywords: route.file,
     });
   }
 

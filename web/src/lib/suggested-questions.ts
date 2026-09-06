@@ -1,4 +1,5 @@
 import type { Analysis, Difficulty } from "@schema/analysis";
+import { routeLabel } from "./api-surface";
 import { ANALYSIS_SECTIONS } from "./sections";
 
 /**
@@ -33,6 +34,7 @@ export function buildSuggestedQuestions(
     architecture: architectureQuestions(analysis),
     graph: graphQuestions(analysis),
     map: mapQuestions(analysis),
+    api: apiQuestions(analysis),
     guide: guideQuestions(analysis),
     tour: tourQuestions(analysis),
     hotspots: hotspotsQuestions(analysis),
@@ -47,6 +49,23 @@ export function buildSuggestedQuestions(
     out[s.slug] = padQuestions(bySlug[s.slug] ?? []);
   }
   return out;
+}
+
+function apiQuestions(a: Analysis): string[] {
+  const routes = a.apiSurface?.routes ?? [];
+  const explained = routes.find((r) => r.note) ?? routes[0];
+  // The most-required actor is the one whose permissions a newcomer meets
+  // first, so it is the one worth a starter question.
+  const counts = new Map<string, number>();
+  for (const route of routes) {
+    counts.set(route.actor, (counts.get(route.actor) ?? 0) + 1);
+  }
+  const commonest = [...counts.entries()].sort((x, y) => y[1] - x[1])[0]?.[0];
+  return [
+    explained ? `What does ${clip(routeLabel(explained))} do?` : "",
+    commonest ? `Which routes can ${clip(commonest)} call?` : "",
+    "Where is the access control for these routes enforced?",
+  ];
 }
 
 function learnQuestions(a: Analysis): string[] {

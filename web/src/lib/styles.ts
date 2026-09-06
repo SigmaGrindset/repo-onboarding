@@ -7,6 +7,7 @@
 import type {
   Difficulty,
   GraphNodeKind,
+  HttpMethod,
   RecentActivity,
   TechStackCategory,
 } from "@schema/analysis";
@@ -219,6 +220,61 @@ const DIFF_KIND_STYLES: Record<DiffKind, BadgeStyle> = {
 
 export function diffKindStyle(kind: DiffKind): BadgeStyle {
   return DIFF_KIND_STYLES[kind] ?? DIFF_KIND_STYLES.changed;
+}
+
+/**
+ * HTTP methods, tinted by what a call does to the server rather than by
+ * protocol trivia: reads are cool, writes are warm, deletes are hot. ANY and WS
+ * stay neutral because neither says whether the call changes anything.
+ */
+const METHOD_STYLES: Record<HttpMethod, BadgeStyle> = {
+  GET: {
+    label: "GET",
+    className: "bg-sky-500/12 text-sky-700 dark:text-sky-300 border-sky-500/25",
+  },
+  HEAD: {
+    label: "HEAD",
+    className: "bg-sky-500/12 text-sky-700 dark:text-sky-300 border-sky-500/25",
+  },
+  POST: {
+    label: "POST",
+    className:
+      "bg-emerald-500/12 text-emerald-800 dark:text-emerald-300 border-emerald-500/25",
+  },
+  PUT: {
+    label: "PUT",
+    className:
+      "bg-amber-500/12 text-amber-800 dark:text-amber-300 border-amber-500/25",
+  },
+  PATCH: {
+    label: "PATCH",
+    className:
+      "bg-amber-500/12 text-amber-800 dark:text-amber-300 border-amber-500/25",
+  },
+  DELETE: {
+    label: "DELETE",
+    className:
+      "bg-rose-500/12 text-rose-700 dark:text-rose-300 border-rose-500/25",
+  },
+  OPTIONS: {
+    label: "OPTIONS",
+    className:
+      "bg-stone-500/12 text-stone-700 dark:text-stone-300 border-stone-500/25",
+  },
+  ANY: {
+    label: "ANY",
+    className:
+      "bg-violet-500/12 text-violet-700 dark:text-violet-300 border-violet-500/25",
+  },
+  WS: {
+    label: "WS",
+    className:
+      "bg-teal-500/12 text-teal-700 dark:text-teal-300 border-teal-500/25",
+  },
+};
+
+export function methodStyle(m: HttpMethod): BadgeStyle {
+  return METHOD_STYLES[m] ?? METHOD_STYLES.ANY;
 }
 
 /**

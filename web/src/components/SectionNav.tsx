@@ -11,6 +11,7 @@ const ICONS: Record<SectionSlug, ReactNode> = {
   architecture: <IconArchitecture />,
   graph: <IconGraph />,
   map: <IconMap />,
+  api: <IconApi />,
   guide: <IconGuide />,
   tour: <IconTour />,
   hotspots: <IconHotspots />,
@@ -237,6 +238,15 @@ function IconTour() {
       <path d="M8 2v9" />
       <circle cx="8" cy="13" r="1.3" />
       <path d="M8 3.5h4.5v3H8" />
+    </>,
+  );
+}
+function IconApi() {
+  return svg(
+    <>
+      <path d="M6.5 2.5C5 2.5 5 4 5 5.5S3.5 8 3.5 8 5 8.5 5 10.5s0 3 1.5 3" />
+      <path d="M9.5 2.5c1.5 0 1.5 1.5 1.5 3s1.5 2.5 1.5 2.5-1.5.5-1.5 2.5 0 3-1.5 3" />
+      <path d="M9.2 5.6 6.8 10.4" />
     </>,
   );
 }

@@ -21,6 +21,7 @@ export type SectionSlug =
   | "architecture"
   | "graph"
   | "map"
+  | "api"
   | "guide"
   | "tour"
   | "hotspots"
@@ -68,6 +69,14 @@ export const ANALYSIS_SECTIONS: AnalysisSection[] = [
   { slug: "architecture", label: "Architecture", class: "core" },
   { slug: "graph", label: "Dependency Graph", class: "core" },
   { slug: "map", label: "Codebase Map", class: "core" },
+  // Specialized sections join the structural block after the codebase map,
+  // interleaved by meaning rather than grouped by class — see ADR 0004.
+  {
+    slug: "api",
+    label: "API Surface",
+    class: "specialized",
+    key: "apiSurface",
+  },
   { slug: "guide", label: "Contributor Guide", class: "core" },
   { slug: "tour", label: "Guided Tour", class: "core" },
   { slug: "hotspots", label: "Hotspots", class: "core" },
