@@ -208,3 +208,70 @@ primitive, and the test for when writing a new one is right instead. Usually unw
 it states the practice the code shows rather than a rule someone documented. Required —
 the section cannot exist without it.
 _Avoid_: guideline, convention, policy, contribution rule
+
+## Delivery
+
+**Delivery**:
+How committed code reaches a running environment, as one section: the pipeline it travels,
+the gates it must pass, the build a deploy runs, the environments it lands in, how
+migrations are applied, and the variables a deploy requires. A specialized section — a
+repository with nothing committed about its pipeline has no Delivery, and no tab where one
+would be. It stops at what is committed, which is a boundary rather than an omission.
+_Avoid_: CI/CD, release process, and — as a name for this section — deploy or deployment.
+"Deploy" is the word that invites an analysis engine into the operational half, which is why
+the section is not called it; the ordinary verb, for the thing a pipeline does, is fine.
+
+**Operational half**:
+Everything true about running the system that is not in the repository — production
+dashboards, log access, rollback procedure, on-call. Named so that the schema, the
+generator prompt and the viewer can all refer to the same excluded thing. It is absent by
+design: the repository does not contain it, so an analysis engine asked for it invents it,
+and an invented instruction about production is one somebody follows against a live system.
+_Avoid_: ops, production knowledge, operations section — there is no such section and there
+is no field to hold it. "Runbook" names a real document and the word is fine for one; it is
+not a name for this concept
+
+**Gate**:
+One automated check a change must pass, at the grain a reader could run it at — usually a
+job, sometimes a single step where a job runs several distinct checks. Named as this
+repository names it, grounded in the file that defines it, and carrying what it actually
+checks, because a gate called `web` says nothing. Listed **exhaustively**: a check not
+listed is one that does not run.
+_Avoid_: check (that is what a gate does), status check, and — as a name for the concept —
+job, step or workflow. Those three name the mechanism a gate happens to be built from, which
+is why the definition uses them and the term does not: one workflow file defines several
+gates, and one job can be several.
+
+**Environment**:
+One place committed configuration deploys to, named with what reaches it — a branch, a tag,
+an event — and the committed file that says so. The file is not decoration: a
+branch-to-environment mapping that lives only in a hosting dashboard cannot be read, so it
+is not written down.
+_Avoid_: stage, tier, target, deployment (that is one event, not the place)
+
+**Migration application**:
+What applies this repository's database migrations, and when. Its most valuable answer is
+frequently "nothing does — a person runs the command by hand", which is exactly the answer
+a newcomer who ships a schema change needs and the one an analysis engine is most tempted
+to improve upon.
+_Avoid_: schema change, database deploy, and "migrations" alone — that word names the files,
+which is why the document's key `migrations` holds this concept *about* them rather than a
+list of them.
+
+**Deploy variable**:
+One name a deploy must have a value for, given with what it is for and the committed file
+that declares it. Listed **exhaustively**, unlike design token groups, because a partial
+list of required variables is worse than none — and carrying **no values ever**, because an
+analysis document is shared and a value beside a database URL is a leak, not a stale fact.
+_Avoid_: env var, secret, config, and "environment variable" unqualified — that is what the
+thing is, not which ones this section lists, and "environment" on its own is the place a
+value is set, which is a different entry.
+
+**Build**:
+What a deploy actually runs, and the committed file that defines producing it — a container
+image from a `Dockerfile`, a bundle from a `build` script, a package published from source.
+It is where the repository's committed build and deploy configuration lands, and it is the
+one part of the section a repository can always answer, because "nothing is compiled, the
+source is the artefact" is an answer rather than an absence.
+_Avoid_: artifact (that is the output alone, without where it comes from), compile, bundle,
+pipeline (that is the whole journey, of which this is one step)
