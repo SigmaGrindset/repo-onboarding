@@ -479,6 +479,63 @@ function renderApiSurface(analysis: Analysis): string[] {
   return lines;
 }
 
+/**
+ * Two lists with two different promises, and the section must not blur them:
+ * the token groups are a way in (the file each names is the inventory), the
+ * primitives are the set. So the tokens render as prose with their files and
+ * the primitives render as a table — and each table row carries its own `use`,
+ * because a primitive's name says nothing about when to reach for it.
+ */
+function renderDesignSystem(analysis: Analysis): string[] {
+  const system = analysis.designSystem;
+  const lines = ["## Design System", ""];
+  lines.push(system?.approach ?? "");
+
+  const rule = system?.reuseRule;
+  if (rule) {
+    lines.push("", "### Reuse rule", "");
+    lines.push(`**Reuse when:** ${rule.reuseWhen}`);
+    lines.push("", `**Create when:** ${rule.createWhen}`);
+    lines.push("", `A new primitive belongs in ${code(cell(rule.newPrimitiveHome))}.`);
+  }
+
+  const tokens = system?.tokens ?? [];
+  if (tokens.length) {
+    lines.push("", "### Token groups", "");
+    lines.push(
+      "Sampled, not exhaustive — each group's file is the full list.",
+    );
+    for (const group of tokens) {
+      lines.push("", `**${cell(group.name)}** — ${code(cell(group.file))}`);
+      lines.push("", group.usage);
+      if (group.examples.length) {
+        lines.push(
+          "",
+          `For example: ${group.examples.map((e) => code(cell(e))).join(", ")}.`,
+        );
+      }
+    }
+  }
+
+  const primitives = system?.primitives ?? [];
+  if (primitives.length) {
+    lines.push("", "### Primitives", "");
+    lines.push(
+      "Exhaustive — a primitive that is not here does not exist.",
+      "",
+    );
+    lines.push("| Primitive | Reach for it when | File |");
+    lines.push("| --- | --- | --- |");
+    for (const p of primitives) {
+      lines.push(
+        `| ${cell(p.name)} | ${cell(p.use)} | ${code(cell(p.file))} |`,
+      );
+    }
+  }
+
+  return lines;
+}
+
 function renderContributorGuide(analysis: Analysis): string[] {
   const guide = analysis.contributorGuide;
   const lines = ["## Contributor Guide"];
@@ -547,6 +604,7 @@ const RENDERERS: Record<SectionSlug, ((analysis: Analysis) => string[]) | null> 
   graph: renderDependencyGraph,
   map: renderCodebaseMap,
   api: renderApiSurface,
+  design: renderDesignSystem,
   guide: renderContributorGuide,
   tour: renderTour,
   hotspots: renderHotspots,

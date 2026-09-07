@@ -564,3 +564,295 @@ test("validate: the actor join is offline and deterministic (ADR 0002)", { skip:
     globalThis.fetch = realFetch;
   }
 });
+
+// --- Design system: the substance floor --------------------------------------
+//
+// Also SPECIALIZED, and the floor is the whole enforcement: unlike the API
+// surface there is no join by name here, so nothing but the schema stands
+// between an over-eager analysis engine and a Design System tab on a repository
+// with a handful of styles. See docs/adr/0005-design-system-judgement-not-inventory.md.
+
+/** Four real primitives: the fourth-Button number, and the minimum. */
+const PRIMITIVES = [
+  {
+    name: "Button",
+    file: "src/ui/button.tsx",
+    use: "Every clickable action in the product, in three variants.",
+  },
+  {
+    name: "Card",
+    file: "src/ui/card.tsx",
+    use: "The surface every top-level block on a page sits on.",
+  },
+  {
+    name: "Field",
+    file: "src/ui/field.tsx",
+    use: "A labelled input with its error message and hint text.",
+  },
+  {
+    name: "Stack",
+    file: "src/ui/stack.tsx",
+    use: "Vertical rhythm between blocks, so margins are never hand-set.",
+  },
+];
+
+/** One token group: the minimum, and a sample rather than an inventory. */
+const TOKENS = [
+  {
+    name: "Colour",
+    file: "src/styles/tokens.css",
+    usage: "Referenced as var(--surface-2) in CSS and as bg-surface-2 in markup.",
+    examples: ["--surface", "--surface-2", "--text", "--accent"],
+  },
+];
+
+const REUSE_RULE = {
+  reuseWhen:
+    "Search src/ui before writing anything: if a primitive renders the shape you need, extend its props rather than forking it.",
+  createWhen:
+    "Write a new primitive only when three screens already need the same shape and no existing one can express it with a prop.",
+  newPrimitiveHome: "src/ui/",
+};
+
+/** A design system that clears every floor — the baseline the cases mutate. */
+function designSystem() {
+  return {
+    approach:
+      "One stylesheet of custom properties, consumed through utility classes; nothing writes a colour literal in a component.",
+    tokens: TOKENS.map((t) => ({ ...t, examples: [...t.examples] })),
+    primitives: PRIMITIVES.map((p) => ({ ...p })),
+    reuseRule: { ...REUSE_RULE },
+  };
+}
+
+test("validate: a document with no designSystem is valid", { skip: skipNoSample }, async () => {
+  const doc = JSON.parse(readFileSync(SAMPLE, "utf8"));
+  assert.equal(doc.designSystem, undefined, "the sample carries no design system");
+  const res = await runCli(["validate", SAMPLE, "--json"]);
+  assert.equal(res.status, 0, res.stdout);
+});
+
+test("validate: four primitives, one token group, an approach and a rule clear the floor", { skip: skipNoSample }, async () => {
+  const { res } = await validateMutated((doc) => {
+    doc.designSystem = designSystem();
+  }, "design-ok");
+  assert.equal(res.status, 0, res.stdout);
+});
+
+test("validate: fewer than four primitives is not a design system", { skip: skipNoSample }, async () => {
+  const { res, parsed } = await validateMutated((doc) => {
+    doc.designSystem = designSystem();
+    doc.designSystem.primitives = PRIMITIVES.slice(0, 3);
+  }, "design-thin");
+  assert.equal(res.status, 1);
+  const issue = parsed.issues.find((i) => i.path === "/designSystem/primitives");
+  assert.ok(issue, `no issue at /designSystem/primitives: ${res.stdout}`);
+  assert.equal(issue.keyword, "minItems");
+  assert.equal(issue.expected, "at least 4 item(s)");
+});
+
+test("validate: a design system with no token group is rejected", { skip: skipNoSample }, async () => {
+  const { res, parsed } = await validateMutated((doc) => {
+    doc.designSystem = designSystem();
+    doc.designSystem.tokens = [];
+  }, "design-no-tokens");
+  assert.equal(res.status, 1);
+  assert.ok(
+    parsed.issues.some(
+      (i) => i.path === "/designSystem/tokens" && i.keyword === "minItems",
+    ),
+    res.stdout,
+  );
+});
+
+for (const key of ["approach", "tokens", "primitives", "reuseRule"]) {
+  test(`validate: a design system without ${key} answers a different question`, { skip: skipNoSample }, async () => {
+    const { res, parsed } = await validateMutated((doc) => {
+      doc.designSystem = designSystem();
+      delete doc.designSystem[key];
+    }, `design-no-${key}`);
+    assert.equal(res.status, 1);
+    const issue = parsed.issues.find(
+      (i) => i.path === "/designSystem" && i.expected === `property "${key}"`,
+    );
+    assert.ok(issue, res.stdout);
+    assert.equal(issue.keyword, "required");
+  });
+}
+
+for (const half of ["reuseWhen", "createWhen"]) {
+  test(`validate: the reuse rule must carry ${half}`, { skip: skipNoSample }, async () => {
+    // Both halves are required for the same reason: asked for one rule, an
+    // engine writes the platitude and drops the test a newcomer needs.
+    const { res, parsed } = await validateMutated((doc) => {
+      doc.designSystem = designSystem();
+      delete doc.designSystem.reuseRule[half];
+    }, `design-rule-no-${half}`);
+    assert.equal(res.status, 1);
+    assert.ok(
+      parsed.issues.some(
+        (i) =>
+          i.path === "/designSystem/reuseRule" &&
+          i.keyword === "required" &&
+          i.expected === `property "${half}"`,
+      ),
+      res.stdout,
+    );
+  });
+
+  test(`validate: a platitude in ${half} is rejected`, { skip: skipNoSample }, async () => {
+    const { res, parsed } = await validateMutated((doc) => {
+      doc.designSystem = designSystem();
+      doc.designSystem.reuseRule[half] = "Reuse a component where one fits.";
+    }, `design-rule-thin-${half}`);
+    assert.equal(res.status, 1);
+    assert.ok(
+      parsed.issues.some(
+        (i) =>
+          i.path === `/designSystem/reuseRule/${half}` && i.keyword === "minLength",
+      ),
+      res.stdout,
+    );
+  });
+}
+
+test("validate: a genuinely new primitive needs somewhere to go", { skip: skipNoSample }, async () => {
+  const { res, parsed } = await validateMutated((doc) => {
+    doc.designSystem = designSystem();
+    delete doc.designSystem.reuseRule.newPrimitiveHome;
+  }, "design-rule-no-home");
+  assert.equal(res.status, 1);
+  assert.ok(
+    parsed.issues.some(
+      (i) =>
+        i.path === "/designSystem/reuseRule" &&
+        i.expected === 'property "newPrimitiveHome"',
+    ),
+    res.stdout,
+  );
+});
+
+test("validate: naming the styling library is not an approach", { skip: skipNoSample }, async () => {
+  const { res, parsed } = await validateMutated((doc) => {
+    doc.designSystem = designSystem();
+    doc.designSystem.approach = "Tailwind CSS.";
+  }, "design-thin-approach");
+  assert.equal(res.status, 1);
+  assert.ok(
+    parsed.issues.some(
+      (i) => i.path === "/designSystem/approach" && i.keyword === "minLength",
+    ),
+    res.stdout,
+  );
+});
+
+test("validate: a primitive must say what a reader reaches for it for", { skip: skipNoSample }, async () => {
+  const { res, parsed } = await validateMutated((doc) => {
+    doc.designSystem = designSystem();
+    doc.designSystem.primitives[1].use = "A card.";
+  }, "design-thin-use");
+  assert.equal(res.status, 1);
+  assert.ok(
+    parsed.issues.some(
+      (i) =>
+        i.path === "/designSystem/primitives/1/use" && i.keyword === "minLength",
+    ),
+    res.stdout,
+  );
+});
+
+test("validate: two primitives of the same name are two entries, not an error", { skip: skipNoSample }, async () => {
+  // The rejected uniqueness rule, asserted as a permission: two components
+  // called Button in two files is a true statement about a repository, and
+  // precisely the one a reader most needs — see the Primitive entry in
+  // CONTEXT.md, which the schema description restates.
+  const { res, parsed } = await validateMutated((doc) => {
+    doc.designSystem = designSystem();
+    doc.designSystem.primitives.push({
+      name: "Button",
+      file: "src/legacy/Button.tsx",
+      use: "The pre-redesign button, still rendered on the billing screens.",
+    });
+  }, "design-duplicate-primitive");
+  assert.equal(res.status, 0, res.stdout);
+  assert.deepEqual(parsed.issues, []);
+});
+
+test("validate: a token group samples rather than enumerates", { skip: skipNoSample }, async () => {
+  const { res, parsed } = await validateMutated((doc) => {
+    doc.designSystem = designSystem();
+    doc.designSystem.tokens[0].examples = Array.from(
+      { length: 9 },
+      (_, i) => `--surface-${i}`,
+    );
+  }, "design-token-inventory");
+  assert.equal(res.status, 1);
+  const issue = parsed.issues.find(
+    (i) => i.path === "/designSystem/tokens/0/examples",
+  );
+  assert.ok(issue, res.stdout);
+  assert.equal(issue.keyword, "maxItems");
+});
+
+test("validate: one example is not a sample", { skip: skipNoSample }, async () => {
+  const { res, parsed } = await validateMutated((doc) => {
+    doc.designSystem = designSystem();
+    doc.designSystem.tokens[0].examples = ["--surface"];
+  }, "design-token-single");
+  assert.equal(res.status, 1);
+  assert.ok(
+    parsed.issues.some(
+      (i) =>
+        i.path === "/designSystem/tokens/0/examples" && i.keyword === "minItems",
+    ),
+    res.stdout,
+  );
+});
+
+test("validate: a token group must say how a value is referenced here", { skip: skipNoSample }, async () => {
+  const { res, parsed } = await validateMutated((doc) => {
+    doc.designSystem = designSystem();
+    doc.designSystem.tokens[0].usage = "CSS variables.";
+  }, "design-token-thin-usage");
+  assert.equal(res.status, 1);
+  assert.ok(
+    parsed.issues.some(
+      (i) => i.path === "/designSystem/tokens/0/usage" && i.keyword === "minLength",
+    ),
+    res.stdout,
+  );
+});
+
+test("validate: a stray property on a primitive is rejected", { skip: skipNoSample }, async () => {
+  const { res, parsed } = await validateMutated((doc) => {
+    doc.designSystem = designSystem();
+    doc.designSystem.primitives[0].variants = ["primary", "ghost"];
+  }, "design-stray-key");
+  assert.equal(res.status, 1);
+  assert.ok(
+    parsed.issues.some(
+      (i) =>
+        i.path === "/designSystem/primitives/0" &&
+        i.keyword === "additionalProperties",
+    ),
+    res.stdout,
+  );
+});
+
+test("validate: a token group carries names, and has nowhere to put a value", { skip: skipNoSample }, async () => {
+  // Values rot invisibly — a swatch is still a swatch when it is the wrong
+  // blue — so the schema gives them no home rather than trusting the prompt.
+  const { res, parsed } = await validateMutated((doc) => {
+    doc.designSystem = designSystem();
+    doc.designSystem.tokens[0].values = { "--surface": "#ffffff" };
+  }, "design-token-values");
+  assert.equal(res.status, 1);
+  assert.ok(
+    parsed.issues.some(
+      (i) =>
+        i.path === "/designSystem/tokens/0" &&
+        i.keyword === "additionalProperties",
+    ),
+    res.stdout,
+  );
+});

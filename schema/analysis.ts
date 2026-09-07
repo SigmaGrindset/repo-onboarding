@@ -45,6 +45,13 @@ export interface Analysis {
    * See `docs/adr/0004-sections-are-declared-by-presence.md`.
    */
   apiSurface?: ApiSurface;
+  /**
+   * How this repository's interface is built. A SPECIALIZED section: present
+   * exactly when the repository has a design system of its own, absent entirely
+   * otherwise — the viewer shows no tab and no empty state.
+   * See `docs/adr/0005-design-system-judgement-not-inventory.md`.
+   */
+  designSystem?: DesignSystem;
   /** Suggested first tasks for a new contributor. */
   firstTasks: FirstTask[];
 }
@@ -408,6 +415,81 @@ export interface ApiActor {
 export interface ApiSurface {
   routes: ApiRoute[];
   actors?: ApiActor[];
+}
+
+// ---------------------------------------------------------------------------
+// Design system
+// ---------------------------------------------------------------------------
+
+/**
+ * One kind of design decision that has been given names — colour, spacing,
+ * typography, elevation, layering. SAMPLED, never enumerated: the `file` is the
+ * inventory and stays correct as the repository repaints, and this entry is the
+ * way into it.
+ */
+export interface DesignTokenGroup {
+  /** What this group is called here ("Colour", "Spacing", "Elevation"). */
+  name: string;
+  /** Repo-relative file the group is defined in — the real inventory. */
+  file: string;
+  /**
+   * How a value from this group is referenced in code, in this repository's own
+   * notation (`text-muted`, `var(--surface-2)`, `theme.space[3]`).
+   */
+  usage: string;
+  /**
+   * A representative handful of token NAMES — never values, which rot faster
+   * than anything else in an analysis document and rot invisibly. Two to eight,
+   * capped so that "sample" is a contract rather than a hope.
+   */
+  examples: string[];
+}
+
+/**
+ * One component the interface is built FROM rather than one built for a screen.
+ * `use` sits on every entry rather than a curated few, because a primitive's
+ * name says nothing about when to reach for it.
+ */
+export interface DesignPrimitive {
+  name: string;
+  /** Repo-relative file implementing it. */
+  file: string;
+  /** What a reader reaches for it for, in this repository's terms. */
+  use: string;
+}
+
+/**
+ * The judgement a newcomer would otherwise get wrong. Two halves rather than
+ * one, because an engine asked for a single rule writes the platitude half and
+ * drops the test for when creating is right.
+ */
+export interface ReuseRule {
+  /** When to reach for an existing primitive, and how to find the one that exists. */
+  reuseWhen: string;
+  /** The test for when writing a new primitive is the right call instead. */
+  createWhen: string;
+  /** Repo-relative file or directory a genuinely new primitive belongs in. */
+  newPrimitiveHome: string;
+}
+
+/**
+ * How this repository's interface is built. A SPECIALIZED section: present
+ * exactly when the repository has a design system of its own, absent entirely
+ * otherwise — the viewer shows no tab and no empty state.
+ *
+ * The two lists carry different promises and the section must not blur them: if
+ * a primitive is not listed it does not exist, while a token not listed very
+ * likely does exist and this is not where you would find it. See
+ * `docs/adr/0005-design-system-judgement-not-inventory.md`.
+ */
+export interface DesignSystem {
+  /** The one way styles are written here, and the second way not to introduce. */
+  approach: string;
+  /** Sampled by group; the files they name are the inventory. */
+  tokens: DesignTokenGroup[];
+  /** Exhaustive within the boundary the analysis engine draws. */
+  primitives: DesignPrimitive[];
+  reuseRule: ReuseRule;
 }
 
 // ---------------------------------------------------------------------------

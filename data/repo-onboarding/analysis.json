@@ -1981,6 +1981,147 @@
       }
     ]
   },
+  "designSystem": {
+    "approach": "Tailwind v4 utilities over one stylesheet of CSS custom properties. `web/src/app/globals.css` declares every literal colour exactly once, in a `--light-*` and a `--dark-*` scale; the theme rules after them only re-point the semantic tokens (`--surface`, `--text`, `--accent`) at one scale or the other, so the two themes cannot drift apart. Components then write utilities — `bg-surface-2`, `text-muted`, `shadow-soft` — and never a value inside a theme rule. Two exceptions are deliberate and are the whole of them. Data colour — difficulty, churn, HTTP method, diff deltas — lives in `web/src/lib/styles.ts` as complete literal class strings, because Tailwind v4 scans source for literals and a class name assembled at runtime silently does not exist. And chrome that must stay dark in BOTH themes (the palette and dialog scrims, fullscreen diagram toolbars) writes the dark scale's own values as arbitrary utilities — `bg-[#0f1216]/45`, `text-[#e9edf2]/75` — because a semantic token would flip to light with the theme. Anywhere else, a hex value in a component is a bug.",
+    "tokens": [
+      {
+        "name": "Colour",
+        "file": "web/src/app/globals.css",
+        "usage": "Never referenced as a raw variable in markup: the `--light-*` / `--dark-*` scales feed the semantic tokens, `@theme inline` exposes those to Tailwind, and a component writes the utility — `bg-surface`, `text-muted`, `border-border-strong`.",
+        "examples": [
+          "--bg",
+          "--surface",
+          "--surface-2",
+          "--border-strong",
+          "--text",
+          "--muted",
+          "--accent",
+          "--accent-soft"
+        ]
+      },
+      {
+        "name": "Elevation",
+        "file": "web/src/app/globals.css",
+        "usage": "Three shadows, each carrying the background's hue and one light source. Markup uses the named step (`shadow-soft`, `shadow-raised`, `shadow-float`); the `--shadow-sm/md/lg` scale behind them is only read inside globals.css.",
+        "examples": [
+          "--shadow-sm",
+          "--shadow-md",
+          "--shadow-lg",
+          "--shadow-soft",
+          "--shadow-raised",
+          "--shadow-float"
+        ]
+      },
+      {
+        "name": "Typography",
+        "file": "web/src/app/globals.css",
+        "usage": "Two faces injected by `next/font` in `layout.tsx` and aliased in `@theme inline`, so markup writes `font-sans` / `font-mono`. Anything a reader parses as data — paths, counts, shas, kickers — is mono, and `.kicker` is the one type style with a class of its own.",
+        "examples": [
+          "--font-sans",
+          "--font-mono",
+          "--font-geist-sans",
+          "--font-geist-mono"
+        ]
+      },
+      {
+        "name": "Layering",
+        "file": "web/src/app/globals.css",
+        "usage": "The scale is the reference rather than the reference implementation: components write the matching Tailwind step (`z-20` for the sticky header, `z-50` for a dialog) and only `.skip-link` reads `var(--z-overlay)` directly. Read the scale before inventing a z-index.",
+        "examples": [
+          "--z-base",
+          "--z-sticky",
+          "--z-float",
+          "--z-overlay"
+        ]
+      },
+      {
+        "name": "Data tints",
+        "file": "web/src/lib/styles.ts",
+        "usage": "Not CSS variables at all: the maps are module-private and reached through an exported helper that returns a complete literal Tailwind class string. Call the helper; never build a class name by concatenation, because Tailwind v4 only emits classes it can see written out.",
+        "examples": [
+          "categoryStyle",
+          "difficultyStyle",
+          "activityStyle",
+          "kindStyle",
+          "methodStyle",
+          "labelTint",
+          "LANGUAGE_PALETTE"
+        ]
+      }
+    ],
+    "primitives": [
+      {
+        "name": "Card",
+        "file": "web/src/components/ui.tsx",
+        "use": "The surface almost everything sits on. `tone` decides whether it earns elevation — `raised` for a top-level block, `quiet` for one nested inside another card — and `radius` tightens as elements nest, so reach for the props before a new component."
+      },
+      {
+        "name": "Badge",
+        "file": "web/src/components/ui.tsx",
+        "use": "A squared-off label carrying data — a language, a category, a difficulty, an HTTP method — deliberately not a pill, because pills read as \"New\"/\"Beta\" marketing. Colour comes in as a className from `lib/styles.ts`."
+      },
+      {
+        "name": "SectionHeader",
+        "file": "web/src/components/ui.tsx",
+        "use": "The mono kicker, short rule and display title at the top of every section page. Use it rather than an `h1` so a new section is immediately recognisable as one of the set."
+      },
+      {
+        "name": "FileChip",
+        "file": "web/src/components/ui.tsx",
+        "use": "Any repo-relative path a reader might want to open, optionally with a line range. Given an `href` it becomes a link to the source at the analysed commit — pass `githubBlobUrl(...)` rather than building a URL."
+      },
+      {
+        "name": "EmptyState",
+        "file": "web/src/components/ui.tsx",
+        "use": "What a core section shows when the document predates it: a mark, the state, the reason, and the way out. A specialized section must NOT use it — an absent one renders no page at all."
+      },
+      {
+        "name": "CodeBlock",
+        "file": "web/src/components/CodeBlock.tsx",
+        "use": "A copyable block of code or shell with an optional label strip along the top. Client-only, because it owns the clipboard call and the copied flash."
+      },
+      {
+        "name": "CommandBlock",
+        "file": "web/src/components/CommandBlock.tsx",
+        "use": "A single copy-pasteable command with a copy button beside it. Overlaps CodeBlock almost entirely — this pair is the repository's own worked example of what the reuse rule below exists to prevent."
+      },
+      {
+        "name": "SkeletonLine",
+        "file": "web/src/components/resilience.tsx",
+        "use": "One pulsing bar, sized by a className. Every loading placeholder in the app is built from these rather than from a bespoke shimmer, so loading looks the same everywhere."
+      },
+      {
+        "name": "LoadingStatus",
+        "file": "web/src/components/resilience.tsx",
+        "use": "The screen-reader half of a loading state: a visually hidden `role=\"status\"` announcing what is loading. Pair it with skeletons, which are `aria-hidden` and announce nothing on their own."
+      },
+      {
+        "name": "SectionSkeleton",
+        "file": "web/src/components/resilience.tsx",
+        "use": "The whole loading shape of a section page — kicker, title, lede, then `cards` placeholder blocks. A new section's `loading.tsx` should render this rather than assemble its own."
+      },
+      {
+        "name": "RouteErrorState",
+        "file": "web/src/components/resilience.tsx",
+        "use": "The alert a route's `error.tsx` renders: title, hint, a retry that calls `reset`, and a way back. Takes the copy as props so every error boundary reads the same and only the words change."
+      },
+      {
+        "name": "ViewportControls",
+        "file": "web/src/components/viewport.tsx",
+        "use": "The zoom and fit toolbar for a pan-and-zoom surface. `tone` picks the surface it sits on and `orientation` fixes the button order — anything else beside it, a close button say, is the caller's own sibling."
+      },
+      {
+        "name": "ViewportButton",
+        "file": "web/src/components/viewport.tsx",
+        "use": "The 32px icon button the viewport toolbars are made of, and the closest thing this repository has to a Button primitive. It is scoped to that chrome on purpose: elsewhere a button is markup with the `press` class."
+      }
+    ],
+    "reuseRule": {
+      "reuseWhen": "Read `web/src/components/ui.tsx` before writing anything — five primitives cover most of what a page needs, and their props already express the variants people usually fork a component to get: `Card` has `tone` and `radius`, `FileChip` has an optional `href` and line range, `Badge` takes its colour as a className. The rest sit beside it in `CodeBlock.tsx`, `CommandBlock.tsx`, `resilience.tsx` and `viewport.tsx`, and that is the whole set: anything under `web/src/components/` that renders one screen of the analysis document — `TourStepper`, `DependencyGraph`, `SectionNav` — is a feature component, not a primitive, and is not listed here. A shape that differs only in colour or corner radius is a prop, not a new component.",
+      "createWhen": "Extract a primitive when a SECOND surface needs the same behaviour — not merely the same look. That is the test this repository actually applied: `viewport.tsx` was pulled out only once the dependency graph and the diagram canvas had drifted apart doing the same pan, zoom and fit. Markup repeated twice stays inline; two implementations of one interaction is the signal, and `CodeBlock` and `CommandBlock` are what it looks like when the signal is missed.",
+      "newPrimitiveHome": "web/src/components/ui.tsx"
+    }
+  },
   "firstTasks": [
     {
       "title": "Give the Versions tab its own chat starter questions",

@@ -63,6 +63,10 @@
       "description": "Everything this repository exposes to callers over the network. A SPECIALIZED section: present exactly when the repository has a real API, and absent entirely otherwise — an analysis engine that finds no routes omits the key rather than emitting an empty one. See docs/adr/0004-sections-are-declared-by-presence.md.",
       "$ref": "#/$defs/ApiSurface"
     },
+    "designSystem": {
+      "description": "How this repository's interface is built. A SPECIALIZED section: present exactly when the repository has a design system of its own, and absent entirely otherwise — an analysis engine that finds a handful of styles omits the key rather than emitting the section thin. See docs/adr/0004-sections-are-declared-by-presence.md and docs/adr/0005-design-system-judgement-not-inventory.md.",
+      "$ref": "#/$defs/DesignSystem"
+    },
     "firstTasks": {
       "description": "Suggested first tasks for a new contributor.",
       "type": "array",
@@ -707,6 +711,108 @@
           "description": "Optional prose on what this route does and why a newcomer should care. Only for routes that are genuinely instructive: most routes carry none, and a note on every route is a wall of text with nothing emphasised. Forced to be substantive when present.",
           "type": "string",
           "minLength": 40
+        }
+      }
+    },
+    "DesignSystem": {
+      "description": "How this repository's interface is built, scoped to a newcomer's first change: what to build with, how to reference it, and when to add to it. Deliberately NOT the API surface's two tiers — the tokens are SAMPLED and the primitives are EXHAUSTIVE, and the curated prose sits on the section rather than on a few of its rows. All four keys are required: a section missing any of them answers a different question than the one a reader arrived with. See docs/adr/0005-design-system-judgement-not-inventory.md.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["approach", "tokens", "primitives", "reuseRule"],
+      "properties": {
+        "approach": {
+          "description": "The one way styles are written here — the mechanism and the convention that keeps it single — and the second way a newcomer must not introduce. Forced to be substantive: naming the library is what the tech stack does, and is not an answer here.",
+          "type": "string",
+          "minLength": 60
+        },
+        "tokens": {
+          "description": "The kinds of design decision that have been given names, one entry per group. A way in, not an inventory: the file each group names is the inventory and stays correct as the repository repaints. At least one group is a substance floor — a repository whose colours are literals in components has no tokens to point at.",
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/DesignTokenGroup" }
+        },
+        "primitives": {
+          "description": "Every primitive this repository implements, one entry each. EXHAUSTIVE within the boundary the analysis engine draws, so that a component not listed is one that does not exist. The minimum is a substance floor and it is the fourth-Button number: a repository that cannot name four primitives of its own has a handful of styles rather than a system, and the section must be omitted rather than emitted thin. Names are deliberately NOT required to be unique — two components called Button in two files is a true statement about a repository and precisely the one a reader most needs.",
+          "type": "array",
+          "minItems": 4,
+          "items": { "$ref": "#/$defs/DesignPrimitive" }
+        },
+        "reuseRule": { "$ref": "#/$defs/ReuseRule" }
+      }
+    },
+    "DesignTokenGroup": {
+      "description": "One kind of design decision that has been given names — colour, spacing, typography, elevation, layering. Sampled rather than enumerated, and carrying NO VALUES: a value rots faster than anything else in an analysis document and rots invisibly, because a swatch is still a swatch when it is the wrong blue.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "file", "usage", "examples"],
+      "properties": {
+        "name": {
+          "description": "What this group of decisions is called here (\"Colour\", \"Spacing\", \"Elevation\", \"Layering\"), in the repository's own words where it has them.",
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "description": "Repo-relative path of the file this group is defined in — the inventory this entry is a way into, and where a reader goes to add to it.",
+          "type": "string",
+          "minLength": 1
+        },
+        "usage": {
+          "description": "How a value from this group is referenced in code IN THIS REPOSITORY'S OWN NOTATION — the line a newcomer copies (`text-muted`, `var(--surface-2)`, `theme.space[3]`). Forced to be substantive so it says how, not what.",
+          "type": "string",
+          "minLength": 30
+        },
+        "examples": {
+          "description": "A representative handful of token NAMES from this group — never values. The cap is what makes \"sample\" a contract rather than a hope: an engine given room for sixty supplies sixty, and the file is a better inventory than a document could ever be.",
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 8,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "DesignPrimitive": {
+      "description": "One component the interface is built FROM rather than one built for a screen — the thing a newcomer should find before writing a fourth of it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "file", "use"],
+      "properties": {
+        "name": {
+          "description": "The component's name as it is exported and imported here.",
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "description": "Repo-relative path of the file implementing it — where a reader goes to read it before reaching for it.",
+          "type": "string",
+          "minLength": 1
+        },
+        "use": {
+          "description": "What a reader reaches for this primitive FOR, in this repository's terms. On every row rather than a curated few, because a primitive's name says nothing — `Card`, `Stack` and `Field` tell a newcomer nothing about when to reach for them.",
+          "type": "string",
+          "minLength": 40
+        }
+      }
+    },
+    "ReuseRule": {
+      "description": "The judgement a newcomer would otherwise get wrong. Required rather than optional, because it is the only part of the section that cannot be read off a file, and an optional field asking for a judgement is the field a model omits. In two halves rather than one blob, because an engine asked for a single rule writes the half that is a platitude and drops the test a newcomer actually needs. Usually unwritten: stating the practice the code shows is the expected answer.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reuseWhen", "createWhen", "newPrimitiveHome"],
+      "properties": {
+        "reuseWhen": {
+          "description": "When to reach for an existing primitive instead of writing something — including how to find the one that already exists. Forced to be substantive so it cannot degrade into \"reuse a component where one fits\".",
+          "type": "string",
+          "minLength": 60
+        },
+        "createWhen": {
+          "description": "The test for when writing a new primitive is the right call instead — the half a newcomer actually needs, and the half an engine asked for one rule drops.",
+          "type": "string",
+          "minLength": 60
+        },
+        "newPrimitiveHome": {
+          "description": "The repo-relative file or directory a genuinely new primitive belongs in, so the judgement ends somewhere a reader can act on.",
+          "type": "string",
+          "minLength": 1
         }
       }
     }

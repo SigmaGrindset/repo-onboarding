@@ -2,7 +2,12 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import type { Analysis } from "@schema/analysis";
-import { collectBrowserErrors, CORE_ROUTES, waitForPageReady } from "./helpers";
+import {
+  collectBrowserErrors,
+  CORE_ROUTES,
+  LARGE_DOCUMENT_TIMEOUT,
+  waitForPageReady,
+} from "./helpers";
 
 test("home lists local analysis fixtures", async ({ page }) => {
   const errors = collectBrowserErrors(page);
@@ -44,7 +49,9 @@ test("the command palette finds a route by its path", async ({ page }) => {
 
   await hit.click();
   await expect(page).toHaveURL(/\/analysis\/repo-onboarding\/api\?route=/);
-  await expect(page.getByRole("heading", { name: "What this repository exposes" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "What this repository exposes" }),
+  ).toBeVisible({ timeout: LARGE_DOCUMENT_TIMEOUT });
 });
 
 test("the API surface says what each actor can do", async ({ page }) => {
@@ -72,6 +79,65 @@ test("the API surface says what each actor can do", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Actors" })).toBeVisible();
   for (const actor of actors) {
     await expect(page.getByText(actor.summary, { exact: true })).toBeVisible();
+  }
+});
+
+test("the command palette finds a primitive by its name", async ({ page }) => {
+  // The reader-level assertion behind "do not write a fourth Button": before
+  // writing a component you ask the palette whether one already exists, and the
+  // answer has to take you to the row that says what it is for.
+  const path = "/analysis/repo-onboarding";
+  await page.goto(path);
+  await waitForPageReady(page, path);
+
+  await page.getByRole("button", { name: /Search analysis/ }).click();
+  const dialog = page.getByRole("dialog", { name: "Search this analysis" });
+  await expect(dialog).toBeVisible();
+
+  await dialog.getByRole("textbox", { name: "Search this analysis" }).fill("FileChip");
+  const hit = dialog.getByRole("button", { name: /FileChip/ });
+  await expect(hit).toBeVisible();
+  await expect(dialog.getByText("Design System", { exact: true })).toBeVisible();
+
+  await hit.click();
+  await expect(page).toHaveURL(/\/analysis\/repo-onboarding\/design\?primitive=/);
+  await expect(
+    page.getByRole("heading", { name: "How this interface is built" }),
+  ).toBeVisible({ timeout: LARGE_DOCUMENT_TIMEOUT });
+});
+
+test("the design system keeps its two lists' promises apart", async ({ page }) => {
+  // Read from the document rather than restated here. The promise is that a
+  // reader can tell the sampled list from the exhaustive one — if a primitive
+  // is not listed it does not exist, and if a token is not listed it very
+  // likely does. See ADR 0005.
+  const file = join(
+    test.info().project.testDir,
+    "..",
+    "..",
+    "data",
+    "repo-onboarding",
+    "analysis.json",
+  );
+  const doc = JSON.parse(readFileSync(file, "utf8")) as Analysis;
+  const system = doc.designSystem;
+  expect(system).toBeTruthy();
+
+  const path = "/analysis/repo-onboarding/design";
+  await page.goto(path);
+  await waitForPageReady(page, path);
+
+  await expect(page.getByText(/sampled,\s*not exhaustive/i)).toBeVisible();
+  await expect(page.getByText(/exhaustive — one that is not here/i)).toBeVisible();
+
+  // The rule is the section's reason for existing, so both halves are on the
+  // page — not one blob with the useful half missing.
+  await expect(page.getByRole("heading", { name: "Reuse when" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Create when" })).toBeVisible();
+  await expect(page.getByText(system!.reuseRule.createWhen)).toBeVisible();
+
+  for (const primitive of system!.primitives) {
+    await expect(page.getByText(primitive.use, { exact: true })).toBeVisible();
   }
 });
 

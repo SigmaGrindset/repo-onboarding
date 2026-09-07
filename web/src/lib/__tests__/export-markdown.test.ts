@@ -42,7 +42,8 @@ function canonicalRenderer(): Promise<Renderer> {
 /**
  * `repo-onboarding` is here for a specific reason: parity is compared per
  * fixture, so a section no fixture carries could diverge between the mirror and
- * the canonical `.mjs` unnoticed. It is the only document with an `apiSurface`.
+ * the canonical `.mjs` unnoticed. It is the only document carrying either
+ * specialized section — an `apiSurface` and a `designSystem`.
  */
 const FIXTURE_IDS = ["sample", "express", "repo-onboarding"] as const;
 
@@ -155,4 +156,73 @@ test("a document without an API surface exports no such section", () => {
   const md = renderOnboardingMarkdown(fixture("sample"));
   assert.ok(!md.includes("## API Surface"));
   assert.ok(!md.includes("- [API Surface]"));
+});
+
+// --- Design System ---------------------------------------------------------
+
+test("a document with a design system exports it, in its nav position", () => {
+  const doc = fixture("repo-onboarding");
+  const md = renderOnboardingMarkdown(doc);
+
+  assert.ok(md.includes("## Design System"), "the section has a heading");
+  assert.ok(
+    md.includes("- [Design System](#design-system)"),
+    "the section is in the table of contents",
+  );
+  // After the API surface, before the contributor guide — the registry order.
+  assert.ok(
+    md.indexOf("## API Surface") < md.indexOf("## Design System") &&
+      md.indexOf("## Design System") < md.indexOf("## Contributor Guide"),
+    "the section sits between the API surface and the contributor guide",
+  );
+
+  const system = doc.designSystem;
+  assert.ok(system);
+  assert.ok(md.includes(system.approach), "the styling approach is exported");
+});
+
+test("the exported design system keeps its two lists' promises apart", () => {
+  const doc = fixture("repo-onboarding");
+  const md = renderOnboardingMarkdown(doc);
+  const system = doc.designSystem!;
+
+  // Sampled: every group and its file, and the reader told the file is the
+  // real list. No token VALUE anywhere — the schema has nowhere to put one.
+  assert.match(md, /Sampled, not exhaustive/);
+  for (const group of system.tokens) {
+    assert.ok(md.includes(`**${group.name}** — \`${group.file}\``), group.name);
+    assert.ok(md.includes(group.usage), `${group.name} does not say how to use it`);
+    for (const example of group.examples) {
+      assert.ok(md.includes(`\`${example}\``), `${example} is missing`);
+    }
+  }
+
+  // Exhaustive: every primitive is a row, and every row carries its own `use`,
+  // because a primitive's name says nothing about when to reach for it.
+  assert.match(md, /Exhaustive — a primitive that is not here does not exist/);
+  for (const p of system.primitives) {
+    assert.ok(
+      md.includes(`| ${p.name} | ${p.use} | \`${p.file}\` |`),
+      `${p.name} is missing from the table`,
+    );
+  }
+});
+
+test("the exported design system carries the reuse rule in both halves", () => {
+  const doc = fixture("repo-onboarding");
+  const md = renderOnboardingMarkdown(doc);
+  const rule = doc.designSystem!.reuseRule;
+
+  assert.ok(md.includes("### Reuse rule"));
+  assert.ok(md.includes(`**Reuse when:** ${rule.reuseWhen}`));
+  assert.ok(md.includes(`**Create when:** ${rule.createWhen}`));
+  assert.ok(md.includes(`\`${rule.newPrimitiveHome}\``));
+  // Ahead of both lists: it is the practice, and they are the reference.
+  assert.ok(md.indexOf("### Reuse rule") < md.indexOf("### Primitives"));
+});
+
+test("a document without a design system exports no such section", () => {
+  const md = renderOnboardingMarkdown(fixture("sample"));
+  assert.ok(!md.includes("## Design System"));
+  assert.ok(!md.includes("- [Design System]"));
 });

@@ -26,7 +26,8 @@ import { execFileSync } from "node:child_process";
 import process from "node:process";
 
 // 0.2.0 added `signals` — the candidate hints for specialized sections.
-const PREPASS_VERSION = "0.2.0";
+// 0.3.0 added `signals.designSystem`.
+const PREPASS_VERSION = "0.3.0";
 
 // ---------------------------------------------------------------------------
 // Configuration / knobs
@@ -844,13 +845,173 @@ function collectApiSurfaceSignal(manifests, tree) {
 }
 
 /**
+ * Dependency names that mean "this repository has an opinion about styling" —
+ * a styling mechanism, or a component library it may be wrapping. Matched the
+ * same way SERVER_FRAMEWORKS is: against the full name and, where an ecosystem
+ * namespaces them, against the last path segment.
+ *
+ * A component library here is evidence in both directions and the analysis
+ * engine has to read it as such: a repository that wraps one has a design
+ * system of its own, and a repository that consumes one wholesale and wraps
+ * nothing does not — the same way a library whose users define the routes has
+ * no API surface. Which of the two this is cannot be decided from a manifest.
+ */
+const STYLING_LIBRARIES = new Set([
+  // css mechanisms
+  "tailwindcss", "@tailwindcss/postcss", "sass", "node-sass", "less", "stylus",
+  "postcss", "styled-components", "@emotion/react", "@emotion/styled",
+  "@emotion/css", "@stitches/react", "@vanilla-extract/css", "linaria",
+  "@linaria/core", "@compiled/react", "jss", "aphrodite", "styled-jsx",
+  "unocss", "@unocss/core", "windicss", "panda", "@pandacss/dev",
+  // component libraries a repository usually wraps
+  "@mui/material", "@material-ui/core", "antd", "@chakra-ui/react",
+  "@mantine/core", "react-bootstrap", "bootstrap", "bulma", "@radix-ui/themes",
+  "@headlessui/react", "@ariakit/react", "@base-ui-components/react",
+  "@shopify/polaris", "@fluentui/react", "@carbon/react", "primereact",
+  "vuetify", "quasar", "primevue", "element-plus", "naive-ui",
+  "@angular/material", "@ng-bootstrap/ng-bootstrap", "@nextui-org/react",
+  "@heroui/react", "flowbite", "daisyui", "shadcn-ui", "bits-ui", "skeleton",
+  // non-npm ecosystems
+  "django-compressor", "flask-assets", "phlex", "view_component",
+  "tailwindcss-rails", "sass-rails", "bootstrap-sass",
+]);
+
+/**
+ * File basenames that are themselves a token definition. `globals.css` is
+ * deliberately absent — the commonest token home has a name that says nothing,
+ * which is what the custom-property scan below exists to catch.
+ */
+const TOKEN_FILE_RE =
+  /^(tokens|theme|themes|_variables|variables|design-tokens|design_tokens|tailwind\.config|panda\.config|uno\.config)[.\-][a-z0-9.]*$|^\.?[a-z0-9_-]*\.tokens\.json$/i;
+
+/** Directory names that conventionally hold the primitives themselves. */
+const PRIMITIVE_DIR_NAMES = new Set([
+  "ui", "primitives", "design-system", "design_system", "designsystem",
+  "atoms", "elements", "base", "kit",
+]);
+
+/**
+ * A whole primitive set living in ONE module rather than a directory —
+ * `ui.tsx` and its siblings. This repository's own primitives are shaped that
+ * way, which is why a directory-only scan would have missed them entirely.
+ */
+const PRIMITIVE_FILE_RE = /^(ui|primitives|design-system)\.(jsx?|tsx?|vue|svelte)$/i;
+
+/** A Storybook story: the clearest statement that something is a primitive. */
+const STORY_FILE_RE = /\.stories\.(jsx?|tsx?|mdx|svelte|vue)$/i;
+
+/** Extensions the custom-property scan will open. CSS family only. */
+const STYLESHEET_RE = /\.(css|scss|sass|less|styl|pcss|postcss)$/i;
+
+/** Bounds on the custom-property scan, per ADR 0002: cheap, offline, capped. */
+const MAX_STYLESHEET_BYTES = 256 * 1024; // skip a generated or vendored sheet
+const MAX_STYLESHEETS_READ = 60; // stop opening files after this many
+const MAX_CUSTOM_PROPERTY_FILES = 15; // and report at most this many
+
+/** `--token: value` at the start of a declaration, not `var(--token)` usage. */
+const CUSTOM_PROPERTY_RE = /(^|[{;\s])--[a-z0-9][a-z0-9_-]*\s*:/im;
+
+/**
+ * Does this repository show evidence of a design system of its own? Four kinds
+ * of cheap evidence, each wrong sometimes: a styling or component library in a
+ * parsed manifest, token-shaped files, primitive-shaped directories and
+ * modules, and Storybook stories.
+ *
+ * The fifth bucket is the one that earns its cost. The commonest home for
+ * tokens is a `globals.css` whose name says nothing, so the collector also
+ * opens the stylesheets and reports the ones that DECLARE custom properties —
+ * bounded per ADR 0002: CSS-family extensions only, a size cap per file, a cap
+ * on how many are opened, and a capped list out.
+ *
+ * Emitted so the analysis engine is DECIDING whether a Design System section is
+ * warranted rather than guessing whether one is possible. The pre-pass never
+ * decides — see docs/adr/0004-sections-are-declared-by-presence.md.
+ */
+function collectDesignSystemSignal(repoPath, manifests, tree) {
+  const libraries = [];
+  for (const m of manifests) {
+    for (const dep of m.dependencies || []) {
+      const name = String(dep.name || "");
+      const tail = String(name.split("/").pop());
+      if (
+        STYLING_LIBRARIES.has(name.toLowerCase()) ||
+        STYLING_LIBRARIES.has(tail.toLowerCase())
+      ) {
+        libraries.push({ name, manifest: m.path, ecosystem: m.ecosystem });
+      }
+    }
+  }
+
+  const tokenFiles = [];
+  const primitiveDirs = [];
+  const primitiveFiles = [];
+  const stories = [];
+  const stylesheets = [];
+  // Component trees nest as deeply as route trees do, and for the same reason.
+  (function rec(node, depth) {
+    if (!node.children || depth > 12) return;
+    for (const c of node.children) {
+      if (c.type === "dir") {
+        if (PRIMITIVE_DIR_NAMES.has(c.name.toLowerCase())) primitiveDirs.push(c.path);
+        rec(c, depth + 1);
+        continue;
+      }
+      if (c.type !== "file") continue;
+      if (TOKEN_FILE_RE.test(c.name)) tokenFiles.push(c.path);
+      if (PRIMITIVE_FILE_RE.test(c.name)) primitiveFiles.push(c.path);
+      if (STORY_FILE_RE.test(c.name)) stories.push(c.path);
+      if (STYLESHEET_RE.test(c.name)) stylesheets.push(c.path);
+    }
+  })(tree, 0);
+
+  // Read the stylesheets, smallest cap first: a sheet over the size cap is
+  // generated or vendored far more often than it is a token file.
+  const customPropertyFiles = [];
+  let opened = 0;
+  for (const rel of stylesheets) {
+    if (opened >= MAX_STYLESHEETS_READ) break;
+    if (customPropertyFiles.length >= MAX_CUSTOM_PROPERTY_FILES) break;
+    const abs = join(repoPath, rel);
+    let size = 0;
+    try {
+      size = statSync(abs).size;
+    } catch {
+      continue;
+    }
+    if (size > MAX_STYLESHEET_BYTES) continue;
+    opened++;
+    const text = safeRead(abs);
+    if (text && CUSTOM_PROPERTY_RE.test(text)) customPropertyFiles.push(rel);
+  }
+
+  return {
+    libraries: libraries.slice(0, 20),
+    tokenFiles: tokenFiles.slice(0, 25),
+    customPropertyFiles,
+    primitiveDirs: primitiveDirs.slice(0, 25),
+    primitiveFiles: primitiveFiles.slice(0, 25),
+    stories: stories.slice(0, 40),
+    candidate:
+      libraries.length > 0 ||
+      tokenFiles.length > 0 ||
+      customPropertyFiles.length > 0 ||
+      primitiveDirs.length > 0 ||
+      primitiveFiles.length > 0 ||
+      stories.length > 0,
+  };
+}
+
+/**
  * Candidate signals for the specialized sections — the sections only some
  * repositories have anything to put in. Advisory by construction: each entry
  * names the evidence and the files it was found in, and says nothing about
  * whether the section belongs in the document.
  */
-function collectSignals(manifests, tree) {
-  return { apiSurface: collectApiSurfaceSignal(manifests, tree) };
+function collectSignals(repoPath, manifests, tree) {
+  return {
+    apiSurface: collectApiSurfaceSignal(manifests, tree),
+    designSystem: collectDesignSystemSignal(repoPath, manifests, tree),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -898,7 +1059,7 @@ function main() {
   const manifests = parseManifests(repoPath, walk.tree);
   const git = collectGit(repoPath, args.commits, paths);
   const notable = findNotable(repoPath, walk.tree);
-  const signals = collectSignals(manifests, walk.tree);
+  const signals = collectSignals(repoPath, manifests, walk.tree);
 
   const output = {
     prepassVersion: PREPASS_VERSION,

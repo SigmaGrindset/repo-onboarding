@@ -131,3 +131,37 @@ test("a document with no API surface still gets three api starter questions", ()
   assert.equal(questions.length, 3);
   assert.equal(new Set(questions).size, 3);
 });
+
+// --- Design System ---------------------------------------------------------
+
+test("the design section asks about a real primitive and a real token group", () => {
+  const doc: Analysis = JSON.parse(
+    readFileSync(
+      path.join(process.cwd(), "..", "data", "repo-onboarding", "analysis.json"),
+      "utf8",
+    ),
+  );
+  const questions = buildSuggestedQuestions(doc)["design"];
+  assert.equal(questions.length, 3);
+
+  const primitive = doc.designSystem?.primitives[0];
+  const group = doc.designSystem?.tokens[0];
+  assert.ok(primitive && group, "the fixture carries a design system");
+  assert.ok(
+    questions[0].includes(primitive.name),
+    `"${questions[0]}" does not name a primitive`,
+  );
+  assert.ok(
+    questions[1].includes(group.name.toLowerCase()),
+    `"${questions[1]}" does not name a token group`,
+  );
+  // The reuse rule is what the section is for, so it gets a pill of its own
+  // whatever the document happens to contain.
+  assert.match(questions[2], /new primitive/);
+});
+
+test("a document with no design system still gets three design starter questions", () => {
+  const questions = buildSuggestedQuestions(fixture)["design"];
+  assert.equal(questions.length, 3);
+  assert.equal(new Set(questions).size, 3);
+});

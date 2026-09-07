@@ -629,9 +629,9 @@ test("a section carried by a document that predates its release still counts as 
 
 test("the presence rule is a function of the section registry, not of the API surface", () => {
   // A stand-in registry: the API surface as it really is, plus a second
-  // specialized section introduced at a different contract version. Design
-  // System and Delivery are not in the real registry yet, so this is what
-  // proves the rule is written once rather than per section. The second entry
+  // specialized section introduced at a different contract version. Neither
+  // entry has to be a section that ships, which is the point: the rule is
+  // written once and reads whatever the registry holds. The second entry
   // borrows a real optional key so the fixture stays honestly typed.
   const registry: SpecializedSection[] = [
     {
@@ -699,6 +699,61 @@ test("the presence rule is a function of the section registry, not of the API su
     [
       { slug: "api", label: "API Surface", kind: "not-stated" },
       { slug: "learn", label: "Stand-in Section", kind: "removed" },
+    ],
+  );
+});
+
+test("the real registry now reads a second section through the same rule", () => {
+  // The stand-in registry above proves the rule generalises; this proves the
+  // Design System is actually wired into it, which is a different claim and the
+  // one that breaks if a section is added to the schema and not to the registry.
+  const withDesign = (a: Analysis): Analysis => {
+    a.designSystem = {
+      approach:
+        "One stylesheet of custom properties behind utility classes; no component writes a colour literal.",
+      tokens: [
+        {
+          name: "Colour",
+          file: "src/tokens.css",
+          usage: "Referenced as var(--surface-2) in CSS and bg-surface-2 in markup.",
+          examples: ["--surface", "--text"],
+        },
+      ],
+      primitives: [
+        { name: "Badge", file: "src/ui.tsx", use: "A squared-off label carrying data." },
+        { name: "Card", file: "src/ui.tsx", use: "The surface a top-level block sits on." },
+        { name: "Field", file: "src/ui.tsx", use: "A labelled input with its error text." },
+        { name: "Stack", file: "src/ui.tsx", use: "Vertical rhythm between blocks." },
+      ],
+      reuseRule: {
+        reuseWhen: "Read src/ui.tsx first; a shape differing only by colour is a prop.",
+        createWhen: "Extract one when a second surface needs the same behaviour.",
+        newPrimitiveHome: "src/ui.tsx",
+      },
+    };
+    return a;
+  };
+
+  const designDelta = (diff: ReturnType<typeof diffAnalyses>) =>
+    diff.sections.deltas.find((d) => d.slug === "design");
+
+  // Gained between two documents that could both have carried one.
+  assert.equal(
+    designDelta(diffAnalyses(docAt("1.4.0"), withDesign(docAt("1.4.0"))))?.kind,
+    "added",
+  );
+  // The base predates the section, so its silence is the contract's.
+  assert.equal(
+    designDelta(diffAnalyses(docAt("1.3.0"), withDesign(docAt("1.4.0"))))?.kind,
+    "newly-present",
+  );
+  // And a repository can gain both sections at once, each read by the same rule.
+  assert.deepEqual(
+    diffAnalyses(docAt("1.4.0"), withDesign(docAt("1.4.0", someRoutes()))).sections
+      .deltas,
+    [
+      { slug: "api", label: "API Surface", kind: "added" },
+      { slug: "design", label: "Design System", kind: "added" },
     ],
   );
 });

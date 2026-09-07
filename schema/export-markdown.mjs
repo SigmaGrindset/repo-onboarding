@@ -41,6 +41,7 @@ const SECTIONS = [
   { label: "Dependency Graph" },
   { label: "Codebase Map" },
   { label: "API Surface", key: "apiSurface" },
+  { label: "Design System", key: "designSystem" },
   { label: "Contributor Guide" },
   { label: "Guided Tour" },
   { label: "Hotspots" },
@@ -61,6 +62,7 @@ const RENDERERS = {
   "Dependency Graph": renderDependencyGraph,
   "Codebase Map": renderCodebaseMap,
   "API Surface": renderApiSurface,
+  "Design System": renderDesignSystem,
   "Contributor Guide": renderContributorGuide,
   "Guided Tour": renderTour,
   "Hotspots": renderHotspots,
@@ -567,6 +569,61 @@ function renderApiSurface(analysis) {
       lines.push("", `**\`${route.method} ${route.path}\`** — ${String(route.note)}`);
     }
   }
+  return lines;
+}
+
+/**
+ * Two lists with two different promises, and the section must not blur them:
+ * the token groups are a way in (the file each names is the inventory), the
+ * primitives are the set. So the tokens render as prose with their files and
+ * the primitives render as a table — and each table row carries its own `use`,
+ * because a primitive's name says nothing about when to reach for it.
+ */
+function renderDesignSystem(analysis) {
+  const system = analysis.designSystem ?? {};
+  const lines = ["## Design System", ""];
+  lines.push(String(system.approach ?? ""));
+
+  const rule = system.reuseRule;
+  if (rule) {
+    lines.push("", "### Reuse rule", "");
+    lines.push(`**Reuse when:** ${String(rule.reuseWhen ?? "")}`);
+    lines.push("", `**Create when:** ${String(rule.createWhen ?? "")}`);
+    lines.push("", `A new primitive belongs in ${code(cell(rule.newPrimitiveHome))}.`);
+  }
+
+  const tokens = Array.isArray(system.tokens) ? system.tokens : [];
+  if (tokens.length) {
+    lines.push("", "### Token groups", "");
+    lines.push(
+      "Sampled, not exhaustive — each group's file is the full list.",
+    );
+    for (const group of tokens) {
+      const examples = Array.isArray(group.examples) ? group.examples : [];
+      lines.push("", `**${cell(group.name)}** — ${code(cell(group.file))}`);
+      lines.push("", String(group.usage ?? ""));
+      if (examples.length) {
+        lines.push("", `For example: ${examples.map((e) => code(cell(e))).join(", ")}.`);
+      }
+    }
+  }
+
+  const primitives = Array.isArray(system.primitives) ? system.primitives : [];
+  if (primitives.length) {
+    lines.push("", "### Primitives", "");
+    lines.push(
+      "Exhaustive — a primitive that is not here does not exist.",
+      "",
+    );
+    lines.push("| Primitive | Reach for it when | File |");
+    lines.push("| --- | --- | --- |");
+    for (const p of primitives) {
+      lines.push(
+        `| ${cell(p.name)} | ${cell(p.use)} | ${code(cell(p.file))} |`,
+      );
+    }
+  }
+
   return lines;
 }
 

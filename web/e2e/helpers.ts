@@ -4,10 +4,10 @@ import { expect, test, type Page } from "@playwright/test";
  * The pages the smoke, accessibility and visual suites all walk. One list, three
  * suites, so a section page added here gets all three kinds of coverage at once.
  *
- * Most rows point at `sample`, the demo fixture. `api` cannot: the API Surface
- * section is specialized and `sample` declares none, so the page 404s there by
- * design. It points at `repo-onboarding` — this repository analysed by its own
- * engine — which is the document that carries one.
+ * Most rows point at `sample`, the demo fixture. `api` and `design` cannot: both
+ * sections are specialized and `sample` declares neither, so those pages 404
+ * there by design. They point at `repo-onboarding` — this repository analysed by
+ * its own engine — which is the document that carries both.
  */
 export const CORE_ROUTES = [
   { slug: "overview", path: "/analysis/sample" },
@@ -15,6 +15,7 @@ export const CORE_ROUTES = [
   { slug: "graph", path: "/analysis/sample/graph" },
   { slug: "map", path: "/analysis/sample/map" },
   { slug: "api", path: "/analysis/repo-onboarding/api" },
+  { slug: "design", path: "/analysis/repo-onboarding/design" },
   { slug: "guide", path: "/analysis/sample/guide" },
   { slug: "tour", path: "/analysis/sample/tour" },
   { slug: "hotspots", path: "/analysis/sample/hotspots" },
@@ -24,6 +25,18 @@ export const CORE_ROUTES = [
 
 /** Mermaid lays every diagram out in the browser, and this page stacks several. */
 const DIAGRAM_TIMEOUT = 20_000;
+
+/**
+ * Navigating INTO a `repo-onboarding` page — from the palette, say — server-
+ * renders the largest document in `data/` before anything of the new page
+ * appears. Alone that is a second or two; under a fully parallel run it crosses
+ * the default 5s assertion budget, which shows up as a flake rather than as a
+ * finding. `test.slow()` does not help: it raises the TEST timeout and leaves
+ * each assertion on its own. So a first assertion after such a navigation says
+ * how long the page is allowed to take, and the suite still goes red on a
+ * defect rather than on load.
+ */
+export const LARGE_DOCUMENT_TIMEOUT = 20_000;
 
 /**
  * The document title is in `<head>`, and was there in the first flush.

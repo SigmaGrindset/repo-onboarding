@@ -22,6 +22,7 @@ export type SectionSlug =
   | "graph"
   | "map"
   | "api"
+  | "design"
   | "guide"
   | "tour"
   | "hotspots"
@@ -90,6 +91,21 @@ export const ANALYSIS_SECTIONS: AnalysisSection[] = [
     // reason; until the bump lands, two 1.2.0 documents cannot be told apart
     // from two that predate the section, and neither is called a removal.
     since: "1.3.0",
+  },
+  {
+    slug: "design",
+    label: "Design System",
+    class: "specialized",
+    key: "designSystem",
+    // After the API surface rather than beside Delivery: both describe what a
+    // repository is made of, and grouping the specialized sections together
+    // would organise the nav around a distinction a reader cannot see.
+    //
+    // 1.4.0 is unreleased until the release ticket bumps the contract, so — as
+    // with the API surface above — a document generated today carries a design
+    // system and still declares 1.2.0. Presence is read first for exactly that
+    // reason, and nothing calls such a document a removal.
+    since: "1.4.0",
   },
   { slug: "guide", label: "Contributor Guide", class: "core" },
   { slug: "tour", label: "Guided Tour", class: "core" },

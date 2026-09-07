@@ -66,3 +66,63 @@ test("a document with no API surface contributes no route entries", () => {
   // ...and the section itself is not offered as a jump target either.
   assert.equal(items.filter((i) => i.label === "API Surface").length, 0);
 });
+
+// --- Design System ---------------------------------------------------------
+
+test("a primitive is findable by its name, and reaches the row it names", () => {
+  const doc = fixture("repo-onboarding");
+  const items = buildSearchIndex(doc, BASE);
+
+  // The question the section exists to answer — "is there already a Card?" —
+  // is one a reader asks the palette first.
+  const card = items.find(
+    (i) => i.group === "Design System" && i.label === "Card",
+  );
+  assert.ok(card, "the Card primitive is not in the index");
+  assert.ok(
+    card.href.startsWith(`${BASE}/design?primitive=`),
+    `"${card.href}" does not deep-link into the section`,
+  );
+  // The file is the hint and the keyword: a reader who knows where it lives
+  // finds it that way, and one who does not is told.
+  assert.equal(card.hint, "ui.tsx");
+  assert.equal(card.keywords, "web/src/components/ui.tsx");
+});
+
+test("every primitive is indexed, not a selection", () => {
+  const doc = fixture("repo-onboarding");
+  const indexed = buildSearchIndex(doc, BASE).filter(
+    (i) => i.group === "Design System",
+  );
+  assert.equal(indexed.length, doc.designSystem?.primitives.length);
+});
+
+test("two primitives of the same name are separate entries", () => {
+  // Names are deliberately not unique — see the Primitive entry in CONTEXT.md —
+  // so the anchor cannot be the name alone: a reader jumping to one Button must
+  // not land on the other.
+  const doc = fixture("repo-onboarding");
+  const primitives = doc.designSystem?.primitives ?? [];
+  const twinned: Analysis = {
+    ...doc,
+    designSystem: {
+      ...doc.designSystem!,
+      primitives: [
+        ...primitives,
+        { ...primitives[0], file: "web/src/components/legacy/ui.tsx" },
+      ],
+    },
+  };
+  const hrefs = buildSearchIndex(twinned, BASE)
+    .filter((i) => i.group === "Design System" && i.label === primitives[0].name)
+    .map((i) => i.href);
+  assert.equal(hrefs.length, 2);
+  assert.equal(new Set(hrefs).size, 2, "the two files share an anchor");
+});
+
+test("a document with no design system contributes no primitive entries", () => {
+  const items = buildSearchIndex(fixture("sample"), "/analysis/sample");
+  assert.equal(items.filter((i) => i.group === "Design System").length, 0);
+  // ...and the section itself is not offered as a jump target either.
+  assert.equal(items.filter((i) => i.label === "Design System").length, 0);
+});

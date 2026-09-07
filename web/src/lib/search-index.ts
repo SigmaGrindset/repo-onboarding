@@ -1,6 +1,7 @@
 import type { Analysis } from "@schema/analysis";
 import { routeAnchor, routeLabel } from "./api-surface";
-import { slugify } from "./format";
+import { primitiveAnchor } from "./design-system";
+import { basename, slugify } from "./format";
 import { visibleSections } from "./sections";
 
 /**
@@ -18,6 +19,7 @@ export const SEARCH_GROUPS = [
   "Architecture",
   "Codebase Map",
   "API Surface",
+  "Design System",
   "Contributor Guide",
   "Guided Tour",
   "Hotspots",
@@ -89,6 +91,19 @@ export function buildSearchIndex(analysis: Analysis, base: string): SearchItem[]
       hint: route.actor,
       href: `${base}/api?route=${routeAnchor(route)}`,
       keywords: route.file,
+    });
+  }
+
+  // Every primitive, for the same reason every route is indexed: the palette
+  // is how a reader checks whether a Button already exists before writing a
+  // fourth one, and a curated index could not answer that.
+  for (const primitive of analysis.designSystem?.primitives ?? []) {
+    items.push({
+      group: "Design System",
+      label: primitive.name,
+      hint: basename(primitive.file),
+      href: `${base}/design?primitive=${primitiveAnchor(primitive)}`,
+      keywords: primitive.file,
     });
   }
 

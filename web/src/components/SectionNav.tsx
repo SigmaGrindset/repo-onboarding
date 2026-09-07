@@ -12,6 +12,7 @@ const ICONS: Record<SectionSlug, ReactNode> = {
   graph: <IconGraph />,
   map: <IconMap />,
   api: <IconApi />,
+  design: <IconDesign />,
   guide: <IconGuide />,
   tour: <IconTour />,
   hotspots: <IconHotspots />,
@@ -247,6 +248,15 @@ function IconApi() {
       <path d="M6.5 2.5C5 2.5 5 4 5 5.5S3.5 8 3.5 8 5 8.5 5 10.5s0 3 1.5 3" />
       <path d="M9.5 2.5c1.5 0 1.5 1.5 1.5 3s1.5 2.5 1.5 2.5-1.5.5-1.5 2.5 0 3-1.5 3" />
       <path d="M9.2 5.6 6.8 10.4" />
+    </>,
+  );
+}
+function IconDesign() {
+  return svg(
+    <>
+      {/* Two swatches, one over the other: the tokens under the primitives. */}
+      <rect x="1.5" y="1.5" width="8" height="8" rx="1.5" />
+      <rect x="6.5" y="6.5" width="8" height="8" rx="1.5" />
     </>,
   );
 }

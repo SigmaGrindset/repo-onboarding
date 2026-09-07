@@ -212,6 +212,54 @@ Extract, per schema section, as you read:
   - Machine callers get an entry like anyone else: a service account, a scheduled job or
     a webhook sender is an actor, and dropping it is how a permission summary quietly
     loses its most dangerous caller.
+- **designSystem** — a SPECIALIZED section: emit the key only if this repository has a design
+  system OF ITS OWN, and OMIT IT ENTIRELY otherwise. There is no empty version of this section —
+  a repository with a handful of styles produces a document with no `designSystem` key, and the
+  viewer shows no tab at all. Start from `signals.designSystem`: the styling and component
+  libraries it found in the manifests, the token-shaped files, the stylesheets that actually
+  declare custom properties, the primitive-shaped directories and modules, and the Storybook
+  stories. It is a hint, not a verdict — open those files and decide.
+  - "Of its own" is the whole judgement. A repository that consumes a component library
+    wholesale and wraps nothing has no design system of its own, the same way a library whose
+    users define the routes has no API surface. One that wraps that library in its own
+    primitives does.
+  - The floor is FOUR PRIMITIVES, ONE TOKEN GROUP, THE APPROACH AND THE RULE — a floor, not a
+    target. Four is the fourth-Button number: the section exists so a reader does not write a
+    fourth of something. If you cannot name four primitives this repository implements, omit
+    the key.
+  - `approach` (≥ 60 chars) — the ONE way styles are written here: the mechanism, the
+    convention that keeps it single, and the second way a newcomer must not introduce. Naming
+    the library is what the tech stack does and is not an answer here; "Tailwind utility classes
+    over CSS custom properties, and no component writes a colour literal" is.
+  - `tokens[]` is SAMPLED, NEVER ENUMERATED. One entry per *group* of decisions — colour,
+    spacing, typography, elevation, layering — each with `name`, the `file` it is defined in,
+    `usage` (≥ 30 chars: how a value from it is referenced in code in THIS repository's
+    notation — `text-muted`, `var(--surface-2)`, `theme.space[3]`), and 2–8 `examples`.
+  - `examples` are token NAMES ONLY, NEVER VALUES. There is nowhere in the schema to put a
+    value, and that is deliberate: values rot faster than anything else in a document and rot
+    invisibly, because a swatch is still a swatch when it is the wrong blue. The file you named
+    is the inventory and stays correct; this entry is the way into it.
+  - `primitives[]` is EXHAUSTIVE, NOT CURATED: every component this repository implements that
+    the interface is built FROM rather than built for one screen, so a reader can conclude that
+    a primitive not listed does not exist. You draw the boundary — a feature component that
+    renders one screen is not a primitive — but having drawn it, list everything inside it.
+  - Each primitive carries `name`, `file`, and `use` (≥ 40 chars). `use` is on every row rather
+    than a curated few because a primitive's name says nothing: `Card`, `Stack` and `Field` tell
+    a newcomer nothing about when to reach for them, and that line is the point of the list.
+  - TWO PRIMITIVES WITH THE SAME NAME ARE TWO ENTRIES. Do not deduplicate and do not quietly
+    drop one: two components called `Button` in two files is a true statement about a repository
+    and precisely the one a reader most needs before they write a third.
+  - `reuseRule` is REQUIRED, in two halves plus a destination. `reuseWhen` (≥ 60 chars) — when
+    to reach for an existing primitive, including how to find the one that already exists.
+    `createWhen` (≥ 60 chars) — the test for when writing a new one is the right call instead.
+    `newPrimitiveHome` — the repo-relative file or directory a genuinely new primitive belongs
+    in.
+  - The rule is the most valuable thing in the section and the first thing to drop, precisely
+    because it is the only part that cannot be read off a file. It is usually UNWRITTEN: state
+    the practice the code shows, not a rule someone documented. A documented rule is a bonus,
+    not the bar. "Reuse a component where one fits" is the platitude the two halves exist to
+    prevent — if you cannot say when creating is right, this repository has a folder of
+    components rather than a system, and the key does not belong in the document.
 - **firstTasks[]** (≥ 2, aim for 3–4) — concrete, real tasks referencing real files, with a
   `difficulty` and a `rationale` for why it's a good newcomer task. Range easy→hard.
 
@@ -281,4 +329,9 @@ Do not finish until **both** commands exit 0.
 - [ ] If `apiSurface.actors` is present, the join holds both ways: every actor described is
       required by a route, every actor a route requires is described, machine callers
       included.
+- [ ] `designSystem` is present only if this repo has a design system of its own — and if it
+      is, every primitive it implements is listed, not a selection, and no token VALUE appears
+      anywhere in it.
+- [ ] The reuse rule states the practice the code shows, and its two halves say different
+      things — not one platitude split in two.
 - [ ] `node schema/validate.mjs …` exits 0 AND `node …/edges-check.mjs …` exits 0.

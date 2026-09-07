@@ -62,6 +62,7 @@ const EXPECTED_SPECIALIZED: Record<
   { key: keyof Analysis; since: string }
 > = {
   api: { key: "apiSurface", since: "1.3.0" },
+  design: { key: "designSystem", since: "1.4.0" },
 };
 
 test("a section is specialized exactly when it is one of the known few", () => {
@@ -187,6 +188,101 @@ test("the real document that carries an API surface shows the section", () => {
   const doc = fixture("repo-onboarding");
   assert.ok((doc.apiSurface?.routes.length ?? 0) >= 3);
   assert.ok(visibleSections(doc).some((s) => s.slug === "api"));
+});
+
+
+// --- Design System --------------------------------------------------------
+
+/** The floor: four primitives, one token group, an approach and a rule. */
+function withDesignSystem(base: Analysis): Analysis {
+  return {
+    ...base,
+    designSystem: {
+      approach:
+        "Utility classes over one stylesheet of custom properties; no component writes a colour literal of its own.",
+      tokens: [
+        {
+          name: "Colour",
+          file: "src/styles/tokens.css",
+          usage: "Referenced as var(--surface-2) in CSS and bg-surface-2 in markup.",
+          examples: ["--surface", "--surface-2", "--text"],
+        },
+      ],
+      primitives: [
+        { name: "Badge", file: "src/ui.tsx", use: "A squared-off label carrying data rather than marketing." },
+        { name: "Card", file: "src/ui.tsx", use: "The surface every top-level block on a page sits on." },
+        { name: "Field", file: "src/ui.tsx", use: "A labelled input with its hint text and error message." },
+        { name: "Stack", file: "src/ui.tsx", use: "Vertical rhythm between blocks, so margins are never hand-set." },
+      ],
+      reuseRule: {
+        reuseWhen:
+          "Read src/ui.tsx before writing anything: if a primitive renders the shape you need, pass it a prop.",
+        createWhen:
+          "Write a new primitive only once three screens need the same shape and no prop on an existing one expresses it.",
+        newPrimitiveHome: "src/ui.tsx",
+      },
+    },
+  };
+}
+
+test("a document carrying a design system shows the section after the API surface", () => {
+  const slugs = visibleSections(
+    withDesignSystem(withApiSurface(fixture("sample"))),
+  ).map((s) => s.slug);
+  assert.ok(slugs.includes("design"));
+  assert.equal(slugs.indexOf("design"), slugs.indexOf("api") + 1);
+});
+
+test("a design system needs no API surface to sit in the structural block", () => {
+  // The two are independent: a static front end has primitives and no routes,
+  // and the section still lands after the codebase map rather than at the end.
+  const slugs = visibleSections(withDesignSystem(fixture("sample"))).map((s) => s.slug);
+  assert.ok(!slugs.includes("api"));
+  assert.equal(slugs.indexOf("design"), slugs.indexOf("map") + 1);
+});
+
+test("a document with no design system shows no Design System section at all", () => {
+  for (const name of FIXTURE_NAMES) {
+    const slugs = visibleSections(fixture(name)).map((s) => s.slug);
+    assert.ok(!slugs.includes("design"), `${name} shows a Design System tab`);
+  }
+});
+
+test("the Design System section is only ever added, never reordered around", () => {
+  const withDesign = visibleSections(withDesignSystem(fixture("sample"))).map((s) => s.slug);
+  assert.deepEqual(
+    withDesign.filter((slug) => slug !== "design"),
+    TODAYS_SECTIONS,
+  );
+});
+
+test("the real document that carries a design system shows the section", () => {
+  // `repo-onboarding` is this repository analysed by its own engine — the one
+  // document with a real design system rather than a built one.
+  const doc = fixture("repo-onboarding");
+  assert.ok((doc.designSystem?.primitives.length ?? 0) >= 4);
+  assert.ok(visibleSections(doc).some((s) => s.slug === "design"));
+});
+
+/** The Design System as the registry really records it. */
+const DESIGN_SECTION = ANALYSIS_SECTIONS.find(
+  (s): s is SpecializedSection => s.class === "specialized" && s.slug === "design",
+)!;
+
+test("a document declaring a contract older than 1.4.0 could not have carried a design system", () => {
+  const old = { ...fixture("sample"), schemaVersion: "1.3.0" };
+  assert.equal(canExpressSection(old, DESIGN_SECTION), false);
+
+  const current = { ...fixture("sample"), schemaVersion: "1.4.0" };
+  assert.equal(canExpressSection(current, DESIGN_SECTION), true);
+});
+
+test("carrying a design system beats whatever version a document claims", () => {
+  // Written while the section was still unreleased: it says 1.2.0 and carries
+  // one anyway, and nothing may read that as a repository that lost something.
+  const doc = fixture("repo-onboarding");
+  assert.ok(compareSchemaVersions(doc.schemaVersion, DESIGN_SECTION.since) < 0);
+  assert.equal(canExpressSection(doc, DESIGN_SECTION), true);
 });
 
 // --------------------------------------------------------------------------

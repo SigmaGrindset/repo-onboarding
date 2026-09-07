@@ -35,6 +35,7 @@ export function buildSuggestedQuestions(
     graph: graphQuestions(analysis),
     map: mapQuestions(analysis),
     api: apiQuestions(analysis),
+    design: designQuestions(analysis),
     guide: guideQuestions(analysis),
     tour: tourQuestions(analysis),
     hotspots: hotspotsQuestions(analysis),
@@ -65,6 +66,19 @@ function apiQuestions(a: Analysis): string[] {
     explained ? `What does ${clip(routeLabel(explained))} do?` : "",
     commonest ? `Which routes can ${clip(commonest)} call?` : "",
     "Where is the access control for these routes enforced?",
+  ];
+}
+
+function designQuestions(a: Analysis): string[] {
+  const system = a.designSystem;
+  const primitive = system?.primitives[0];
+  const group = system?.tokens[0];
+  return [
+    primitive ? `When should I use ${clip(primitive.name)} instead of writing my own?` : "",
+    group ? `How do I reference a ${clip(group.name.toLowerCase())} token here?` : "",
+    // The reuse rule is the section, so the third pill asks for the half a
+    // reader is most likely to get wrong on their first interface change.
+    "When is writing a new primitive the right call here?",
   ];
 }
 
