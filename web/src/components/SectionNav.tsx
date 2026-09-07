@@ -17,6 +17,7 @@ const ICONS: Record<SectionSlug, ReactNode> = {
   tour: <IconTour />,
   hotspots: <IconHotspots />,
   setup: <IconSetup />,
+  delivery: <IconDelivery />,
   learn: <IconLearn />,
   tasks: <IconTasks />,
   versions: <IconVersions />,
@@ -280,6 +281,16 @@ function IconSetup() {
     <>
       <circle cx="8" cy="8" r="2" />
       <path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4" />
+    </>,
+  );
+}
+function IconDelivery() {
+  return svg(
+    <>
+      {/* A change travelling a track, through one gate, to somewhere it runs. */}
+      <path d="M1.5 8h3.5M10.5 8h4" />
+      <circle cx="7.75" cy="8" r="2.25" />
+      <path d="M12.5 6 14.5 8l-2 2" />
     </>,
   );
 }

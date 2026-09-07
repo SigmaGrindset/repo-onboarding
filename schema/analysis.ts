@@ -52,6 +52,14 @@ export interface Analysis {
    * See `docs/adr/0005-design-system-judgement-not-inventory.md`.
    */
   designSystem?: DesignSystem;
+  /**
+   * How committed code reaches a running environment. A SPECIALIZED section:
+   * present exactly when the repository commits something about its own
+   * pipeline, absent entirely otherwise — the viewer shows no tab and no empty
+   * state. It stops at what is committed, which is a boundary rather than an
+   * omission. See `docs/adr/0006-delivery-stops-at-what-is-committed.md`.
+   */
+  delivery?: Delivery;
   /** Suggested first tasks for a new contributor. */
   firstTasks: FirstTask[];
 }
@@ -490,6 +498,109 @@ export interface DesignSystem {
   /** Exhaustive within the boundary the analysis engine draws. */
   primitives: DesignPrimitive[];
   reuseRule: ReuseRule;
+}
+
+// ---------------------------------------------------------------------------
+// Delivery
+// ---------------------------------------------------------------------------
+
+/**
+ * What a deploy actually runs, and the committed file that defines producing
+ * it. Required rather than optional: every repository that delivers produces
+ * something, and "nothing is compiled, the source is the artefact" is an
+ * answer rather than an absence.
+ */
+export interface DeliveryBuild {
+  /** What a deploy runs, in this repository's terms — not just its file type. */
+  produces: string;
+  /** Repo-relative file defining how it is produced. */
+  file: string;
+  /** The command that produces it, where the file names one. */
+  command?: string;
+}
+
+/**
+ * One automated check a change must pass, at the grain a reader could run it
+ * at — usually a job, sometimes a single step where a job runs several
+ * distinct checks. "Must pass" is what keeps the stale-bot workflow out.
+ */
+export interface DeliveryGate {
+  /** The job or step name a reader sees reported against their pull request. */
+  name: string;
+  /** Repo-relative workflow or configuration file defining it. */
+  file: string;
+  /** What it checks and what makes it fail — a job called `web` says nothing. */
+  checks: string;
+  /** The command that pre-empts it locally, where there is one. */
+  runLocally?: string;
+}
+
+/**
+ * One place committed configuration deploys to. The `file` is the boundary in
+ * its operative form: a branch-to-environment mapping that lives only in a
+ * hosting dashboard cannot be read, so it is not written down.
+ */
+export interface DeliveryEnvironment {
+  name: string;
+  /** The branch, tag pattern or event that reaches it. */
+  deployedFrom: string;
+  /** Repo-relative file that maps that branch, tag or event to this place. */
+  file: string;
+}
+
+/**
+ * What applies this repository's migrations, and when. Its own key because its
+ * most useful answer is frequently "nothing does — a person runs the command by
+ * hand", which no gate row and no environment row can carry.
+ */
+export interface DeliveryMigrations {
+  /** Repo-relative directory the migration files live in. */
+  directory: string;
+  /** What applies them and when, including "nothing in the pipeline does". */
+  appliedBy: string;
+  /** The command that applies them, where there is one. */
+  command?: string;
+}
+
+/**
+ * One name a deploy must have a value for. NEVER a value: an analysis document
+ * is shared, exported and fed to a chat model, and a value beside a database
+ * URL is a leak rather than a stale fact. See
+ * `docs/adr/0006-delivery-stops-at-what-is-committed.md`.
+ */
+export interface DeployVariable {
+  name: string;
+  /** What a deploy needs it for — what fails to boot without it. */
+  purpose: string;
+  /** Repo-relative file that declares it. */
+  file: string;
+}
+
+/**
+ * How committed code reaches a running environment. A SPECIALIZED section:
+ * present exactly when the repository commits something about its own
+ * pipeline, absent entirely otherwise — the viewer shows no tab and no empty
+ * state.
+ *
+ * The section stops at what is committed, and this shape is what stops it:
+ * every entry is anchored to a committed file or directory, and there is
+ * nowhere to hold a dashboard, a log query, a rollback procedure or an on-call
+ * rota. Anything rendering this must not invent that half back — the fixed
+ * sentence the viewer states about the boundary is the viewer's, and the
+ * document never carries it. See
+ * `docs/adr/0006-delivery-stops-at-what-is-committed.md`.
+ */
+export interface Delivery {
+  /** Push to running, as one narrative — the only place the whole shape is stated. */
+  pipeline: string;
+  build: DeliveryBuild;
+  /** Exhaustive: a check not listed is one that does not run. */
+  gates: DeliveryGate[];
+  /** Optional — a mapping with no committed file cannot be cited. */
+  environments?: DeliveryEnvironment[];
+  migrations?: DeliveryMigrations;
+  /** Exhaustive when present, and names only — never values. */
+  deployVariables?: DeployVariable[];
 }
 
 // ---------------------------------------------------------------------------

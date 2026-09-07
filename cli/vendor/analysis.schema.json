@@ -67,6 +67,10 @@
       "description": "How this repository's interface is built. A SPECIALIZED section: present exactly when the repository has a design system of its own, and absent entirely otherwise — an analysis engine that finds a handful of styles omits the key rather than emitting the section thin. See docs/adr/0004-sections-are-declared-by-presence.md and docs/adr/0005-design-system-judgement-not-inventory.md.",
       "$ref": "#/$defs/DesignSystem"
     },
+    "delivery": {
+      "description": "How committed code reaches a running environment. A SPECIALIZED section: present exactly when the repository commits something about its own pipeline, and absent entirely otherwise. It stops at what is committed — there is no field here for a production dashboard, log access, a rollback procedure or an on-call rota, and that is the boundary rather than an oversight: the operational half is not in the repository, so an analysis engine asked for it invents it. See docs/adr/0004-sections-are-declared-by-presence.md and docs/adr/0006-delivery-stops-at-what-is-committed.md.",
+      "$ref": "#/$defs/Delivery"
+    },
     "firstTasks": {
       "description": "Suggested first tasks for a new contributor.",
       "type": "array",
@@ -811,6 +815,159 @@
         },
         "newPrimitiveHome": {
           "description": "The repo-relative file or directory a genuinely new primitive belongs in, so the judgement ends somewhere a reader can act on.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "Delivery": {
+      "description": "What happens to a change when it merges: the gates it must pass, the build a deploy runs, where it lands, how migrations are applied, and the variables a deploy requires. The section stops at what is committed, and THIS SHAPE IS WHAT STOPS IT — every entry below is anchored to a committed file or directory, `additionalProperties` is false throughout, and there is nowhere to put a dashboard, a log query, a rollback procedure or an on-call rota. That is deliberate and load-bearing: an analysis engine asked how code ships drifts toward the operational half, and having nowhere to say it is a stronger guarantee than being told not to. See docs/adr/0006-delivery-stops-at-what-is-committed.md.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pipeline", "build", "gates"],
+      "properties": {
+        "pipeline": {
+          "description": "What happens to a change from the moment it is pushed to the moment it is running — the narrative the rows below then detail, and the only place the shape of the whole thing is stated. Nothing about production dashboards, log access, rollback or on-call belongs here: no schema can tell whether a paragraph mentions Grafana, which is why the generator prompt carries that half of the boundary. Forced to be substantive because no file anywhere states this.",
+          "type": "string",
+          "minLength": 80
+        },
+        "build": { "$ref": "#/$defs/DeliveryBuild" },
+        "gates": {
+          "description": "Every automated check a change must pass, one entry each. EXHAUSTIVE: a check not listed is one that does not run. One gate is the substance floor, and it is a floor rather than a measure — unlike routes and primitives this section's subject is the pipeline rather than a list, so its length is not the evidence, and the substance is carried by the prose minimums instead.",
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/DeliveryGate" }
+        },
+        "environments": {
+          "description": "Where committed configuration deploys to, one entry per environment. OPTIONAL, and the required `file` on each entry is why: a branch-to-environment mapping that lives in a hosting dashboard cannot be cited, so it cannot be claimed, and a repository whose deploy is a project connection rather than a committed file emits nothing here at all.",
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/DeliveryEnvironment" }
+        },
+        "migrations": { "$ref": "#/$defs/DeliveryMigrations" },
+        "deployVariables": {
+          "description": "Every variable a deploy must have a value for, one entry each. EXHAUSTIVE when present and uncapped, which is the opposite call from design token groups and deliberately so: a missing token name costs a browsing reader nothing, a missing required variable costs them a deploy that will not boot after they believed they had set everything the document asked for. NAMES AND PURPOSES ONLY — there is nowhere here to put a value, because an analysis document is shared, exported and fed to a chat model, and a value beside a database URL is a leak.",
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/DeployVariable" }
+        }
+      }
+    },
+    "DeliveryBuild": {
+      "description": "What a deploy actually runs, and the committed file that defines producing it. Required rather than optional, because every repository that delivers produces SOMETHING a deploy runs — \"nothing is compiled, the source is the artefact\" is a real answer rather than a missing one — and because without it the repository's committed build and deploy configuration has nowhere to go.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["produces", "file"],
+      "properties": {
+        "produces": {
+          "description": "What a deploy actually runs, in this repository's terms: a container image, a framework's standalone bundle, a static directory, a package published from source. Forced to be substantive because a Dockerfile does not say what the thing it builds IS, which is the judgement this field exists for.",
+          "type": "string",
+          "minLength": 30
+        },
+        "file": {
+          "description": "Repo-relative path of the committed file that defines producing it — a Dockerfile, a deploy configuration, or the manifest whose build script is the real answer.",
+          "type": "string",
+          "minLength": 1
+        },
+        "command": {
+          "description": "Optional: the command that produces it, as a reader would run it. Optional because it is a line an analysis engine can read off the file named above, and required here tracks judgement rather than importance.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "DeliveryGate": {
+      "description": "One automated check a change must pass, at the grain a reader could run it at — usually a job, sometimes a single step where a job runs several distinct checks. \"A check a change MUST PASS\" is what excludes the stale-bot workflow and the release-notes action from this list, and it does the work a minimum count would otherwise have been reaching for.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "file", "checks"],
+      "properties": {
+        "name": {
+          "description": "What this gate is called here — the job or step name a reader will see reported against their pull request.",
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "description": "Repo-relative path of the committed workflow or configuration file that defines it.",
+          "type": "string",
+          "minLength": 1
+        },
+        "checks": {
+          "description": "What this gate actually checks, and what makes it fail. Forced to be substantive because a job called `web` says nothing, and that gap is the whole reason the field exists.",
+          "type": "string",
+          "minLength": 40
+        },
+        "runLocally": {
+          "description": "Optional: the command that pre-empts this gate on a reader's own machine — the field that turns a list of checks into something a newcomer can act on before pushing. Optional because it is a `run:` line an engine can read off the file, not a judgement it has to make.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "DeliveryEnvironment": {
+      "description": "One place committed configuration deploys to, named with what reaches it and the committed file that says so. The `file` is not decoration: it is the boundary in its operative form, because a mapping nobody committed cannot be read, and so cannot be written down.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "deployedFrom", "file"],
+      "properties": {
+        "name": {
+          "description": "What this environment is called here (\"production\", \"staging\", \"preview\").",
+          "type": "string",
+          "minLength": 1
+        },
+        "deployedFrom": {
+          "description": "What reaches it — a branch, a tag pattern, or the event that triggers the deploy.",
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "description": "Repo-relative path of the committed file that maps that branch, tag or event to this environment.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "DeliveryMigrations": {
+      "description": "What applies this repository's database migrations, and when. Its own key because its most useful answer is frequently \"nothing does — a person runs the command by hand before the deploy\", which no gate row and no environment row can carry, and which is the answer a newcomer shipping their first schema change most needs. Its anchor is a directory rather than a file: the one exception in this section.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["directory", "appliedBy"],
+      "properties": {
+        "directory": {
+          "description": "Repo-relative directory the migration files live in.",
+          "type": "string",
+          "minLength": 1
+        },
+        "appliedBy": {
+          "description": "What applies them and when — including \"nothing in the pipeline does; a person runs the command by hand before deploying\" where that is the truth. Forced to be substantive, because the honest answer is a sentence and the tempting one is an improvement on it.",
+          "type": "string",
+          "minLength": 40
+        },
+        "command": {
+          "description": "Optional: the command that applies them, as a reader would run it.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "DeployVariable": {
+      "description": "One name a deploy must have a value for, given with what it is for and the committed file that declares it. NO VALUES — there is no property here to hold one, and the reason is disclosure rather than staleness: an analysis document is shared, exported to Markdown and handed to a chat model, and a value beside a database URL is a leak. No exception for a placeholder that looks fake.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "purpose", "file"],
+      "properties": {
+        "name": {
+          "description": "The variable's name, exactly as a deploy must set it.",
+          "type": "string",
+          "minLength": 1
+        },
+        "purpose": {
+          "description": "What a deploy needs it FOR, in this repository's terms — what breaks or fails to boot without it. Forced to be substantive so an entry cannot restate its own name.",
+          "type": "string",
+          "minLength": 30
+        },
+        "file": {
+          "description": "Repo-relative path of the committed file that declares it — an example environment file, a deploy configuration, or the workflow that passes it in.",
           "type": "string",
           "minLength": 1
         }

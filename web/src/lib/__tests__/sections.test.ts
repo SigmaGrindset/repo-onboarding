@@ -63,6 +63,7 @@ const EXPECTED_SPECIALIZED: Record<
 > = {
   api: { key: "apiSurface", since: "1.3.0" },
   design: { key: "designSystem", since: "1.4.0" },
+  delivery: { key: "delivery", since: "1.5.0" },
 };
 
 test("a section is specialized exactly when it is one of the known few", () => {
@@ -190,7 +191,6 @@ test("the real document that carries an API surface shows the section", () => {
   assert.ok(visibleSections(doc).some((s) => s.slug === "api"));
 });
 
-
 // --- Design System --------------------------------------------------------
 
 /** The floor: four primitives, one token group, an approach and a rule. */
@@ -283,6 +283,94 @@ test("carrying a design system beats whatever version a document claims", () => 
   const doc = fixture("repo-onboarding");
   assert.ok(compareSchemaVersions(doc.schemaVersion, DESIGN_SECTION.since) < 0);
   assert.equal(canExpressSection(doc, DESIGN_SECTION), true);
+});
+
+// --- Delivery -------------------------------------------------------------
+
+/** The floor: a pipeline paragraph, a build that names an artefact, one gate. */
+function withDelivery(base: Analysis): Analysis {
+  return {
+    ...base,
+    delivery: {
+      pipeline:
+        "A push opens a pull request, one workflow runs the test job against it, and merging to main hands the commit to the host, which builds and serves it.",
+      build: {
+        produces: "A standalone server bundle the host runs directly.",
+        file: "package.json",
+        command: "npm run build",
+      },
+      gates: [
+        {
+          name: "test",
+          file: ".github/workflows/ci.yml",
+          checks: "Runs the unit suite; any failing assertion fails the job.",
+          runLocally: "npm test",
+        },
+      ],
+    },
+  };
+}
+
+test("a document carrying a delivery section shows it straight after setup", () => {
+  const slugs = visibleSections(withDelivery(fixture("sample"))).map((s) => s.slug);
+  assert.ok(slugs.includes("delivery"));
+  assert.equal(slugs.indexOf("delivery"), slugs.indexOf("setup") + 1);
+});
+
+test("a document with no committed pipeline shows no Delivery section at all", () => {
+  for (const name of FIXTURE_NAMES) {
+    const slugs = visibleSections(fixture(name)).map((s) => s.slug);
+    assert.ok(!slugs.includes("delivery"), `${name} shows a Delivery tab`);
+  }
+});
+
+test("the Delivery section is only ever added, never reordered around", () => {
+  const withDeliv = visibleSections(withDelivery(fixture("sample"))).map((s) => s.slug);
+  assert.deepEqual(
+    withDeliv.filter((slug) => slug !== "delivery"),
+    TODAYS_SECTIONS,
+  );
+});
+
+test("delivery sits after setup even when the structural sections are present", () => {
+  // The three specialized sections are independent and interleaved by meaning:
+  // two join the structural block after the codebase map, this one follows
+  // setup, and adding one must not drag the others out of position.
+  const slugs = visibleSections(
+    withDelivery(withDesignSystem(withApiSurface(fixture("sample")))),
+  ).map((s) => s.slug);
+  assert.equal(slugs.indexOf("api"), slugs.indexOf("map") + 1);
+  assert.equal(slugs.indexOf("design"), slugs.indexOf("api") + 1);
+  assert.equal(slugs.indexOf("delivery"), slugs.indexOf("setup") + 1);
+});
+
+test("the real document that carries a delivery section shows it", () => {
+  // `repo-onboarding` is this repository analysed by its own engine — the one
+  // document with a real committed pipeline rather than a built one.
+  const doc = fixture("repo-onboarding");
+  assert.ok((doc.delivery?.gates.length ?? 0) >= 1);
+  assert.ok(visibleSections(doc).some((s) => s.slug === "delivery"));
+});
+
+/** The Delivery section as the registry really records it. */
+const DELIVERY_SECTION = ANALYSIS_SECTIONS.find(
+  (s): s is SpecializedSection => s.class === "specialized" && s.slug === "delivery",
+)!;
+
+test("a document declaring a contract older than 1.5.0 could not have carried delivery", () => {
+  const old = { ...fixture("sample"), schemaVersion: "1.4.0" };
+  assert.equal(canExpressSection(old, DELIVERY_SECTION), false);
+
+  const current = { ...fixture("sample"), schemaVersion: "1.5.0" };
+  assert.equal(canExpressSection(current, DELIVERY_SECTION), true);
+});
+
+test("carrying a delivery section beats whatever version a document claims", () => {
+  // Written while the section was still unreleased: it says 1.2.0 and carries
+  // one anyway, and nothing may read that as a repository that lost something.
+  const doc = fixture("repo-onboarding");
+  assert.ok(compareSchemaVersions(doc.schemaVersion, DELIVERY_SECTION.since) < 0);
+  assert.equal(canExpressSection(doc, DELIVERY_SECTION), true);
 });
 
 // --------------------------------------------------------------------------

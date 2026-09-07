@@ -27,6 +27,7 @@ export type SectionSlug =
   | "tour"
   | "hotspots"
   | "setup"
+  | "delivery"
   | "learn"
   | "tasks"
   | "versions";
@@ -111,6 +112,21 @@ export const ANALYSIS_SECTIONS: AnalysisSection[] = [
   { slug: "tour", label: "Guided Tour", class: "core" },
   { slug: "hotspots", label: "Hotspots", class: "core" },
   { slug: "setup", label: "Setup", class: "core" },
+  {
+    slug: "delivery",
+    label: "Delivery",
+    class: "specialized",
+    key: "delivery",
+    // Straight after setup rather than beside the other two specialized
+    // sections: setup is how the repository runs locally, delivery is how it
+    // runs everywhere else, and a reader meets them in that order.
+    //
+    // 1.5.0 is unreleased until the release ticket bumps the contract, so — as
+    // with the two above — a document generated today carries a delivery
+    // section and still declares 1.2.0. Presence is read first for exactly
+    // that reason, and nothing calls such a document a removal.
+    since: "1.5.0",
+  },
   { slug: "learn", label: "Learn", class: "core" },
   { slug: "tasks", label: "First Tasks", class: "core" },
   { slug: "versions", label: "Versions", class: "core" },

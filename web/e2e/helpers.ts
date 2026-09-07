@@ -4,10 +4,11 @@ import { expect, test, type Page } from "@playwright/test";
  * The pages the smoke, accessibility and visual suites all walk. One list, three
  * suites, so a section page added here gets all three kinds of coverage at once.
  *
- * Most rows point at `sample`, the demo fixture. `api` and `design` cannot: both
- * sections are specialized and `sample` declares neither, so those pages 404
- * there by design. They point at `repo-onboarding` — this repository analysed by
- * its own engine — which is the document that carries both.
+ * Most rows point at `sample`, the demo fixture. `api`, `design` and `delivery`
+ * cannot: all three sections are specialized and `sample` declares none of them,
+ * so those pages 404 there by design. They point at `repo-onboarding` — this
+ * repository analysed by its own engine — which is the document that carries
+ * all three.
  */
 export const CORE_ROUTES = [
   { slug: "overview", path: "/analysis/sample" },
@@ -20,6 +21,7 @@ export const CORE_ROUTES = [
   { slug: "tour", path: "/analysis/sample/tour" },
   { slug: "hotspots", path: "/analysis/sample/hotspots" },
   { slug: "setup", path: "/analysis/sample/setup" },
+  { slug: "delivery", path: "/analysis/repo-onboarding/delivery" },
   { slug: "tasks", path: "/analysis/sample/tasks" },
 ] as const;
 

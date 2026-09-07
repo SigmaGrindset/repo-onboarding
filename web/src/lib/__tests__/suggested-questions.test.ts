@@ -165,3 +165,36 @@ test("a document with no design system still gets three design starter questions
   assert.equal(questions.length, 3);
   assert.equal(new Set(questions).size, 3);
 });
+
+// --- Delivery --------------------------------------------------------------
+
+test("the delivery section asks about a real gate and about migration application", () => {
+  const doc: Analysis = JSON.parse(
+    readFileSync(
+      path.join(process.cwd(), "..", "data", "repo-onboarding", "analysis.json"),
+      "utf8",
+    ),
+  );
+  const questions = buildSuggestedQuestions(doc)["delivery"];
+  assert.equal(questions.length, 3);
+
+  // The gate a reader can pre-empt: the question then leads somewhere they can
+  // act on before pushing rather than after a red check.
+  const gate = doc.delivery?.gates.find((g) => g.runLocally);
+  assert.ok(gate, "the fixture has a gate a reader can run locally");
+  assert.ok(
+    questions[0].includes(gate.name),
+    `"${questions[0]}" does not name a gate`,
+  );
+  assert.match(questions[1], /pull request/);
+  // "Nothing applies them" is the answer an engine is most tempted to improve
+  // upon, so the pill asks for it directly rather than hoping it comes up.
+  assert.ok(doc.delivery?.migrations, "the fixture has real migrations");
+  assert.match(questions[2], /migrations/);
+});
+
+test("a document with no delivery section still gets three delivery starter questions", () => {
+  const questions = buildSuggestedQuestions(fixture)["delivery"];
+  assert.equal(questions.length, 3);
+  assert.equal(new Set(questions).size, 3);
+});

@@ -260,6 +260,71 @@ Extract, per schema section, as you read:
     not the bar. "Reuse a component where one fits" is the platitude the two halves exist to
     prevent — if you cannot say when creating is right, this repository has a folder of
     components rather than a system, and the key does not belong in the document.
+- **delivery** — a SPECIALIZED section: emit the key only if this repository COMMITS something
+  about its own pipeline, and OMIT IT ENTIRELY otherwise. There is no empty version of this
+  section — a repository with no committed CI, no build and no deploy configuration produces a
+  document with no `delivery` key, and the viewer shows no tab at all.
+  - There is NO `signals.delivery`, and that is not an oversight: unlike routes and design
+    tokens, this evidence declares itself at the top of the tree. Read `notable.ciConfigs` and
+    `notable.containerFiles` as a shortlist, then read the tree yourself.
+  - **AN EMPTY `ciConfigs` NEVER MEANS "NO PIPELINE".** That collector recurses `.github/`
+    only, so a GitLab, CircleCI, Jenkins, Travis or Woodpecker repository gets an empty list
+    while having a full pipeline; and a GitHub one gets `dependabot.yml` and every
+    `ISSUE_TEMPLATE/*.yml` alongside its workflows, which are not gates. `containerFiles`
+    matches five exact basenames in the repository ROOT, so `Dockerfile.prod`, `Containerfile`
+    and `docker/Dockerfile` are all missed. Look for `.gitlab-ci.yml`, `.circleci/`,
+    `Jenkinsfile`, `azure-pipelines.yml`, `.woodpecker.yml`, `vercel.json`, `netlify.toml`,
+    `fly.toml`, `Procfile`, `app.yaml`, `.env.example` and the migrations directory yourself.
+  - **THE SECTION STOPS AT WHAT IS COMMITTED, AND THIS IS THE HALF ONLY YOU CAN ENFORCE.** The
+    schema has no field for a production dashboard, log access, a rollback procedure or an
+    on-call rota — but `pipeline` is a paragraph and no schema can tell whether a paragraph
+    mentions Grafana. Write NOTHING about how to watch the system, read its logs, roll a deploy
+    back or who to page. None of it is in the repository, so anything you write there is
+    invention, and an invented instruction about production is one somebody follows against a
+    live system. A true sentence about a committed thing is always fine — "a failed gate blocks
+    the merge" is a statement about the gates, not a runbook.
+  - The floor is A PIPELINE PARAGRAPH, A BUILD AND ONE GATE. It is deliberately low, because
+    this section's subject is a journey rather than a list and a count would measure the wrong
+    thing. What keeps it honest is substance: if you cannot say what a deploy runs, or what a
+    gate actually checks, you are describing a pipeline you have not read.
+  - `pipeline` (≥ 80 chars) — what happens to a change from the moment it is pushed to the
+    moment it is running. The narrative the rows below then detail, and the only place the
+    shape of the whole thing is stated. No file says this; you assemble it from the ones you
+    read.
+  - `build` is REQUIRED: `produces` (≥ 30 chars — what a deploy actually RUNS, in this
+    repository's terms: a container image, a framework's standalone bundle, a static `dist/`, a
+    package published from source), `file` (the committed file that defines producing it), and
+    an optional `command`. "Nothing is compiled, the source is the artefact" is a real answer —
+    say it and name the file that makes it true, rather than omitting the section.
+  - `gates[]` is EXHAUSTIVE, NOT CURATED: every automated check a change MUST PASS, so a reader
+    can conclude that a check not listed does not run. "Must pass" is the test — a stale-bot
+    workflow, a release-notes action and a nightly cron are not gates.
+  - A gate is ONE CHECK AT THE GRAIN A READER COULD RUN IT AT — usually a job, but split a job
+    that runs several distinct checks into one gate each, because a newcomer needs three
+    commands rather than a job name. Each carries `name`, `file`, `checks` (≥ 40 chars: what it
+    actually checks and what makes it FAIL — a job called `web` says nothing) and an optional
+    `runLocally`, the command that pre-empts it. Fill `runLocally` wherever the file gives you
+    one: it is what turns a list of checks into something a newcomer can act on.
+  - `environments[]` is OPTIONAL, and the required `file` on each row is why. A
+    branch-to-environment mapping that lives in a hosting dashboard rather than a file cannot
+    be cited, so it CANNOT BE CLAIMED — omit the key entirely rather than writing down what you
+    inferred from a badge, a README sentence or a deploy URL.
+  - `migrations` is OPTIONAL, and its most valuable answer is frequently "nothing does". Say in
+    `appliedBy` (≥ 40 chars) what applies them and when — including "nothing in the pipeline
+    applies them; a person runs the command by hand before deploying" where that is the truth.
+    Do not improve on that answer: it is the one a newcomer shipping their first schema change
+    most needs.
+  - `deployVariables[]` is OPTIONAL, and EXHAUSTIVE when present — every variable a deploy must
+    have a value for, over what the committed configuration declares. Unlike design tokens this
+    list is not sampled and is not capped: a missing token name costs a reader nothing, a
+    missing required variable costs them a deploy that will not boot.
+  - **NAMES AND PURPOSES ONLY, NEVER VALUES.** There is nowhere in the schema to put a value,
+    and no exception for a placeholder that looks fake: an analysis document is shared,
+    exported and fed to a chat model, and a value beside a `DATABASE_URL` is a leak.
+  - The viewer states the boundary itself, in fixed text, on every delivery section it renders.
+    So do NOT write a sentence anywhere in the document explaining what this section leaves out
+    — that disclaimer already exists, and a second one in your own words is the operational
+    summary this whole section is shaped to prevent.
 - **firstTasks[]** (≥ 2, aim for 3–4) — concrete, real tasks referencing real files, with a
   `difficulty` and a `rationale` for why it's a good newcomer task. Range easy→hard.
 
@@ -334,4 +399,9 @@ Do not finish until **both** commands exit 0.
       anywhere in it.
 - [ ] The reuse rule states the practice the code shows, and its two halves say different
       things — not one platitude split in two.
+- [ ] `delivery` is present only if this repo commits something about its own pipeline — and an
+      empty `notable.ciConfigs` was NOT read as "no pipeline"; the tree was checked.
+- [ ] Every gate a change must pass is listed, at the grain a reader could run it at, and
+      nothing in the section mentions dashboards, log access, rollback or on-call.
+- [ ] No deploy variable carries a VALUE, placeholder or otherwise.
 - [ ] `node schema/validate.mjs …` exits 0 AND `node …/edges-check.mjs …` exits 0.

@@ -758,6 +758,56 @@ test("the real registry now reads a second section through the same rule", () =>
   );
 });
 
+test("the real registry now reads a third section through the same rule", () => {
+  // Delivery is wired into the registry, so the same rule reads it — and this
+  // is the assertion that breaks if a section is added to the schema and the
+  // viewer but not to the registry the diff derives from.
+  const withDelivery = (a: Analysis): Analysis => {
+    a.delivery = {
+      pipeline:
+        "A push opens a pull request, one workflow runs the gate below against it, and merging to main hands the commit to the host to build and serve.",
+      build: {
+        produces: "A standalone server bundle the host runs directly.",
+        file: "package.json",
+      },
+      gates: [
+        {
+          name: "test",
+          file: ".github/workflows/ci.yml",
+          checks: "Runs the unit suite; one failing assertion fails the job.",
+        },
+      ],
+    };
+    return a;
+  };
+
+  const deliveryDelta = (diff: ReturnType<typeof diffAnalyses>) =>
+    diff.sections.deltas.find((d) => d.slug === "delivery");
+
+  // Gained between two documents that could both have carried one.
+  assert.equal(
+    deliveryDelta(diffAnalyses(docAt("1.5.0"), withDelivery(docAt("1.5.0"))))?.kind,
+    "added",
+  );
+  // The base predates the section, so its silence is the contract's.
+  assert.equal(
+    deliveryDelta(diffAnalyses(docAt("1.4.0"), withDelivery(docAt("1.5.0"))))?.kind,
+    "newly-present",
+  );
+  // A repository that stopped committing a pipeline really did lose one.
+  assert.equal(
+    deliveryDelta(diffAnalyses(withDelivery(docAt("1.5.0")), docAt("1.5.0")))?.kind,
+    "removed",
+  );
+  // And the deltas stay in reading order: delivery follows setup, so it sorts
+  // after the two sections that join the structural block.
+  assert.deepEqual(
+    diffAnalyses(docAt("1.5.0"), withDelivery(docAt("1.5.0", someRoutes()))).sections
+      .deltas.map((d) => d.slug),
+    ["api", "delivery"],
+  );
+});
+
 // --------------------------------------------------------------------------
 // 12. Routes added, removed and changed
 // --------------------------------------------------------------------------

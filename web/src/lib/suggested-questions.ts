@@ -40,6 +40,7 @@ export function buildSuggestedQuestions(
     tour: tourQuestions(analysis),
     hotspots: hotspotsQuestions(analysis),
     setup: setupQuestions(analysis),
+    delivery: deliveryQuestions(analysis),
     learn: learnQuestions(analysis),
     tasks: tasksQuestions(analysis),
     versions: [],
@@ -79,6 +80,22 @@ function designQuestions(a: Analysis): string[] {
     // The reuse rule is the section, so the third pill asks for the half a
     // reader is most likely to get wrong on their first interface change.
     "When is writing a new primitive the right call here?",
+  ];
+}
+
+function deliveryQuestions(a: Analysis): string[] {
+  const delivery = a.delivery;
+  // The gate a reader can pre-empt is the one worth asking about: it turns the
+  // question into something they can act on before pushing.
+  const gate = delivery?.gates.find((g) => g.runLocally) ?? delivery?.gates[0];
+  return [
+    gate ? `What does the ${clip(gate.name)} check look for?` : "",
+    "What runs when I open a pull request here?",
+    // Migration application is the answer an engine is most tempted to improve
+    // on, so the pill asks for it directly rather than hoping it comes up.
+    delivery?.migrations
+      ? "What applies the database migrations, and when?"
+      : "What does a deploy actually run?",
   ];
 }
 

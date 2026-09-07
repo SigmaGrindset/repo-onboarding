@@ -2127,6 +2127,79 @@
       "newPrimitiveHome": "web/src/components/ui.tsx"
     }
   },
+  "delivery": {
+    "pipeline": "A push opens a pull request and .github/workflows/ci.yml runs against it: three jobs in parallel — the schema fixtures, the CLI package's tests, and the web app's tests, lint and production build — then a Windows runner replays the Playwright suite once the web job has passed. The same workflow runs again on every push to main. No job in that workflow deploys, and the tree holds no vercel.json, Dockerfile or Procfile, so the build below is the last step anything committed describes. Migrations travel separately, and by hand.",
+    "build": {
+      "produces": "The Next.js production build of the viewer in web/ — server-rendered pages the host runs on demand. Nothing is containerised, and neither the CLI package nor the schema tooling is built at all.",
+      "file": "web/package.json",
+      "command": "cd web && npm run build"
+    },
+    "gates": [
+      {
+        "name": "schema",
+        "file": ".github/workflows/ci.yml",
+        "checks": "Validates every data/<id>/analysis.json in the repository against the analysis schema, and reports every fixture that has drifted from the contract before exiting non-zero. Schema only: validate-all.mjs calls the validator with no options, so the cross-reference rules a document can also break go unchecked here.",
+        "runLocally": "npm run validate:all"
+      },
+      {
+        "name": "cli",
+        "file": ".github/workflows/ci.yml",
+        "checks": "Runs the published package's own suite, the vendor drift test included — so a canonical schema, pre-pass or export generator edited without re-running `npm run sync` in cli/ fails here rather than shipping to the registry.",
+        "runLocally": "cd cli && npm test"
+      },
+      {
+        "name": "web tests",
+        "file": ".github/workflows/ci.yml",
+        "checks": "Runs the viewer's two unit suites in the one command the `test` script chains: `tsx --test` over src/lib/__tests__, then Vitest over the component tests. A failing assertion in either one fails the job.",
+        "runLocally": "cd web && npm test"
+      },
+      {
+        "name": "web lint",
+        "file": ".github/workflows/ci.yml",
+        "checks": "Runs ESLint over the app with eslint-config-next. Only error-level rules fail the job — warnings pass, so a warning-free tree is a convention here rather than something this gate enforces.",
+        "runLocally": "cd web && npm run lint"
+      },
+      {
+        "name": "web build",
+        "file": ".github/workflows/ci.yml",
+        "checks": "Builds the app in local mode (APP_MODE=local, output to .next-local). A type error, a bad import or a page that cannot be prerendered fails here rather than at deploy time.",
+        "runLocally": "cd web && npm run build:local"
+      },
+      {
+        "name": "playwright",
+        "file": ".github/workflows/ci.yml",
+        "checks": "Rebuilds the app and replays the Playwright suite — smoke, accessibility and pixel snapshots — on a Windows runner, so the visual baselines committed from a Windows machine are the ones compared. Runs only after the web job passes, and uploads its report as an artifact when it fails.",
+        "runLocally": "cd web && npm run test:e2e"
+      }
+    ],
+    "migrations": {
+      "directory": "web/drizzle/",
+      "appliedBy": "Nothing in the pipeline applies them. A person runs the command against DATABASE_URL by hand before the deploy that needs it — no CI job and no deploy step touches the database. Migration 0002 carries a data backfill, so it has to be applied with `migrate`, which runs the SQL verbatim, and not with `push`, which diffs the schema and skips the UPDATE.",
+      "command": "cd web && npx drizzle-kit migrate"
+    },
+    "deployVariables": [
+      {
+        "name": "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY",
+        "purpose": "Clerk's browser key — the sign-in UI and the client-side session. One of the four keys whose presence is what switches the app out of local mode, per web/src/lib/mode.ts.",
+        "file": "web/.env.example"
+      },
+      {
+        "name": "CLERK_SECRET_KEY",
+        "purpose": "Clerk's server key. Every authenticated read and write is checked through it, and the proxy cannot protect a route without it.",
+        "file": "web/.env.example"
+      },
+      {
+        "name": "DATABASE_URL",
+        "purpose": "The Neon Postgres connection holding analysis metadata, API tokens and per-user tour progress. Also what drizzle-kit migrate is run against.",
+        "file": "web/.env.example"
+      },
+      {
+        "name": "BLOB_READ_WRITE_TOKEN",
+        "purpose": "The Vercel Blob store an uploaded analysis.json payload is written to and read back from; the Postgres rows only point at it.",
+        "file": "web/.env.example"
+      }
+    ]
+  },
   "firstTasks": [
     {
       "title": "Give the Versions tab its own chat starter questions",

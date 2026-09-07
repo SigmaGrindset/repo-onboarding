@@ -1,5 +1,6 @@
 import type { Analysis } from "@schema/analysis";
 import { routeAnchor, routeLabel } from "./api-surface";
+import { gateAnchor } from "./delivery";
 import { primitiveAnchor } from "./design-system";
 import { basename, slugify } from "./format";
 import { visibleSections } from "./sections";
@@ -23,6 +24,7 @@ export const SEARCH_GROUPS = [
   "Contributor Guide",
   "Guided Tour",
   "Hotspots",
+  "Delivery",
   "Learn",
 ] as const;
 
@@ -160,6 +162,24 @@ export function buildSearchIndex(analysis: Analysis, base: string): SearchItem[]
       hint: `${h.commits} commits`,
       href: `${base}/hotspots?file=${slugify(h.path)}`,
       keywords: h.recentActivity,
+    });
+  }
+
+  // Every gate, and only the gates. The list is exhaustive in the document, so
+  // the palette can answer "is there a lint check?" — the question a reader
+  // asks before pushing. Deploy variables are exhaustive too and are NOT
+  // indexed: nobody jumps to one, they read the whole list to find out what a
+  // deploy needs, and the section entry above already goes there.
+  for (const gate of analysis.delivery?.gates ?? []) {
+    items.push({
+      group: "Delivery",
+      label: gate.name,
+      hint: basename(gate.file),
+      href: `${base}/delivery?gate=${gateAnchor(gate)}`,
+      // The command is a keyword rather than the hint: a reader who knows
+      // `npm test` and not the job name still finds the row, and one who is
+      // scanning wants to see which workflow file it came from.
+      keywords: [gate.file, gate.runLocally].filter(Boolean).join(" "),
     });
   }
 

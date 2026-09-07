@@ -126,3 +126,81 @@ test("a document with no design system contributes no primitive entries", () => 
   // ...and the section itself is not offered as a jump target either.
   assert.equal(items.filter((i) => i.label === "Design System").length, 0);
 });
+
+// --- Delivery --------------------------------------------------------------
+
+test("a gate is findable by its name, and reaches the row it names", () => {
+  const doc = fixture("repo-onboarding");
+  const items = buildSearchIndex(doc, BASE);
+
+  const gate = doc.delivery!.gates[0];
+  const hit = items.find((i) => i.group === "Delivery" && i.label === gate.name);
+  assert.ok(hit, `the ${gate.name} gate is not in the index`);
+  assert.ok(
+    hit.href.startsWith(`${BASE}/delivery?gate=`),
+    `"${hit.href}" does not deep-link into the section`,
+  );
+  assert.equal(hit.hint, "ci.yml");
+});
+
+test("a gate is findable by the command that pre-empts it", () => {
+  // A reader knows `npm run lint` long before they know what the job is
+  // called, so the command is matchable even though the hint is the file.
+  const doc = fixture("repo-onboarding");
+  const runnable = doc.delivery!.gates.filter((g) => g.runLocally);
+  assert.ok(runnable.length > 0, "the fixture has gates a reader can pre-empt");
+
+  const items = buildSearchIndex(doc, BASE);
+  for (const gate of runnable) {
+    const hit = items.find((i) => i.group === "Delivery" && i.label === gate.name);
+    assert.ok(
+      hit?.keywords?.includes(gate.runLocally!),
+      `${gate.name} cannot be found by "${gate.runLocally}"`,
+    );
+  }
+});
+
+test("every gate is indexed, not a selection", () => {
+  const doc = fixture("repo-onboarding");
+  const indexed = buildSearchIndex(doc, BASE).filter((i) => i.group === "Delivery");
+  assert.equal(indexed.length, doc.delivery?.gates.length);
+});
+
+test("two gates of the same name in different files are separate entries", () => {
+  // A gate is named as the repository names it, and two workflow files may
+  // each define a `test` job — so the anchor cannot be the name alone.
+  const doc = fixture("repo-onboarding");
+  const gates = doc.delivery!.gates;
+  const twinned: Analysis = {
+    ...doc,
+    delivery: {
+      ...doc.delivery!,
+      gates: [...gates, { ...gates[0], file: ".github/workflows/nightly.yml" }],
+    },
+  };
+  const hrefs = buildSearchIndex(twinned, BASE)
+    .filter((i) => i.group === "Delivery" && i.label === gates[0].name)
+    .map((i) => i.href);
+  assert.equal(hrefs.length, 2);
+  assert.equal(new Set(hrefs).size, 2, "the two files share an anchor");
+});
+
+test("deploy variables are deliberately not indexed", () => {
+  // Exhaustive in the document, but nobody jumps to one: a reader checking
+  // what a deploy needs reads the whole list, and the section entry goes there.
+  const doc = fixture("repo-onboarding");
+  const variables = doc.delivery?.deployVariables ?? [];
+  assert.ok(variables.length > 0, "the fixture declares deploy variables");
+
+  const labels = new Set(buildSearchIndex(doc, BASE).map((i) => i.label));
+  for (const variable of variables) {
+    assert.ok(!labels.has(variable.name), `${variable.name} is in the palette`);
+  }
+});
+
+test("a document with no delivery section contributes no gate entries", () => {
+  const items = buildSearchIndex(fixture("sample"), "/analysis/sample");
+  assert.equal(items.filter((i) => i.group === "Delivery").length, 0);
+  // ...and the section itself is not offered as a jump target either.
+  assert.equal(items.filter((i) => i.label === "Delivery").length, 0);
+});

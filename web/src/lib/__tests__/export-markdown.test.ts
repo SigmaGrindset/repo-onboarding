@@ -42,8 +42,8 @@ function canonicalRenderer(): Promise<Renderer> {
 /**
  * `repo-onboarding` is here for a specific reason: parity is compared per
  * fixture, so a section no fixture carries could diverge between the mirror and
- * the canonical `.mjs` unnoticed. It is the only document carrying either
- * specialized section — an `apiSurface` and a `designSystem`.
+ * the canonical `.mjs` unnoticed. It is the only document carrying any of the
+ * specialized sections — an `apiSurface`, a `designSystem` and a `delivery`.
  */
 const FIXTURE_IDS = ["sample", "express", "repo-onboarding"] as const;
 
@@ -225,4 +225,112 @@ test("a document without a design system exports no such section", () => {
   const md = renderOnboardingMarkdown(fixture("sample"));
   assert.ok(!md.includes("## Design System"));
   assert.ok(!md.includes("- [Design System]"));
+});
+
+// --- Delivery --------------------------------------------------------------
+
+test("a document with a delivery section exports it, in its nav position", () => {
+  const doc = fixture("repo-onboarding");
+  const md = renderOnboardingMarkdown(doc);
+
+  assert.ok(md.includes("## Delivery"), "the section has a heading");
+  assert.ok(
+    md.includes("- [Delivery](#delivery)"),
+    "the section is in the table of contents",
+  );
+  // After setup, before learn — the registry order. Setup is how the
+  // repository runs locally; delivery is how it runs everywhere else.
+  assert.ok(
+    md.indexOf("## Setup") < md.indexOf("## Delivery") &&
+      md.indexOf("## Delivery") < md.indexOf("## Learn"),
+    "the section sits between setup and learn",
+  );
+
+  const delivery = doc.delivery;
+  assert.ok(delivery);
+  assert.ok(md.includes(delivery.pipeline), "the pipeline narrative is exported");
+  assert.ok(md.includes(delivery.build.produces), "the build is exported");
+  assert.ok(md.includes(`\`${delivery.build.file}\``));
+});
+
+test("the exported delivery section states the boundary in fixed text", () => {
+  // The one sentence the DOCUMENT never carries: a schema field asking an
+  // engine to state an absence is one it fills with a plausible operational
+  // summary. So every renderer states it itself, identically. See ADR 0006.
+  const doc = fixture("repo-onboarding");
+  const md = renderOnboardingMarkdown(doc);
+
+  assert.match(md, /Everything here is read from a committed file\./);
+  assert.match(
+    md,
+    /Production dashboards, log access, rollback procedure and on-call are not in this repository/,
+  );
+  // And it really is fixed text rather than something read off the document.
+  assert.ok(
+    !JSON.stringify(doc).includes("Everything here is read from a committed file"),
+    "the document carries the boundary sentence — it must not",
+  );
+});
+
+test("the exported gates are exhaustive, and say so", () => {
+  const doc = fixture("repo-onboarding");
+  const md = renderOnboardingMarkdown(doc);
+  const gates = doc.delivery!.gates;
+
+  assert.match(md, /Exhaustive — a check that is not here does not run/);
+  assert.ok(gates.length > 0);
+  for (const gate of gates) {
+    assert.ok(
+      md.includes(`| ${gate.name} | ${gate.checks} |`),
+      `${gate.name} is missing from the table`,
+    );
+    // The field that turns a list of checks into something a reader can act on.
+    if (gate.runLocally) {
+      assert.ok(md.includes(`\`${gate.runLocally}\``), gate.runLocally);
+    }
+  }
+});
+
+test("the exported deploy variables are exhaustive, and carry no values", () => {
+  // The opposite promise from the design system's sampled token groups, and
+  // the export must not flatten the two into one convention.
+  const doc = fixture("repo-onboarding");
+  const md = renderOnboardingMarkdown(doc);
+  const variables = doc.delivery!.deployVariables ?? [];
+
+  assert.ok(variables.length > 0, "the fixture declares deploy variables");
+  assert.match(md, /Exhaustive — names and purposes only, never values/);
+  for (const variable of variables) {
+    assert.ok(
+      md.includes(`| \`${variable.name}\` | ${variable.purpose} |`),
+      `${variable.name} is missing from the table`,
+    );
+  }
+});
+
+test("the exported migrations say what applies them", () => {
+  // The answer no gate row and no environment row can carry, and the one an
+  // engine is most tempted to improve upon.
+  const doc = fixture("repo-onboarding");
+  const md = renderOnboardingMarkdown(doc);
+  const migrations = doc.delivery!.migrations;
+
+  assert.ok(migrations, "the fixture has real migrations");
+  assert.ok(md.includes("### Migrations"));
+  assert.ok(md.includes(migrations.appliedBy));
+  assert.ok(md.includes(`\`${migrations.directory}\``));
+});
+
+test("a repository with no committed environment mapping exports no such block", () => {
+  // This repository's production deploy is a project connection rather than a
+  // committed file, so there is nothing to cite and nothing is claimed.
+  const doc = fixture("repo-onboarding");
+  assert.equal(doc.delivery?.environments, undefined);
+  assert.ok(!renderOnboardingMarkdown(doc).includes("### Environments"));
+});
+
+test("a document without a delivery section exports no such section", () => {
+  const md = renderOnboardingMarkdown(fixture("sample"));
+  assert.ok(!md.includes("## Delivery"));
+  assert.ok(!md.includes("- [Delivery]"));
 });

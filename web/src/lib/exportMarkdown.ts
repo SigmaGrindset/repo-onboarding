@@ -536,6 +536,98 @@ function renderDesignSystem(analysis: Analysis): string[] {
   return lines;
 }
 
+/**
+ * The boundary, stated once in fixed text. The document never carries this
+ * sentence: a field asking an analysis engine to state an absence is a field it
+ * fills with a plausible operational summary, which is the failure the boundary
+ * exists to prevent. So every renderer of this section states it itself, in the
+ * same words, and it cannot go stale or be invented. See ADR 0006.
+ */
+const DELIVERY_BOUNDARY =
+  "Everything here is read from a committed file. Production dashboards, log " +
+  "access, rollback procedure and on-call are not in this repository, so they " +
+  "are not here — a boundary rather than a gap.";
+
+/**
+ * What happens to a change when it merges. The pipeline paragraph leads because
+ * it is the only place the shape of the whole thing is stated; the rows below
+ * detail it. Gates are exhaustive and say so. Deploy variables are exhaustive
+ * too and carry names only — the schema has nowhere to put a value, and this
+ * renderer must not invent one.
+ */
+function renderDelivery(analysis: Analysis): string[] {
+  const delivery = analysis.delivery;
+  const lines = ["## Delivery", ""];
+  lines.push(delivery?.pipeline ?? "");
+  lines.push("", `_${DELIVERY_BOUNDARY}_`);
+
+  const build = delivery?.build;
+  if (build) {
+    lines.push("", "### Build", "");
+    // `produces` on its own line rather than folded into a sentence: it is
+    // prose an analysis engine writes, and half of them write a full sentence.
+    lines.push(build.produces);
+    lines.push(
+      "",
+      build.command
+        ? `Defined in ${code(cell(build.file))}, produced by ${code(cell(build.command))}.`
+        : `Defined in ${code(cell(build.file))}.`,
+    );
+  }
+
+  const gates = delivery?.gates ?? [];
+  if (gates.length) {
+    lines.push("", "### Gates", "");
+    lines.push("Exhaustive — a check that is not here does not run.", "");
+    lines.push("| Gate | Checks | Run locally | File |");
+    lines.push("| --- | --- | --- | --- |");
+    for (const gate of gates) {
+      const local = gate.runLocally ? code(cell(gate.runLocally)) : "—";
+      lines.push(
+        `| ${cell(gate.name)} | ${cell(gate.checks)} | ${local} | ${code(cell(gate.file))} |`,
+      );
+    }
+  }
+
+  const environments = delivery?.environments ?? [];
+  if (environments.length) {
+    lines.push("", "### Environments", "");
+    for (const env of environments) {
+      lines.push(
+        `- **${cell(env.name)}** — deployed from ${cell(env.deployedFrom)}, per ${code(cell(env.file))}`,
+      );
+    }
+  }
+
+  const migrations = delivery?.migrations;
+  if (migrations) {
+    lines.push("", "### Migrations", "");
+    lines.push(`Migrations live in ${code(cell(migrations.directory))}.`);
+    lines.push("", migrations.appliedBy);
+    if (migrations.command) {
+      lines.push("", `Applied with ${code(cell(migrations.command))}.`);
+    }
+  }
+
+  const variables = delivery?.deployVariables ?? [];
+  if (variables.length) {
+    lines.push("", "### Deploy variables", "");
+    lines.push(
+      "Exhaustive — names and purposes only, never values.",
+      "",
+    );
+    lines.push("| Variable | Needed for | Declared in |");
+    lines.push("| --- | --- | --- |");
+    for (const variable of variables) {
+      lines.push(
+        `| ${code(cell(variable.name))} | ${cell(variable.purpose)} | ${code(cell(variable.file))} |`,
+      );
+    }
+  }
+
+  return lines;
+}
+
 function renderContributorGuide(analysis: Analysis): string[] {
   const guide = analysis.contributorGuide;
   const lines = ["## Contributor Guide"];
@@ -609,6 +701,7 @@ const RENDERERS: Record<SectionSlug, ((analysis: Analysis) => string[]) | null> 
   tour: renderTour,
   hotspots: renderHotspots,
   setup: renderSetup,
+  delivery: renderDelivery,
   learn: renderLearn,
   tasks: renderFirstTasks,
   versions: null,

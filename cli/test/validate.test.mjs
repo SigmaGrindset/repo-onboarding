@@ -856,3 +856,275 @@ test("validate: a token group carries names, and has nowhere to put a value", { 
     res.stdout,
   );
 });
+
+// --- Delivery: the substance floor, and the boundary the schema enforces -----
+//
+// Also SPECIALIZED, and here the schema is doing two jobs at once. The floor is
+// the usual one — nothing but this stands between an over-eager engine and a
+// Delivery tab on a repository with a lint job and nothing else. The SHAPE is
+// the other: there is no field for a dashboard, a log, a rollback or an on-call
+// rota, every entry is anchored to a committed file or directory, and
+// `additionalProperties: false` means an engine cannot add one. That is the
+// half of the boundary a prompt cannot guarantee. See
+// docs/adr/0006-delivery-stops-at-what-is-committed.md.
+
+/** One gate: the minimum, and a check a change must actually pass. */
+const GATES = [
+  {
+    name: "test",
+    file: ".github/workflows/ci.yml",
+    checks:
+      "Runs the unit suite against the pull request; one failing assertion fails the job.",
+    runLocally: "npm test",
+  },
+];
+
+/** A delivery section that clears every floor — the baseline the cases mutate. */
+function delivery() {
+  return {
+    pipeline:
+      "A push opens a pull request, the CI workflow runs the gates below against it, and merging to main hands the commit to the host, which builds and serves it.",
+    build: {
+      produces: "A standalone server bundle the host runs directly.",
+      file: "package.json",
+      command: "npm run build",
+    },
+    gates: GATES.map((g) => ({ ...g })),
+  };
+}
+
+test("validate: a document with no delivery is valid", { skip: skipNoSample }, async () => {
+  const doc = JSON.parse(readFileSync(SAMPLE, "utf8"));
+  assert.equal(doc.delivery, undefined, "the sample carries no delivery section");
+  const res = await runCli(["validate", SAMPLE, "--json"]);
+  assert.equal(res.status, 0, res.stdout);
+});
+
+test("validate: a pipeline, a build and one gate clear the floor", { skip: skipNoSample }, async () => {
+  const { res } = await validateMutated((doc) => {
+    doc.delivery = delivery();
+  }, "delivery-ok");
+  assert.equal(res.status, 0, res.stdout);
+});
+
+test("validate: a delivery section with no gate is rejected", { skip: skipNoSample }, async () => {
+  const { res, parsed } = await validateMutated((doc) => {
+    doc.delivery = delivery();
+    doc.delivery.gates = [];
+  }, "delivery-no-gates");
+  assert.equal(res.status, 1);
+  assert.ok(
+    parsed.issues.some(
+      (i) => i.path === "/delivery/gates" && i.keyword === "minItems",
+    ),
+    res.stdout,
+  );
+});
+
+for (const key of ["pipeline", "build", "gates"]) {
+  test(`validate: a delivery section without ${key} is rejected`, { skip: skipNoSample }, async () => {
+    const { res, parsed } = await validateMutated((doc) => {
+      doc.delivery = delivery();
+      delete doc.delivery[key];
+    }, `delivery-no-${key}`);
+    assert.equal(res.status, 1);
+    assert.ok(
+      parsed.issues.some(
+        (i) => i.path === "/delivery" && i.expected === `property "${key}"`,
+      ),
+      res.stdout,
+    );
+  });
+}
+
+test("validate: naming the CI provider is not a pipeline", { skip: skipNoSample }, async () => {
+  // No file states the end-to-end story, which is why the field is required and
+  // why it is the one an engine is most likely to answer with a label.
+  const { res, parsed } = await validateMutated((doc) => {
+    doc.delivery = delivery();
+    doc.delivery.pipeline = "GitHub Actions, then Vercel.";
+  }, "delivery-thin-pipeline");
+  assert.equal(res.status, 1);
+  assert.ok(
+    parsed.issues.some(
+      (i) => i.path === "/delivery/pipeline" && i.keyword === "minLength",
+    ),
+    res.stdout,
+  );
+});
+
+test("validate: a build must say what a deploy actually runs", { skip: skipNoSample }, async () => {
+  // A Dockerfile does not say what the thing it builds IS, which is the whole
+  // judgement this field exists for.
+  const { res, parsed } = await validateMutated((doc) => {
+    doc.delivery = delivery();
+    doc.delivery.build.produces = "A bundle.";
+  }, "delivery-thin-build");
+  assert.equal(res.status, 1);
+  assert.ok(
+    parsed.issues.some(
+      (i) => i.path === "/delivery/build/produces" && i.keyword === "minLength",
+    ),
+    res.stdout,
+  );
+});
+
+test("validate: a build must name the committed file that defines it", { skip: skipNoSample }, async () => {
+  const { res, parsed } = await validateMutated((doc) => {
+    doc.delivery = delivery();
+    delete doc.delivery.build.file;
+  }, "delivery-build-no-file");
+  assert.equal(res.status, 1);
+  assert.ok(
+    parsed.issues.some(
+      (i) => i.path === "/delivery/build" && i.expected === 'property "file"',
+    ),
+    res.stdout,
+  );
+});
+
+test("validate: a gate must say what it checks", { skip: skipNoSample }, async () => {
+  // A job called `web` says nothing, and that gap is why the field exists.
+  const { res, parsed } = await validateMutated((doc) => {
+    doc.delivery = delivery();
+    doc.delivery.gates[0].checks = "Runs CI.";
+  }, "delivery-thin-gate");
+  assert.equal(res.status, 1);
+  assert.ok(
+    parsed.issues.some(
+      (i) => i.path === "/delivery/gates/0/checks" && i.keyword === "minLength",
+    ),
+    res.stdout,
+  );
+});
+
+test("validate: a gate must name the file defining it", { skip: skipNoSample }, async () => {
+  const { res, parsed } = await validateMutated((doc) => {
+    doc.delivery = delivery();
+    delete doc.delivery.gates[0].file;
+  }, "delivery-gate-no-file");
+  assert.equal(res.status, 1);
+  assert.ok(
+    parsed.issues.some(
+      (i) => i.path === "/delivery/gates/0" && i.expected === 'property "file"',
+    ),
+    res.stdout,
+  );
+});
+
+test("validate: a gate need not be runnable locally", { skip: skipNoSample }, async () => {
+  // Optional because it is a `run:` line an engine reads off the file, not a
+  // judgement it has to make — required here tracks judgement, not importance.
+  const { res } = await validateMutated((doc) => {
+    doc.delivery = delivery();
+    delete doc.delivery.gates[0].runLocally;
+  }, "delivery-gate-no-local");
+  assert.equal(res.status, 0, res.stdout);
+});
+
+test("validate: an environment cannot be claimed without the file that says so", { skip: skipNoSample }, async () => {
+  // The boundary in its operative form: a branch-to-environment mapping that
+  // lives in a hosting dashboard cannot be cited, so it cannot be claimed.
+  const { res, parsed } = await validateMutated((doc) => {
+    doc.delivery = delivery();
+    doc.delivery.environments = [{ name: "production", deployedFrom: "main" }];
+  }, "delivery-env-no-file");
+  assert.equal(res.status, 1);
+  assert.ok(
+    parsed.issues.some(
+      (i) =>
+        i.path === "/delivery/environments/0" && i.expected === 'property "file"',
+    ),
+    res.stdout,
+  );
+});
+
+test("validate: a repository with no committed environment mapping omits the key", { skip: skipNoSample }, async () => {
+  const { res } = await validateMutated((doc) => {
+    doc.delivery = delivery();
+    assert.equal(doc.delivery.environments, undefined);
+  }, "delivery-no-envs");
+  assert.equal(res.status, 0, res.stdout);
+});
+
+test("validate: migrations must say what applies them, and when", { skip: skipNoSample }, async () => {
+  // "Nothing does — a person runs the command by hand" is the answer the field
+  // exists for, and it is a sentence rather than a word.
+  const { res, parsed } = await validateMutated((doc) => {
+    doc.delivery = delivery();
+    doc.delivery.migrations = { directory: "db/migrate/", appliedBy: "By hand." };
+  }, "delivery-thin-migrations");
+  assert.equal(res.status, 1);
+  assert.ok(
+    parsed.issues.some(
+      (i) =>
+        i.path === "/delivery/migrations/appliedBy" && i.keyword === "minLength",
+    ),
+    res.stdout,
+  );
+});
+
+test("validate: a deploy variable must say what it is needed for", { skip: skipNoSample }, async () => {
+  const { res, parsed } = await validateMutated((doc) => {
+    doc.delivery = delivery();
+    doc.delivery.deployVariables = [
+      { name: "DATABASE_URL", purpose: "The database.", file: ".env.example" },
+    ];
+  }, "delivery-thin-variable");
+  assert.equal(res.status, 1);
+  assert.ok(
+    parsed.issues.some(
+      (i) =>
+        i.path === "/delivery/deployVariables/0/purpose" &&
+        i.keyword === "minLength",
+    ),
+    res.stdout,
+  );
+});
+
+test("validate: a deploy variable carries a name, and has nowhere to put a value", { skip: skipNoSample }, async () => {
+  // Disclosure rather than staleness: an analysis document is shared, exported
+  // and fed to a chat model, and a value beside a database URL is a leak. There
+  // is no exception for a placeholder that looks fake, because the schema has
+  // no property to hold either.
+  const { res, parsed } = await validateMutated((doc) => {
+    doc.delivery = delivery();
+    doc.delivery.deployVariables = [
+      {
+        name: "DATABASE_URL",
+        purpose: "The Postgres connection the app reads and writes analyses through.",
+        file: "web/.env.example",
+        value: "postgres://user:hunter2@db.example.com/app",
+      },
+    ];
+  }, "delivery-variable-value");
+  assert.equal(res.status, 1);
+  assert.ok(
+    parsed.issues.some(
+      (i) =>
+        i.path === "/delivery/deployVariables/0" &&
+        i.keyword === "additionalProperties",
+    ),
+    res.stdout,
+  );
+});
+
+test("validate: the operational half has nowhere to go", { skip: skipNoSample }, async () => {
+  // The load-bearing half of ADR 0006. A prompt can be ignored between model
+  // versions; a schema with no field for a dashboard, a log query, a rollback
+  // procedure or an on-call rota cannot be. Each is rejected as a stray
+  // property on the section itself.
+  for (const key of ["dashboards", "logs", "rollback", "onCall", "operations"]) {
+    const { res, parsed } = await validateMutated((doc) => {
+      doc.delivery = delivery();
+      doc.delivery[key] = "Grafana, in the shared workspace.";
+    }, `delivery-operational-${key}`);
+    assert.equal(res.status, 1, `${key} was accepted`);
+    assert.ok(
+      parsed.issues.some(
+        (i) => i.path === "/delivery" && i.keyword === "additionalProperties",
+      ),
+      `${key}: ${res.stdout}`,
+    );
+  }
+});

@@ -118,6 +118,14 @@ export function FileChip({
         ? `:${startLine}-${endLine}`
         : `:${startLine}`
       : "";
+  // The last segment is emphasised and the rest is dimmed, so the eye lands on
+  // the file. Located rather than assumed to be the tail: a directory path is
+  // idiomatically written with a trailing slash (`web/drizzle/`), and slicing
+  // by length alone renders that as `web/ddrizzle`.
+  const name = basename(path);
+  const nameAt = path.lastIndexOf(name);
+  const before = nameAt >= 0 ? path.slice(0, nameAt) : path;
+  const after = nameAt >= 0 ? path.slice(nameAt + name.length) : "";
   const body = (
     <>
       <svg
@@ -136,12 +144,11 @@ export function FileChip({
         <path d="M9 1.5v4h4" />
       </svg>
       <span className="min-w-0 truncate">
-        <span className="text-muted">
-          {path.slice(0, path.length - basename(path).length)}
-        </span>
+        <span className="text-muted">{before}</span>
         <span className="text-text group-hover/chip:text-accent group-hover/chip:underline">
-          {basename(path)}
+          {name}
         </span>
+        {after ? <span className="text-muted">{after}</span> : null}
         {lines ? <span className="text-accent">{lines}</span> : null}
       </span>
     </>
