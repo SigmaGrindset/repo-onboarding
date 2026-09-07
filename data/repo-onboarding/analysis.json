@@ -2086,6 +2086,11 @@
         "use": "A single copy-pasteable command with a copy button beside it. Overlaps CodeBlock almost entirely — this pair is the repository's own worked example of what the reuse rule below exists to prevent."
       },
       {
+        "name": "HeaderLink",
+        "file": "web/src/components/HeaderLink.tsx",
+        "use": "A top-bar destination that knows whether it is the page you are on — it sets `aria-current` and grows a hairline underline rather than filling a pill, so the header keeps a sense of place without shouting."
+      },
+      {
         "name": "SkeletonLine",
         "file": "web/src/components/resilience.tsx",
         "use": "One pulsing bar, sized by a className. Every loading placeholder in the app is built from these rather than from a bespoke shimmer, so loading looks the same everywhere."
@@ -2117,7 +2122,7 @@
       }
     ],
     "reuseRule": {
-      "reuseWhen": "Read `web/src/components/ui.tsx` before writing anything — five primitives cover most of what a page needs, and their props already express the variants people usually fork a component to get: `Card` has `tone` and `radius`, `FileChip` has an optional `href` and line range, `Badge` takes its colour as a className. The rest sit beside it in `CodeBlock.tsx`, `CommandBlock.tsx`, `resilience.tsx` and `viewport.tsx`, and that is the whole set: anything under `web/src/components/` that renders one screen of the analysis document — `TourStepper`, `DependencyGraph`, `SectionNav` — is a feature component, not a primitive, and is not listed here. A shape that differs only in colour or corner radius is a prop, not a new component.",
+      "reuseWhen": "Read `web/src/components/ui.tsx` before writing anything — five primitives cover most of what a page needs, and their props already express the variants people usually fork a component to get: `Card` has `tone` and `radius`, `FileChip` has an optional `href` and line range, `Badge` takes its colour as a className. The rest sit beside it in `CodeBlock.tsx`, `CommandBlock.tsx`, `HeaderLink.tsx`, `resilience.tsx` and `viewport.tsx`, and that is the whole set. Two kinds of neighbour are deliberately not in it: a component that renders one section of the analysis document (`TourStepper`, `DependencyGraph`, `SectionNav`), and one that composes primitives into a particular screen's shape rather than offering a shape of its own (`AnalysisShellSkeleton`, which is `SkeletonLine` arranged into this app's shell). A shape that differs only in colour or corner radius is a prop, not a new component.",
       "createWhen": "Extract a primitive when a SECOND surface needs the same behaviour — not merely the same look. That is the test this repository actually applied: `viewport.tsx` was pulled out only once the dependency graph and the diagram canvas had drifted apart doing the same pan, zoom and fit. Markup repeated twice stays inline; two implementations of one interaction is the signal, and `CodeBlock` and `CommandBlock` are what it looks like when the signal is missed.",
       "newPrimitiveHome": "web/src/components/ui.tsx"
     }
