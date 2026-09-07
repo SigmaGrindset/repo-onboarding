@@ -167,3 +167,44 @@ is optional; where it exists it is a claim about the routes, so it carries the s
 coverage property as learning resources and is checked rather than trusted.
 _Avoid_: role — taken by tech stack entries, which name the role a technology plays —
 user, persona, permission
+
+## Design system
+
+**Design system**:
+How a repository's interface is built, as one section: its styling approach, its design
+token groups, its primitives, and its reuse rule. A specialized section — a repository
+that renders no interface has none, and no tab where one would be. So does one with a
+folder of components nobody can say when to add to: without a reuse rule there is no
+system, only components.
+_Avoid_: UI kit, component library (that is usually a dependency, not this repository's
+own), theme, styleguide
+
+**Styling approach**:
+The one way this repository writes styles — the mechanism and the convention that keeps it
+single. Prose, because the useful part is what a newcomer must not do instead.
+_Avoid_: CSS strategy, methodology, stack (the tech stack names the library; this names
+the practice)
+
+**Design token group**:
+One kind of design decision that has been given names — colour, spacing, typography,
+elevation, layering — with the file it is defined in, how a value from it is referenced in
+code, and a handful of example names. **Sampled, never enumerated**: the file is the
+inventory and stays correct; the group is the way in. Carries no values, so nothing here
+can go quietly stale.
+_Avoid_: token (a single one is not what is listed), variable, palette, theme
+
+**Primitive**:
+One component the interface is built from rather than one built for a screen — the thing a
+newcomer should find before writing a fourth of it. Listed **exhaustively** within the
+boundary the analysis engine draws, so that a component not listed is one that does not
+exist. Two of the same name in different files are two entries, because that is exactly
+what a reader needs to know.
+_Avoid_: component (every file in a React repository is one), atom, widget, element,
+building block
+
+**Reuse rule**:
+The judgement a newcomer would otherwise get wrong: when to reach for an existing
+primitive, and the test for when writing a new one is right instead. Usually unwritten, so
+it states the practice the code shows rather than a rule someone documented. Required —
+the section cannot exist without it.
+_Avoid_: guideline, convention, policy, contribution rule
