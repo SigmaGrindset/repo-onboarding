@@ -19,7 +19,7 @@
   ],
   "properties": {
     "schemaVersion": {
-      "description": "Semantic version of this analysis contract, so consumers can detect/evolve. Current: 1.2.0",
+      "description": "Semantic version of this analysis contract, so consumers can detect/evolve. Current: 1.3.0",
       "type": "string",
       "pattern": "^\\d+\\.\\d+\\.\\d+$"
     },
@@ -60,15 +60,15 @@
       "items": { "$ref": "#/$defs/LearningResourceEntry" }
     },
     "apiSurface": {
-      "description": "Everything this repository exposes to callers over the network. A SPECIALIZED section: present exactly when the repository has a real API, and absent entirely otherwise — an analysis engine that finds no routes omits the key rather than emitting an empty one. See docs/adr/0004-sections-are-declared-by-presence.md.",
+      "description": "Everything this repository exposes to callers over the network. Introduced in schema 1.3.0. A SPECIALIZED section: present exactly when the repository has a real API, and absent entirely otherwise — an analysis engine that finds no routes omits the key rather than emitting an empty one. See docs/adr/0004-sections-are-declared-by-presence.md.",
       "$ref": "#/$defs/ApiSurface"
     },
     "designSystem": {
-      "description": "How this repository's interface is built. A SPECIALIZED section: present exactly when the repository has a design system of its own, and absent entirely otherwise — an analysis engine that finds a handful of styles omits the key rather than emitting the section thin. See docs/adr/0004-sections-are-declared-by-presence.md and docs/adr/0005-design-system-judgement-not-inventory.md.",
+      "description": "How this repository's interface is built. Introduced in schema 1.3.0. A SPECIALIZED section: present exactly when the repository has a design system of its own, and absent entirely otherwise — an analysis engine that finds a handful of styles omits the key rather than emitting the section thin. See docs/adr/0004-sections-are-declared-by-presence.md and docs/adr/0005-design-system-judgement-not-inventory.md.",
       "$ref": "#/$defs/DesignSystem"
     },
     "delivery": {
-      "description": "How committed code reaches a running environment. A SPECIALIZED section: present exactly when the repository commits something about its own pipeline, and absent entirely otherwise. It stops at what is committed — there is no field here for a production dashboard, log access, a rollback procedure or an on-call rota, and that is the boundary rather than an oversight: the operational half is not in the repository, so an analysis engine asked for it invents it. See docs/adr/0004-sections-are-declared-by-presence.md and docs/adr/0006-delivery-stops-at-what-is-committed.md.",
+      "description": "How committed code reaches a running environment. Introduced in schema 1.3.0. A SPECIALIZED section: present exactly when the repository commits something about its own pipeline, and absent entirely otherwise. It stops at what is committed — there is no field here for a production dashboard, log access, a rollback procedure or an on-call rota, and that is the boundary rather than an oversight: the operational half is not in the repository, so an analysis engine asked for it invents it. See docs/adr/0004-sections-are-declared-by-presence.md and docs/adr/0006-delivery-stops-at-what-is-committed.md.",
       "$ref": "#/$defs/Delivery"
     },
     "firstTasks": {

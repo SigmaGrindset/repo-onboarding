@@ -739,17 +739,17 @@ test("the real registry now reads a second section through the same rule", () =>
 
   // Gained between two documents that could both have carried one.
   assert.equal(
-    designDelta(diffAnalyses(docAt("1.4.0"), withDesign(docAt("1.4.0"))))?.kind,
+    designDelta(diffAnalyses(docAt("1.3.0"), withDesign(docAt("1.3.0"))))?.kind,
     "added",
   );
   // The base predates the section, so its silence is the contract's.
   assert.equal(
-    designDelta(diffAnalyses(docAt("1.3.0"), withDesign(docAt("1.4.0"))))?.kind,
+    designDelta(diffAnalyses(docAt("1.2.0"), withDesign(docAt("1.3.0"))))?.kind,
     "newly-present",
   );
   // And a repository can gain both sections at once, each read by the same rule.
   assert.deepEqual(
-    diffAnalyses(docAt("1.4.0"), withDesign(docAt("1.4.0", someRoutes()))).sections
+    diffAnalyses(docAt("1.3.0"), withDesign(docAt("1.3.0", someRoutes()))).sections
       .deltas,
     [
       { slug: "api", label: "API Surface", kind: "added" },
@@ -786,23 +786,23 @@ test("the real registry now reads a third section through the same rule", () => 
 
   // Gained between two documents that could both have carried one.
   assert.equal(
-    deliveryDelta(diffAnalyses(docAt("1.5.0"), withDelivery(docAt("1.5.0"))))?.kind,
+    deliveryDelta(diffAnalyses(docAt("1.3.0"), withDelivery(docAt("1.3.0"))))?.kind,
     "added",
   );
   // The base predates the section, so its silence is the contract's.
   assert.equal(
-    deliveryDelta(diffAnalyses(docAt("1.4.0"), withDelivery(docAt("1.5.0"))))?.kind,
+    deliveryDelta(diffAnalyses(docAt("1.2.0"), withDelivery(docAt("1.3.0"))))?.kind,
     "newly-present",
   );
   // A repository that stopped committing a pipeline really did lose one.
   assert.equal(
-    deliveryDelta(diffAnalyses(withDelivery(docAt("1.5.0")), docAt("1.5.0")))?.kind,
+    deliveryDelta(diffAnalyses(withDelivery(docAt("1.3.0")), docAt("1.3.0")))?.kind,
     "removed",
   );
   // And the deltas stay in reading order: delivery follows setup, so it sorts
   // after the two sections that join the structural block.
   assert.deepEqual(
-    diffAnalyses(docAt("1.5.0"), withDelivery(docAt("1.5.0", someRoutes()))).sections
+    diffAnalyses(docAt("1.3.0"), withDelivery(docAt("1.3.0", someRoutes()))).sections
       .deltas.map((d) => d.slug),
     ["api", "delivery"],
   );

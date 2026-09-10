@@ -34,7 +34,11 @@ function fixture(name: string): Analysis {
   ) as Analysis;
 }
 
-/** Every document in the repository today: 1.2.0, no specialized keys. */
+/**
+ * The documents that carry no specialized key: all three at 1.2.0, the contract
+ * before any specialized section existed. `repo-onboarding` is deliberately not
+ * among them — it is the one committed document that carries all three.
+ */
 const FIXTURE_NAMES = ["sample", "express", "fer-mentor"] as const;
 
 /** The sections every document showed before the list became derived. */
@@ -56,14 +60,19 @@ const TODAYS_SECTIONS = [
  * Every specialized section that ships: the key each is declared by, and the
  * contract version that introduced it. Restated here rather than read from the
  * registry, so that changing either in the registry has to be meant.
+ *
+ * All three share 1.3.0 because all three were released together. That is a
+ * fact about one release rather than a rule, so they are listed separately
+ * here: a fourth section arriving later gets its own version, and nothing in
+ * the viewer should come to assume the specialized sections share one.
  */
 const EXPECTED_SPECIALIZED: Record<
   string,
   { key: keyof Analysis; since: string }
 > = {
   api: { key: "apiSurface", since: "1.3.0" },
-  design: { key: "designSystem", since: "1.4.0" },
-  delivery: { key: "delivery", since: "1.5.0" },
+  design: { key: "designSystem", since: "1.3.0" },
+  delivery: { key: "delivery", since: "1.3.0" },
 };
 
 test("a section is specialized exactly when it is one of the known few", () => {
@@ -269,18 +278,24 @@ const DESIGN_SECTION = ANALYSIS_SECTIONS.find(
   (s): s is SpecializedSection => s.class === "specialized" && s.slug === "design",
 )!;
 
-test("a document declaring a contract older than 1.4.0 could not have carried a design system", () => {
-  const old = { ...fixture("sample"), schemaVersion: "1.3.0" };
+test("a document predating the design system's contract could not have carried one", () => {
+  // 1.2.0 is the last contract with no specialized section in it at all, which
+  // is what makes it the honest "before" here. The "after" is read from the
+  // registry rather than written down, so this does not rot at the next release.
+  const old = { ...fixture("sample"), schemaVersion: "1.2.0" };
   assert.equal(canExpressSection(old, DESIGN_SECTION), false);
 
-  const current = { ...fixture("sample"), schemaVersion: "1.4.0" };
+  const current = { ...fixture("sample"), schemaVersion: DESIGN_SECTION.since };
   assert.equal(canExpressSection(current, DESIGN_SECTION), true);
 });
 
 test("carrying a design system beats whatever version a document claims", () => {
-  // Written while the section was still unreleased: it says 1.2.0 and carries
-  // one anyway, and nothing may read that as a repository that lost something.
-  const doc = fixture("repo-onboarding");
+  // No committed document is in this state any more: 1.3.0 released all three
+  // specialized sections, so a document carrying one now declares a contract
+  // that allowed it. The rule still has to hold, because a document written
+  // anywhere else can carry a key while claiming an older contract, and nothing
+  // may read that as a repository that lost something.
+  const doc = withDesignSystem({ ...fixture("sample"), schemaVersion: "1.2.0" });
   assert.ok(compareSchemaVersions(doc.schemaVersion, DESIGN_SECTION.since) < 0);
   assert.equal(canExpressSection(doc, DESIGN_SECTION), true);
 });
@@ -357,18 +372,18 @@ const DELIVERY_SECTION = ANALYSIS_SECTIONS.find(
   (s): s is SpecializedSection => s.class === "specialized" && s.slug === "delivery",
 )!;
 
-test("a document declaring a contract older than 1.5.0 could not have carried delivery", () => {
-  const old = { ...fixture("sample"), schemaVersion: "1.4.0" };
+test("a document predating delivery's contract could not have carried the section", () => {
+  const old = { ...fixture("sample"), schemaVersion: "1.2.0" };
   assert.equal(canExpressSection(old, DELIVERY_SECTION), false);
 
-  const current = { ...fixture("sample"), schemaVersion: "1.5.0" };
+  const current = { ...fixture("sample"), schemaVersion: DELIVERY_SECTION.since };
   assert.equal(canExpressSection(current, DELIVERY_SECTION), true);
 });
 
 test("carrying a delivery section beats whatever version a document claims", () => {
-  // Written while the section was still unreleased: it says 1.2.0 and carries
-  // one anyway, and nothing may read that as a repository that lost something.
-  const doc = fixture("repo-onboarding");
+  // As with the design system above: a document from outside this repository
+  // can carry the key while claiming a contract that predates it.
+  const doc = withDelivery({ ...fixture("sample"), schemaVersion: "1.2.0" });
   assert.ok(compareSchemaVersions(doc.schemaVersion, DELIVERY_SECTION.since) < 0);
   assert.equal(canExpressSection(doc, DELIVERY_SECTION), true);
 });
@@ -393,14 +408,15 @@ test("a document declaring an older contract could not have carried the section"
   const old = { ...fixture("sample"), schemaVersion: "1.2.0" };
   assert.equal(canExpressSection(old, API_SECTION), false);
 
-  const current = { ...fixture("sample"), schemaVersion: "1.3.0" };
+  const current = { ...fixture("sample"), schemaVersion: API_SECTION.since };
   assert.equal(canExpressSection(current, API_SECTION), true);
 });
 
 test("carrying the section beats whatever version a document claims", () => {
-  // `repo-onboarding` is a real document with a real API surface, written while
-  // the section was still unreleased: it says 1.2.0 and carries one anyway.
-  const doc = fixture("repo-onboarding");
+  // A document carrying an API surface while declaring the contract before the
+  // one that introduced it. Presence wins, so the next run dropping the section
+  // is a real removal rather than a difference between two contracts.
+  const doc = withApiSurface({ ...fixture("sample"), schemaVersion: "1.2.0" });
   assert.ok(compareSchemaVersions(doc.schemaVersion, API_SECTION.since) < 0);
   assert.equal(canExpressSection(doc, API_SECTION), true);
 });

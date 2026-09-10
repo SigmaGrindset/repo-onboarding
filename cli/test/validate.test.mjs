@@ -1128,3 +1128,46 @@ test("validate: the operational half has nowhere to go", { skip: skipNoSample },
     );
   }
 });
+
+// ---------------------------------------------------------------------------
+// Contract 1.3.0: what the release promises documents on either side of it
+// ---------------------------------------------------------------------------
+
+test("validate: a 1.2.0 document validates unchanged against the 1.3.0 contract", { skip: skipNoSample }, async () => {
+  // The three specialized sections arrived together in 1.3.0 as optional keys,
+  // so every document written against the previous contract stays valid with no
+  // migration. The sample is a real 1.2.0 document, which is what makes this a
+  // regression test rather than a restatement of the schema.
+  const doc = JSON.parse(readFileSync(SAMPLE, "utf8"));
+  assert.equal(doc.schemaVersion, "1.2.0", "the sample is no longer a 1.2.0 document");
+
+  const res = await runCli(["validate", SAMPLE, "--json"]);
+  assert.equal(res.status, 0, res.stdout);
+  assert.deepEqual(JSON.parse(res.stdout).issues, []);
+});
+
+test("validate: a document from a newer contract warns rather than failing", { skip: skipNoSample }, async () => {
+  // An installed copy of this package meeting a document from a contract it
+  // predates. Rejecting it would strand a reader whose only fault is that their
+  // package is behind, so validation still runs and the warning goes to stderr,
+  // leaving --json output on stdout machine-readable.
+  const { res, parsed } = await validateMutated((doc) => {
+    doc.schemaVersion = "9.9.9";
+  }, "newer-contract");
+
+  assert.equal(res.status, 0, res.stdout);
+  assert.deepEqual(parsed.issues, []);
+  assert.match(res.stderr, /9\.9\.9 is newer than this CLI's supported 1\.3\.0/);
+});
+
+test("validate: a document at the supported contract warns about nothing", { skip: skipNoSample }, async () => {
+  // The other half of the warning: it fires on documents from a NEWER contract,
+  // not on the one this package targets. Without this, a comparator that read
+  // "not older" as "newer" would warn on every document the CLI just produced.
+  const { res } = await validateMutated((doc) => {
+    doc.schemaVersion = "1.3.0";
+  }, "current-contract");
+
+  assert.equal(res.status, 0, res.stdout);
+  assert.doesNotMatch(res.stderr, /newer than this CLI/);
+});

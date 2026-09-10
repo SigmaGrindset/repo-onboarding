@@ -338,8 +338,8 @@ Write the document to:
 data/<repo-name>/analysis.json
 ```
 (under the repo-onboarding project root). Constants:
-- `schemaVersion`: `"1.2.0"` — the contract this skill is written against
-- `metadata.analyzerVersion`: `"onboard/0.2.0"`
+- `schemaVersion`: `"1.3.0"` — the contract this skill is written against
+- `metadata.analyzerVersion`: `"onboard/0.3.0"`
 - `metadata.analyzedAt`: current UTC time, RFC 3339 (e.g. `2026-07-11T14:22:05Z`)
 
 Fill `metadata.stats`, `commitSha`, `repoUrl` from the pre-pass per Step 2. Create the

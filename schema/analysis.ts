@@ -6,7 +6,7 @@
  * The schema is the source of truth for validation; these types are the source
  * of truth for compile-time safety in the skill and the web viewer.
  *
- * Contract version: schemaVersion "1.2.0".
+ * Contract version: schemaVersion "1.3.0".
  */
 
 /** Semantic version string, e.g. "1.0.0". */
@@ -39,25 +39,26 @@ export interface Analysis {
    */
   learningResources?: LearningResourceEntry[];
   /**
-   * Everything this repository exposes to callers over the network. A
-   * SPECIALIZED section: present exactly when the repository has a real API,
-   * absent entirely otherwise — the viewer shows no tab and no empty state.
-   * See `docs/adr/0004-sections-are-declared-by-presence.md`.
+   * Everything this repository exposes to callers over the network. Introduced
+   * in schema 1.3.0. A SPECIALIZED section: present exactly when the repository
+   * has a real API, absent entirely otherwise — the viewer shows no tab and no
+   * empty state. See `docs/adr/0004-sections-are-declared-by-presence.md`.
    */
   apiSurface?: ApiSurface;
   /**
-   * How this repository's interface is built. A SPECIALIZED section: present
-   * exactly when the repository has a design system of its own, absent entirely
-   * otherwise — the viewer shows no tab and no empty state.
-   * See `docs/adr/0005-design-system-judgement-not-inventory.md`.
+   * How this repository's interface is built. Introduced in schema 1.3.0. A
+   * SPECIALIZED section: present exactly when the repository has a design
+   * system of its own, absent entirely otherwise — the viewer shows no tab and
+   * no empty state. See `docs/adr/0005-design-system-judgement-not-inventory.md`.
    */
   designSystem?: DesignSystem;
   /**
-   * How committed code reaches a running environment. A SPECIALIZED section:
-   * present exactly when the repository commits something about its own
-   * pipeline, absent entirely otherwise — the viewer shows no tab and no empty
-   * state. It stops at what is committed, which is a boundary rather than an
-   * omission. See `docs/adr/0006-delivery-stops-at-what-is-committed.md`.
+   * How committed code reaches a running environment. Introduced in schema
+   * 1.3.0. A SPECIALIZED section: present exactly when the repository commits
+   * something about its own pipeline, absent entirely otherwise — the viewer
+   * shows no tab and no empty state. It stops at what is committed, which is a
+   * boundary rather than an omission.
+   * See `docs/adr/0006-delivery-stops-at-what-is-committed.md`.
    */
   delivery?: Delivery;
   /** Suggested first tasks for a new contributor. */

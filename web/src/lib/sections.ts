@@ -86,11 +86,9 @@ export const ANALYSIS_SECTIONS: AnalysisSection[] = [
     label: "API Surface",
     class: "specialized",
     key: "apiSurface",
-    // The contract is still labelled 1.2.0 until the release ticket bumps it,
-    // so documents this repository generates today carry a surface and declare
-    // 1.2.0 anyway. `canExpressSection` reads presence first for exactly that
-    // reason; until the bump lands, two 1.2.0 documents cannot be told apart
-    // from two that predate the section, and neither is called a removal.
+    // 1.3.0 is the contract that introduced all three specialized sections at
+    // once: they were built in sequence but released together, so there is no
+    // contract a reader can hold that has one of them and not the others.
     since: "1.3.0",
   },
   {
@@ -101,12 +99,7 @@ export const ANALYSIS_SECTIONS: AnalysisSection[] = [
     // After the API surface rather than beside Delivery: both describe what a
     // repository is made of, and grouping the specialized sections together
     // would organise the nav around a distinction a reader cannot see.
-    //
-    // 1.4.0 is unreleased until the release ticket bumps the contract, so — as
-    // with the API surface above — a document generated today carries a design
-    // system and still declares 1.2.0. Presence is read first for exactly that
-    // reason, and nothing calls such a document a removal.
-    since: "1.4.0",
+    since: "1.3.0",
   },
   { slug: "guide", label: "Contributor Guide", class: "core" },
   { slug: "tour", label: "Guided Tour", class: "core" },
@@ -120,12 +113,7 @@ export const ANALYSIS_SECTIONS: AnalysisSection[] = [
     // Straight after setup rather than beside the other two specialized
     // sections: setup is how the repository runs locally, delivery is how it
     // runs everywhere else, and a reader meets them in that order.
-    //
-    // 1.5.0 is unreleased until the release ticket bumps the contract, so — as
-    // with the two above — a document generated today carries a delivery
-    // section and still declares 1.2.0. Presence is read first for exactly
-    // that reason, and nothing calls such a document a removal.
-    since: "1.5.0",
+    since: "1.3.0",
   },
   { slug: "learn", label: "Learn", class: "core" },
   { slug: "tasks", label: "First Tasks", class: "core" },
