@@ -6,8 +6,9 @@
  *  - cloud mode: Clerk protects everything except the home page, Clerk's own
  *    sign-in/sign-up routes, and unlisted-link analysis URLs
  *    (`/analysis/st_<uuid-token>`), which are viewable without an account — the
- *    secret token is the capability. Every other `/analysis/*`, `/upload` and
- *    all `/api/*` still require auth.
+ *    secret token is the capability — plus the public demo analysis and its
+ *    Markdown download (`@/lib/demo`). Every other `/analysis/*`, `/upload` and
+ *    all other `/api/*` still require auth.
  *
  * `@clerk/nextjs/server` is imported dynamically, only in cloud mode, so the
  * Edge bundle stays lean and local mode never evaluates Clerk code. Clerk 7 on
@@ -17,6 +18,7 @@
 import { NextResponse } from "next/server";
 import type { NextFetchEvent, NextRequest } from "next/server";
 import { isCloudMode } from "@/lib/mode";
+import { DEMO_PUBLIC_ROUTES } from "@/lib/demo";
 
 type ProxyFn = (
   req: NextRequest,
@@ -49,6 +51,10 @@ async function getCloudHandler(): Promise<ProxyFn> {
     // is the capability (re-checked by the analysis fetch), so Clerk must not
     // redirect it to sign-in.
     /^\/api\/analyses\/st_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/markdown$/i,
+    // The public example analysis offered on the signed-out home page: its
+    // pages and Markdown download, nothing else (chat and progress need an
+    // account).
+    ...DEMO_PUBLIC_ROUTES,
   ]);
   cloudHandler = clerkMiddleware(async (auth, req) => {
     if (!isPublic(req)) {

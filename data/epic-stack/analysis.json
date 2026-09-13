@@ -1,0 +1,3191 @@
+{
+  "schemaVersion": "1.3.0",
+  "metadata": {
+    "repoName": "epic-stack",
+    "repoUrl": "https://github.com/epicweb-dev/epic-stack",
+    "analyzedAt": "2026-09-10T06:35:52Z",
+    "analyzerVersion": "onboard/0.3.0",
+    "commitSha": "8473afd804b66dba6a23f317908dc35d1535e90d",
+    "primaryLanguage": "TypeScript",
+    "stats": {
+      "totalFiles": 367,
+      "totalLoc": 44194,
+      "languages": [
+        {
+          "language": "JSON",
+          "files": 7,
+          "loc": 19910,
+          "percentage": 45.1
+        },
+        {
+          "language": "TypeScript",
+          "files": 154,
+          "loc": 13064,
+          "percentage": 29.6
+        },
+        {
+          "language": "Markdown",
+          "files": 101,
+          "loc": 10072,
+          "percentage": 22.8
+        },
+        {
+          "language": "JavaScript",
+          "files": 3,
+          "loc": 337,
+          "percentage": 0.8
+        },
+        {
+          "language": "SQL",
+          "files": 2,
+          "loc": 257,
+          "percentage": 0.6
+        },
+        {
+          "language": "YAML",
+          "files": 2,
+          "loc": 224,
+          "percentage": 0.5
+        },
+        {
+          "language": "CSS",
+          "files": 1,
+          "loc": 185,
+          "percentage": 0.4
+        },
+        {
+          "language": "Dockerfile",
+          "files": 1,
+          "loc": 68,
+          "percentage": 0.2
+        },
+        {
+          "language": "TOML",
+          "files": 2,
+          "loc": 54,
+          "percentage": 0.1
+        },
+        {
+          "language": "Config",
+          "files": 2,
+          "loc": 23,
+          "percentage": 0.1
+        }
+      ]
+    }
+  },
+  "pitch": {
+    "summary": "The Epic Stack is Kent C. Dodds's opinionated full-stack starter and reference application, and this repository is the template itself. It ships as a working app called Epic Notes: server-rendered React Router 7 on an Express server, SQLite through Prisma replicated across Fly.io machines with LiteFS, and notes whose images live in S3-compatible Tigris storage. Around that deliberately small domain it implements the parts most products need and few get right on the first try: email signup with emailed one-time codes, password reset, GitHub OAuth, passkeys, TOTP two-factor, role-based permissions, a two-tier cache, tiered rate limiting, and a GitHub Actions workflow that tests every change and deploys `main` to production and `dev` to staging. `npx epicli` generates a new project from it and runs remix.init to rename the app and optionally provision Fly.",
+    "audience": "Developers who generated an app from the Epic Stack (or are evaluating it) and need to know where authentication, data access, styling and deployment live before they change them, and contributors to the template itself, whose design decisions are recorded one per file in docs/decisions.",
+    "techStack": [
+      {
+        "name": "TypeScript",
+        "category": "language",
+        "role": "Every module in app/, server/ and tests/ is TypeScript (ADR 001 makes the stack TypeScript-only), and imports resolve through the package.json `#app/*` and `#tests/*` subpath map rather than tsconfig paths."
+      },
+      {
+        "name": "React",
+        "category": "library",
+        "role": "Renders every route module on the server with renderToPipeableStream in app/entry.server.tsx and hydrates in the browser; UI state is kept in forms, fetchers and the URL rather than client-side stores."
+      },
+      {
+        "name": "React Router",
+        "category": "framework",
+        "role": "Framework mode v7: route modules export loader, action, meta, handle and ErrorBoundary; `react-router build` produces build/server and build/client; react-router-auto-routes turns the app/routes folder tree into the route manifest."
+      },
+      {
+        "name": "Express",
+        "category": "framework",
+        "role": "The HTTP server in server/index.ts: HTTPS and trailing-slash redirects, compression, security headers, three rate-limit tiers and static assets, before handing every request to @react-router/express."
+      },
+      {
+        "name": "Prisma",
+        "category": "library",
+        "role": "ORM for the SQLite application database: schema in prisma/schema.prisma, migrations in prisma/migrations (the initial one also inserts the admin and user roles), and TypedSQL for the raw user-search query in prisma/sql."
+      },
+      {
+        "name": "SQLite",
+        "category": "database",
+        "role": "Both datastores: Prisma's application database and a separate cache database that app/utils/cache.server.ts opens directly with node:sqlite; other/litefs.yml puts both in WAL mode when a deployed primary boots."
+      },
+      {
+        "name": "LiteFS",
+        "category": "infra",
+        "role": "Replicates the SQLite files across Fly machines: other/litefs.yml elects a primary through Consul, runs migrations only on the primary candidate, and fronts the app with a proxy that forwards write requests to the primary."
+      },
+      {
+        "name": "Fly.io",
+        "category": "platform",
+        "role": "Deploy target: fly.toml defines the volume, service ports and health checks, and the GitHub workflow builds the image with flyctl and deploys `main` to the app and `dev` to its `-staging` twin."
+      },
+      {
+        "name": "Tailwind CSS",
+        "category": "library",
+        "role": "Version 4, configured entirely in app/styles/tailwind.css: semantic colour custom properties with light and `.dark` values, a named type scale and animations declared with @theme, and a class-based dark variant."
+      },
+      {
+        "name": "shadcn/ui",
+        "category": "tooling",
+        "role": "The source registry behind app/components/ui: components.json points its CLI at the Tailwind file and `#app/components/ui`, and downloaded components are edited in place rather than updated as a dependency."
+      },
+      {
+        "name": "Radix UI",
+        "category": "library",
+        "role": "Headless behaviour and accessibility under the checkbox, dropdown menu, label and tooltip primitives, plus the Slot that gives Button its `asChild` prop; only files in app/components/ui import it."
+      },
+      {
+        "name": "Conform",
+        "category": "library",
+        "role": "Progressively enhanced forms: every action validates FormData with parseWithZod, and useForm wires field props and the action's `submission.reply()` errors back into the Field components."
+      },
+      {
+        "name": "Vite",
+        "category": "tooling",
+        "role": "Builds the app through the React Router plugin, runs as Express middleware in development, generates the SVG icon sprite, and loads the Sentry plugin only for production builds that have an auth token."
+      },
+      {
+        "name": "Vitest",
+        "category": "tooling",
+        "role": "Unit and component tests colocated as app/**/*.test.ts(x), each worker copying a pre-migrated SQLite file and failing any test that logs console.error or console.warn."
+      },
+      {
+        "name": "Playwright",
+        "category": "tooling",
+        "role": "End-to-end tests in tests/e2e, run in CI against the built app started with `npm run start:mocks`, using fixtures that insert a user and a session cookie instead of clicking through login."
+      },
+      {
+        "name": "MSW",
+        "category": "tooling",
+        "role": "Intercepts Resend, GitHub, Tigris and Have I Been Pwned calls both in tests and in `npm run dev` (MOCKS=true), so the app runs offline with the fake values in .env.example."
+      }
+    ]
+  },
+  "architecture": [
+    {
+      "title": "Request path: Express first, then React Router",
+      "body": "`index.ts` is the process entry: it installs source-map support, imports the MSW server when `MOCKS=true`, then imports `server/index.ts`. That file builds one Express app and layers, in order: an HTTPS redirect driven by Fly's `X-Forwarded-Proto`, a trailing-slash redirect, compression, `@nichtsam/helmet` security headers, a 404 handler for `/img/*` and `/favicons/*`, `morgan` logging, and three `express-rate-limit` tiers — 10 requests a minute for non-GET requests whose path contains login, signup, verify, onboarding, reset-password, settings/profile or admin (and for GETs to `/verify`), 100 for other non-GET requests, 1000 for everything else. Outside production every limit is multiplied by 10,000.\n\nIn development it mounts Vite in middleware mode and loads `server/app.ts` through `ssrLoadModule` on every request, so route edits need no restart. In production it serves `build/client` (fingerprinted `/assets` with a one-year immutable cache) and imports `build/server/index.js`, which Vite built from `server/app.ts`. Either way `server/app.ts` is only `createRequestHandler` from `@react-router/express`.\n\nReact Router runs the root loader and the matched route loaders, or the matched action, and `app/entry.server.tsx` streams the document: it generates a CSP nonce, sets a report-only Content-Security-Policy, waits for `onAllReady` for bots and `onShellReady` for people, and stamps Fly region and LiteFS primary headers on document and data responses. `app/root.tsx`'s loader is the one place that loads the signed-in user (with roles and permissions), the theme cookie, the flash toast, honeypot props and the public `ENV`; components read the user from it with `useOptionalUser()`.\n\nDeployed, two proxies sit in front of Express: Fly's edge sends traffic to internal port 8080, where the LiteFS proxy listens and forwards to the app on 8081, sending write requests to the primary machine.",
+      "diagram": {
+        "type": "flowchart",
+        "title": "From browser to route module",
+        "source": "flowchart TB\n  browser[\"Browser\"] --> fly[\"Fly edge, ports 80 and 443\"]\n  fly --> litefs[\"LiteFS proxy :8080<br/>other/litefs.yml, deployed only\"]\n  litefs --> express[\"Express :8081<br/>server/index.ts\"]\n  express --> redirects[\"HTTPS and trailing-slash redirects\"]\n  redirects --> headers[\"compression, helmet headers, morgan\"]\n  headers --> limits[\"express-rate-limit tiers\"]\n  limits -->|development| vite[\"Vite middleware<br/>ssrLoadModule server/app.ts\"]\n  limits -->|production| statics[\"express.static build/client\"]\n  statics --> bundle[\"build/server/index.js\"]\n  vite --> handler[\"createRequestHandler<br/>server/app.ts\"]\n  bundle --> handler\n  handler --> rootLoader[\"app/root.tsx loader<br/>user, theme, toast, ENV\"]\n  handler --> routeModule[\"app/routes loader or action\"]\n  rootLoader --> render[\"app/entry.server.tsx<br/>nonce, report-only CSP, streamed HTML\"]\n  routeModule --> render"
+      }
+    },
+    {
+      "title": "Route modules and the server-only utilities they call",
+      "body": "Routes are files under `app/routes/`, turned into a manifest by `react-router-auto-routes` (`app/routes.ts`). Folders prefixed with `_` (`_auth`, `_marketing`, `_seo`) group files without adding a URL segment, `$` marks a parameter, `_layout.tsx` wraps its sibling routes, a trailing `_` escapes nesting (`$noteId_.edit.tsx` is `/users/:username/notes/:noteId/edit` but does not render inside the note view), `[.]` escapes a dot (`robots[.]txt.ts`), and `+` folders hold colocated modules that never become routes (`notes/+shared/note-editor.tsx`). Anything named `*.server.*` is ignored as a route, which is how route-specific server logic sits beside its route: `_auth/verify.server.ts`, `_auth/login.server.ts`, `settings/profile/change-email.server.tsx`.\n\nShared server code is one module per concern in `app/utils/*.server.ts`: `auth.server.ts` (sessions, login, signup, password hashing, the common-password check), `permissions.server.ts`, `db.server.ts` (the Prisma singleton), `cache.server.ts`, `storage.server.ts` (hand-signed S3 requests to Tigris), `email.server.ts` (Resend over fetch), `toast.server.ts` and `honeypot.server.ts`. There is no auth middleware: each loader and action calls a guard itself, and a layout loader's guard does not protect a child route's action, which is why every action under `settings/profile` calls `requireUserId` again. Resource routes under `app/routes/resources/` are loaders and actions with no UI: image optimisation, the health check, the theme cookie and the personal data export.",
+      "diagram": {
+        "type": "flowchart",
+        "title": "Which route groups call which utilities",
+        "source": "flowchart LR\n  subgraph routes[\"app/routes\"]\n    authRoutes[\"_auth: login, signup, verify, onboarding, OAuth, passkeys\"]\n    notesRoutes[\"users/$username/notes\"]\n    settingsRoutes[\"settings/profile\"]\n    resourceRoutes[\"resources: images, healthcheck, theme-switch\"]\n    adminRoutes[\"admin/cache\"]\n  end\n  verifyServer[\"_auth/verify.server.ts\"]\n  authServer[\"utils/auth.server.ts\"]\n  permServer[\"utils/permissions.server.ts\"]\n  dbServer[\"utils/db.server.ts\"]\n  cacheServer[\"utils/cache.server.ts\"]\n  storageServer[\"utils/storage.server.ts\"]\n  emailServer[\"utils/email.server.ts\"]\n  authRoutes --> authServer\n  authRoutes --> verifyServer\n  authRoutes --> emailServer\n  settingsRoutes --> authServer\n  settingsRoutes --> verifyServer\n  settingsRoutes --> storageServer\n  notesRoutes --> authServer\n  notesRoutes --> permServer\n  notesRoutes --> storageServer\n  resourceRoutes --> storageServer\n  adminRoutes --> permServer\n  adminRoutes --> cacheServer\n  cacheServer -->|replica writes| adminRoutes\n  permServer --> authServer\n  authServer --> dbServer\n  authServer --> storageServer\n  verifyServer --> dbServer\n  dbServer --> appDb[(\"SQLite app database\")]\n  cacheServer --> cacheDb[(\"SQLite cache database\")]\n  storageServer --> tigris([\"Tigris S3\"])\n  emailServer --> resend([\"Resend API\"])"
+      }
+    },
+    {
+      "title": "Identity: session rows, one-time codes and second factors",
+      "body": "Sign-in state is a database row, not a token. `login()`, `signup()`, the passkey flow and the GitHub callback all create a `Session` row and put only its id in the `en_session` cookie, signed with `SESSION_SECRET`. `getUserId()` looks that row up on every request and treats a missing or expired row as a forced logout. `requireUserId`, `requireAnonymous`, `requireUserWithRole` and `requireUserWithPermission` are the whole guard vocabulary.\n\nEverything that must prove control of an email address or an authenticator goes through one mechanism. `prepareVerification()` in `_auth/verify.server.ts` upserts a `Verification` row holding a TOTP secret, keyed by `target` and `type`, and returns a six-character code plus a `/verify` URL to email. The `/verify` action checks the code against that row and dispatches on `type` — `onboarding`, `reset-password`, `change-email` or `2fa` — to a handler colocated with the feature. What a handler proves is carried to the next step in a separate `en_verification` cookie with a ten-minute max age: the email being onboarded, the username being reset, or a session still waiting for its second factor.\n\nTwo-factor reuses the same table. Enabling it stores a `2fa-verify` row that becomes `2fa` once the user confirms a code from their app. At login, `handleNewSession()` in `_auth/login.server.ts` looks for that row; if it exists, the new session id is parked in `en_verification` and the user is sent to `/verify?type=2fa` instead of receiving `en_session`. Sensitive settings pages call `requireRecentVerification()`, which sends 2FA users back through `/verify` when their last verification is older than the window `shouldRequestTwoFA()` computes.",
+      "diagram": {
+        "type": "sequence",
+        "title": "Email signup through /verify and /onboarding",
+        "source": "sequenceDiagram\n  actor V as Visitor\n  participant S as /signup action\n  participant P as prepareVerification\n  participant DB as SQLite\n  participant R as Resend\n  participant Vf as /verify action\n  participant O as /onboarding action\n  V->>S: POST email, honeypot checked\n  S->>P: type onboarding, target email, 10 minutes\n  P->>DB: upsert Verification with TOTP secret\n  S->>R: send email with code and verify link\n  S-->>V: redirect to /verify\n  V->>Vf: POST six-character code\n  Vf->>DB: check TOTP, delete Verification\n  Vf-->>V: en_verification cookie holds email, redirect /onboarding\n  V->>O: POST username, name, password\n  O->>DB: create User, Password and Session with role user\n  O-->>V: en_session cookie set, en_verification destroyed, toast"
+      }
+    },
+    {
+      "title": "Data and replication: one writable primary, and a cache that knows it",
+      "body": "`prisma/schema.prisma` models a small domain — a `User` owns `Note`s, each with `NoteImage`s, plus one optional `UserImage` — and a larger identity model: `Password` (a bcrypt hash), `Session`, `Connection` (OAuth accounts), `Passkey`, `Verification`, and many-to-many `Role` and `Permission`. Images are not stored in the database: rows hold an `objectKey` into Tigris, and `/resources/images` fetches the object with a signed GET and resizes it with openimg, caching results on disk. The `admin` and `user` roles and their sixteen permissions (create, read, update, delete × user, note × own, any) are inserted by the initial migration SQL, not by `prisma/seed.ts`: `user` holds the eight `own` variants and `admin` the eight `any` variants, so every environment has them after `prisma migrate deploy`.\n\nIn production both SQLite files sit on a LiteFS FUSE mount and replicate to every machine, but only the primary — elected through Consul among machines whose region equals `PRIMARY_REGION` — can write. `other/litefs.yml` runs `prisma migrate deploy` and the WAL pragmas only on the primary candidate, then `npm start` everywhere. The LiteFS proxy forwards write requests (POST and friends) to the primary, but a GET loader that writes must call `ensurePrimary()` itself, as the OAuth callback does. The cache follows the same rule by hand: `app/utils/cache.server.ts` offers an in-memory LRU and a SQLite-backed `cache` for `cachified`; on a replica, `cache.set` and `cache.delete` POST the change to the primary's `/admin/cache/sqlite` with a Bearer `INTERNAL_COMMAND_TOKEN`, a value the Dockerfile generates for every image.",
+      "diagram": {
+        "type": "flowchart",
+        "title": "Primary, replicas and the cache write path",
+        "source": "flowchart LR\n  consul([\"Fly Consul lease\"])\n  subgraph primaryRegion[\"Machines in PRIMARY_REGION\"]\n    primary[\"Primary instance\"]\n  end\n  replica[\"Replica instance\"]\n  primary -.->|holds lease| consul\n  replica -.->|watches lease| consul\n  primary -->|\"at boot: prisma migrate deploy, WAL pragmas\"| files[(\"sqlite.db and cache.db on the LiteFS mount\")]\n  files ==>|LiteFS replication| replicaFiles[(\"read-only copies\")]\n  replica --> replicaFiles\n  replica -->|\"POST, PUT, DELETE forwarded by the LiteFS proxy\"| primary\n  replica -->|\"cache.set or delete: POST /admin/cache/sqlite with Bearer INTERNAL_COMMAND_TOKEN\"| primary\n  callback[\"GET /auth/:provider/callback\"] -->|ensurePrimary| primary"
+      }
+    }
+  ],
+  "dependencyGraph": {
+    "nodes": [
+      {
+        "id": "index",
+        "label": "index.ts",
+        "kind": "entrypoint",
+        "path": "index.ts",
+        "description": "Process entry: source maps, optional MSW mocks, then the Express server."
+      },
+      {
+        "id": "server-index",
+        "label": "server/index.ts",
+        "kind": "internal-module",
+        "path": "server/index.ts",
+        "description": "Express app: redirects, headers, rate limits, static files, dev Vite or production bundle."
+      },
+      {
+        "id": "server-app",
+        "label": "server/app.ts",
+        "kind": "internal-module",
+        "path": "server/app.ts",
+        "description": "React Router request handler; the SSR build input in vite.config.ts."
+      },
+      {
+        "id": "monitoring",
+        "label": "server/utils/monitoring.ts",
+        "kind": "internal-module",
+        "path": "server/utils/monitoring.ts",
+        "description": "Sentry initialisation with health-check and bot-noise filters."
+      },
+      {
+        "id": "entry-server",
+        "label": "app/entry.server.tsx",
+        "kind": "internal-module",
+        "path": "app/entry.server.tsx",
+        "description": "Streams HTML with a nonce and report-only CSP, adds Fly and LiteFS headers, reports errors."
+      },
+      {
+        "id": "root",
+        "label": "app/root.tsx",
+        "kind": "internal-module",
+        "path": "app/root.tsx",
+        "description": "Document shell and root loader: user, theme, toast, honeypot, ENV."
+      },
+      {
+        "id": "routes-auth",
+        "label": "app/routes/_auth",
+        "kind": "internal-module",
+        "path": "app/routes/_auth",
+        "description": "Login, signup, verify, onboarding, password reset, GitHub OAuth and passkey routes."
+      },
+      {
+        "id": "routes-users",
+        "label": "app/routes/users",
+        "kind": "internal-module",
+        "path": "app/routes/users",
+        "description": "User search, profiles and the notes feature."
+      },
+      {
+        "id": "routes-settings",
+        "label": "app/routes/settings/profile",
+        "kind": "internal-module",
+        "path": "app/routes/settings/profile",
+        "description": "Profile, photo, password, email, connections, passkeys and 2FA settings."
+      },
+      {
+        "id": "routes-resources",
+        "label": "app/routes/resources",
+        "kind": "internal-module",
+        "path": "app/routes/resources",
+        "description": "UI-less routes: images, healthcheck, theme switch, data export."
+      },
+      {
+        "id": "routes-admin",
+        "label": "app/routes/admin/cache",
+        "kind": "internal-module",
+        "path": "app/routes/admin/cache",
+        "description": "Admin cache browser and the replica-to-primary cache write endpoint."
+      },
+      {
+        "id": "verify-server",
+        "label": "_auth/verify.server.ts",
+        "kind": "internal-module",
+        "path": "app/routes/_auth/verify.server.ts",
+        "description": "prepareVerification, code validation and dispatch to per-flow handlers."
+      },
+      {
+        "id": "auth-server",
+        "label": "utils/auth.server.ts",
+        "kind": "internal-module",
+        "path": "app/utils/auth.server.ts",
+        "description": "Session lookup, guards, login, signup, password hashing, common-password check."
+      },
+      {
+        "id": "session-server",
+        "label": "utils/session.server.ts",
+        "kind": "internal-module",
+        "path": "app/utils/session.server.ts",
+        "description": "The en_session cookie storage."
+      },
+      {
+        "id": "permissions-server",
+        "label": "utils/permissions.server.ts",
+        "kind": "internal-module",
+        "path": "app/utils/permissions.server.ts",
+        "description": "requireUserWithPermission and requireUserWithRole."
+      },
+      {
+        "id": "db-server",
+        "label": "utils/db.server.ts",
+        "kind": "internal-module",
+        "path": "app/utils/db.server.ts",
+        "description": "Prisma client singleton with slow-query logging."
+      },
+      {
+        "id": "cache-server",
+        "label": "utils/cache.server.ts",
+        "kind": "internal-module",
+        "path": "app/utils/cache.server.ts",
+        "description": "LRU and SQLite caches for cachified, forwarding replica writes to the primary."
+      },
+      {
+        "id": "storage-server",
+        "label": "utils/storage.server.ts",
+        "kind": "internal-module",
+        "path": "app/utils/storage.server.ts",
+        "description": "SigV4-signed uploads and fetches against Tigris."
+      },
+      {
+        "id": "email-server",
+        "label": "utils/email.server.ts",
+        "kind": "internal-module",
+        "path": "app/utils/email.server.ts",
+        "description": "Renders React Email templates and posts them to Resend."
+      },
+      {
+        "id": "litefs-server",
+        "label": "utils/litefs.server.ts",
+        "kind": "internal-module",
+        "path": "app/utils/litefs.server.ts",
+        "description": "Server-only re-exports of litefs-js helpers such as ensurePrimary."
+      },
+      {
+        "id": "env-server",
+        "label": "utils/env.server.ts",
+        "kind": "internal-module",
+        "path": "app/utils/env.server.ts",
+        "description": "Zod validation of process.env at startup and the public ENV subset."
+      },
+      {
+        "id": "github-provider",
+        "label": "utils/providers/github.server.ts",
+        "kind": "internal-module",
+        "path": "app/utils/providers/github.server.ts",
+        "description": "GitHub OAuth strategy, cached profile lookups and the mock redirect."
+      },
+      {
+        "id": "ui",
+        "label": "app/components/ui",
+        "kind": "internal-module",
+        "path": "app/components/ui",
+        "description": "shadcn/ui-derived primitives: Button, Icon, Input, menus, tooltips, OTP input."
+      },
+      {
+        "id": "forms",
+        "label": "app/components/forms.tsx",
+        "kind": "internal-module",
+        "path": "app/components/forms.tsx",
+        "description": "Field, TextareaField, CheckboxField, OTPField and ErrorList for Conform forms."
+      },
+      {
+        "id": "styles",
+        "label": "app/styles/tailwind.css",
+        "kind": "internal-module",
+        "path": "app/styles/tailwind.css",
+        "description": "Colour tokens, type scale, animations and the dark variant."
+      },
+      {
+        "id": "mocks",
+        "label": "tests/mocks",
+        "kind": "internal-module",
+        "path": "tests/mocks",
+        "description": "MSW handlers for every third-party API the app calls."
+      },
+      {
+        "id": "prisma-schema",
+        "label": "prisma/schema.prisma",
+        "kind": "internal-module",
+        "path": "prisma/schema.prisma",
+        "description": "Data model; migrations and seed live beside it."
+      },
+      {
+        "id": "express",
+        "label": "express",
+        "kind": "external-package"
+      },
+      {
+        "id": "rr-express",
+        "label": "@react-router/express",
+        "kind": "external-package"
+      },
+      {
+        "id": "react-router",
+        "label": "react-router",
+        "kind": "external-package"
+      },
+      {
+        "id": "prisma-client",
+        "label": "@prisma/client",
+        "kind": "external-package"
+      },
+      {
+        "id": "remix-auth",
+        "label": "remix-auth",
+        "kind": "external-package"
+      },
+      {
+        "id": "litefs-js",
+        "label": "litefs-js",
+        "kind": "external-package"
+      },
+      {
+        "id": "cachified",
+        "label": "@epic-web/cachified",
+        "kind": "external-package"
+      },
+      {
+        "id": "conform",
+        "label": "@conform-to/zod",
+        "kind": "external-package"
+      },
+      {
+        "id": "radix",
+        "label": "@radix-ui/react-*",
+        "kind": "external-package"
+      },
+      {
+        "id": "tailwindcss",
+        "label": "tailwindcss",
+        "kind": "external-package"
+      },
+      {
+        "id": "openimg",
+        "label": "openimg",
+        "kind": "external-package"
+      },
+      {
+        "id": "msw",
+        "label": "msw",
+        "kind": "external-package"
+      },
+      {
+        "id": "sqlite-app",
+        "label": "SQLite app database (LiteFS)",
+        "kind": "datastore"
+      },
+      {
+        "id": "sqlite-cache",
+        "label": "SQLite cache database",
+        "kind": "datastore"
+      },
+      {
+        "id": "tigris",
+        "label": "Tigris object storage",
+        "kind": "external-service"
+      },
+      {
+        "id": "resend",
+        "label": "Resend email API",
+        "kind": "external-service"
+      },
+      {
+        "id": "github-api",
+        "label": "GitHub OAuth and API",
+        "kind": "external-service"
+      },
+      {
+        "id": "pwned",
+        "label": "Have I Been Pwned range API",
+        "kind": "external-service"
+      },
+      {
+        "id": "sentry",
+        "label": "Sentry",
+        "kind": "external-service"
+      }
+    ],
+    "edges": [
+      {
+        "from": "index",
+        "to": "server-index",
+        "relationship": "imports"
+      },
+      {
+        "from": "index",
+        "to": "mocks",
+        "relationship": "imports when MOCKS=true"
+      },
+      {
+        "from": "server-index",
+        "to": "express",
+        "relationship": "builds app with"
+      },
+      {
+        "from": "server-index",
+        "to": "server-app",
+        "relationship": "loads via Vite in dev, build/server in production"
+      },
+      {
+        "from": "server-index",
+        "to": "monitoring",
+        "relationship": "initialises in production when SENTRY_DSN is set"
+      },
+      {
+        "from": "monitoring",
+        "to": "sentry",
+        "relationship": "reports to"
+      },
+      {
+        "from": "server-app",
+        "to": "rr-express",
+        "relationship": "createRequestHandler"
+      },
+      {
+        "from": "rr-express",
+        "to": "root",
+        "relationship": "runs root loader and layout"
+      },
+      {
+        "from": "rr-express",
+        "to": "entry-server",
+        "relationship": "renders documents with"
+      },
+      {
+        "from": "entry-server",
+        "to": "env-server",
+        "relationship": "validates env at startup"
+      },
+      {
+        "from": "entry-server",
+        "to": "litefs-server",
+        "relationship": "instance headers"
+      },
+      {
+        "from": "entry-server",
+        "to": "sentry",
+        "relationship": "captures loader and action errors"
+      },
+      {
+        "from": "root",
+        "to": "auth-server",
+        "relationship": "getUserId"
+      },
+      {
+        "from": "root",
+        "to": "db-server",
+        "relationship": "loads user with roles"
+      },
+      {
+        "from": "root",
+        "to": "ui",
+        "relationship": "renders shell with"
+      },
+      {
+        "from": "root",
+        "to": "react-router",
+        "relationship": "Outlet, Scripts, useLoaderData"
+      },
+      {
+        "from": "routes-auth",
+        "to": "auth-server",
+        "relationship": "login, signup, requireAnonymous"
+      },
+      {
+        "from": "routes-auth",
+        "to": "verify-server",
+        "relationship": "prepareVerification, validateRequest"
+      },
+      {
+        "from": "routes-auth",
+        "to": "email-server",
+        "relationship": "sends codes"
+      },
+      {
+        "from": "routes-auth",
+        "to": "litefs-server",
+        "relationship": "ensurePrimary in OAuth callback"
+      },
+      {
+        "from": "routes-auth",
+        "to": "forms",
+        "relationship": "form fields"
+      },
+      {
+        "from": "routes-settings",
+        "to": "auth-server",
+        "relationship": "requireUserId"
+      },
+      {
+        "from": "routes-settings",
+        "to": "verify-server",
+        "relationship": "requireRecentVerification"
+      },
+      {
+        "from": "routes-settings",
+        "to": "storage-server",
+        "relationship": "profile photo upload"
+      },
+      {
+        "from": "routes-users",
+        "to": "permissions-server",
+        "relationship": "delete:note checks"
+      },
+      {
+        "from": "routes-users",
+        "to": "auth-server",
+        "relationship": "requireUserId"
+      },
+      {
+        "from": "routes-users",
+        "to": "storage-server",
+        "relationship": "note image upload"
+      },
+      {
+        "from": "routes-users",
+        "to": "db-server",
+        "relationship": "notes and TypedSQL search"
+      },
+      {
+        "from": "routes-users",
+        "to": "conform",
+        "relationship": "parseWithZod"
+      },
+      {
+        "from": "routes-resources",
+        "to": "storage-server",
+        "relationship": "signed GET for images"
+      },
+      {
+        "from": "routes-resources",
+        "to": "openimg",
+        "relationship": "resizes images"
+      },
+      {
+        "from": "routes-admin",
+        "to": "permissions-server",
+        "relationship": "requireUserWithRole admin"
+      },
+      {
+        "from": "routes-admin",
+        "to": "cache-server",
+        "relationship": "reads and deletes keys"
+      },
+      {
+        "from": "verify-server",
+        "to": "db-server",
+        "relationship": "Verification rows"
+      },
+      {
+        "from": "permissions-server",
+        "to": "auth-server",
+        "relationship": "requireUserId"
+      },
+      {
+        "from": "permissions-server",
+        "to": "db-server",
+        "relationship": "role and permission query"
+      },
+      {
+        "from": "auth-server",
+        "to": "session-server",
+        "relationship": "en_session cookie"
+      },
+      {
+        "from": "auth-server",
+        "to": "db-server",
+        "relationship": "Session, User, Password"
+      },
+      {
+        "from": "auth-server",
+        "to": "remix-auth",
+        "relationship": "Authenticator"
+      },
+      {
+        "from": "auth-server",
+        "to": "github-provider",
+        "relationship": "registers strategy"
+      },
+      {
+        "from": "auth-server",
+        "to": "storage-server",
+        "relationship": "uploads OAuth avatar"
+      },
+      {
+        "from": "auth-server",
+        "to": "pwned",
+        "relationship": "checks common passwords"
+      },
+      {
+        "from": "github-provider",
+        "to": "github-api",
+        "relationship": "OAuth and profile calls"
+      },
+      {
+        "from": "github-provider",
+        "to": "cache-server",
+        "relationship": "caches connection data"
+      },
+      {
+        "from": "db-server",
+        "to": "prisma-client",
+        "relationship": "wraps"
+      },
+      {
+        "from": "prisma-schema",
+        "to": "prisma-client",
+        "relationship": "generates"
+      },
+      {
+        "from": "prisma-client",
+        "to": "sqlite-app",
+        "relationship": "reads and writes"
+      },
+      {
+        "from": "cache-server",
+        "to": "cachified",
+        "relationship": "backs"
+      },
+      {
+        "from": "cache-server",
+        "to": "sqlite-cache",
+        "relationship": "node:sqlite"
+      },
+      {
+        "from": "cache-server",
+        "to": "litefs-server",
+        "relationship": "checks primary"
+      },
+      {
+        "from": "cache-server",
+        "to": "routes-admin",
+        "relationship": "forwards replica writes to /admin/cache/sqlite"
+      },
+      {
+        "from": "litefs-server",
+        "to": "litefs-js",
+        "relationship": "re-exports"
+      },
+      {
+        "from": "storage-server",
+        "to": "tigris",
+        "relationship": "signed PUT and GET"
+      },
+      {
+        "from": "email-server",
+        "to": "resend",
+        "relationship": "POST /emails"
+      },
+      {
+        "from": "forms",
+        "to": "ui",
+        "relationship": "composes"
+      },
+      {
+        "from": "forms",
+        "to": "conform",
+        "relationship": "useInputControl"
+      },
+      {
+        "from": "ui",
+        "to": "radix",
+        "relationship": "wraps"
+      },
+      {
+        "from": "ui",
+        "to": "styles",
+        "relationship": "semantic utility classes"
+      },
+      {
+        "from": "styles",
+        "to": "tailwindcss",
+        "relationship": "configures"
+      },
+      {
+        "from": "mocks",
+        "to": "msw",
+        "relationship": "setupServer"
+      },
+      {
+        "from": "mocks",
+        "to": "resend",
+        "relationship": "intercepts"
+      },
+      {
+        "from": "mocks",
+        "to": "github-api",
+        "relationship": "intercepts"
+      },
+      {
+        "from": "mocks",
+        "to": "tigris",
+        "relationship": "intercepts"
+      },
+      {
+        "from": "mocks",
+        "to": "pwned",
+        "relationship": "intercepts"
+      }
+    ]
+  },
+  "codebaseMap": [
+    {
+      "path": "app/routes",
+      "purpose": "Every URL the app serves, as React Router route modules whose file and folder names generate the route manifest; loaders, actions, UI and error boundaries live together per route.",
+      "role": "core domain",
+      "keyFiles": [
+        {
+          "path": "app/routes.ts",
+          "note": "autoRoutes config: ignores tests, dotfiles and *.server.* / *.client.* files."
+        },
+        {
+          "path": "app/routes/$.tsx",
+          "note": "Splat route whose loader and action throw 404 to render the not-found boundary."
+        },
+        {
+          "path": "app/routes/me.tsx",
+          "note": "Redirects the signed-in user to their own profile."
+        }
+      ]
+    },
+    {
+      "path": "app/routes/_auth",
+      "purpose": "All identity flows without a URL prefix: password login, email signup and onboarding, password reset, the shared /verify code step, GitHub OAuth start and callback, and passkey sign-in and registration.",
+      "role": "core domain",
+      "keyFiles": [
+        {
+          "path": "app/routes/_auth/verify.server.ts",
+          "note": "prepareVerification, isCodeValid and the dispatch by verification type."
+        },
+        {
+          "path": "app/routes/_auth/login.server.ts",
+          "note": "handleNewSession: sets en_session or detours through 2FA."
+        },
+        {
+          "path": "app/routes/_auth/auth.$provider/callback.ts",
+          "note": "OAuth callback that links, signs in or starts onboarding."
+        },
+        {
+          "path": "app/routes/_auth/onboarding/index.tsx",
+          "note": "Account creation gated on a verified email in the verification cookie."
+        },
+        {
+          "path": "app/routes/_auth/webauthn/authentication.ts",
+          "note": "Passkey challenge and verification returning JSON."
+        }
+      ]
+    },
+    {
+      "path": "app/routes/users",
+      "purpose": "The Epic Notes domain: user search, public profiles, and each user's notes with image attachments, including the shared editor used for creating and editing.",
+      "role": "core domain",
+      "keyFiles": [
+        {
+          "path": "app/routes/users/index.tsx",
+          "note": "Search page running the TypedSQL searchUsers query."
+        },
+        {
+          "path": "app/routes/users/$username/notes/_layout.tsx",
+          "note": "Owner lookup and the notes sidebar."
+        },
+        {
+          "path": "app/routes/users/$username/notes/$noteId.tsx",
+          "note": "Note view and permission-checked delete action."
+        },
+        {
+          "path": "app/routes/users/$username/notes/+shared/note-editor.server.tsx",
+          "note": "Owner-checked upsert with Tigris image uploads."
+        },
+        {
+          "path": "app/routes/users/$username/notes/+shared/note-editor.tsx",
+          "note": "Conform editor UI and the NoteEditorSchema shared with the server."
+        }
+      ]
+    },
+    {
+      "path": "app/routes/settings/profile",
+      "purpose": "Account settings under one layout: profile details, photo, password create and change, email change, OAuth connections, passkeys, and enabling or disabling two-factor authentication.",
+      "role": "core domain",
+      "keyFiles": [
+        {
+          "path": "app/routes/settings/profile/index.tsx",
+          "note": "One action with update-profile, sign-out-of-sessions and delete-data intents."
+        },
+        {
+          "path": "app/routes/settings/profile/two-factor/verify.tsx",
+          "note": "QR code and confirmation that turns a 2fa-verify row into 2fa."
+        },
+        {
+          "path": "app/routes/settings/profile/change-email.server.tsx",
+          "note": "Completes an email change once /verify accepts the code."
+        },
+        {
+          "path": "app/routes/settings/profile/photo.tsx",
+          "note": "Multipart upload with a 3MB limit, stored in Tigris."
+        }
+      ]
+    },
+    {
+      "path": "app/routes/resources",
+      "purpose": "Routes with no page of their own that other pages and infrastructure call: the image optimiser, the Fly health check, the theme preference cookie and the JSON export of a user's data.",
+      "role": "adapter",
+      "keyFiles": [
+        {
+          "path": "app/routes/resources/images.tsx",
+          "note": "openimg optimiser over Tigris objects and local files."
+        },
+        {
+          "path": "app/routes/resources/healthcheck.tsx",
+          "note": "SELECT 1 plus a HEAD request to itself."
+        },
+        {
+          "path": "app/routes/resources/theme-switch.tsx",
+          "note": "Theme action plus the ThemeSwitch component and useTheme hooks."
+        }
+      ]
+    },
+    {
+      "path": "app/routes/admin/cache",
+      "purpose": "An admin-only browser for cache keys across LiteFS instances, and the token-protected endpoint replicas use to write cache entries on the primary.",
+      "role": "supporting",
+      "keyFiles": [
+        {
+          "path": "app/routes/admin/cache/index.tsx",
+          "note": "Search, inspect and delete keys per instance."
+        },
+        {
+          "path": "app/routes/admin/cache/sqlite.server.ts",
+          "note": "updatePrimaryCacheValue and the INTERNAL_COMMAND_TOKEN-guarded action."
+        }
+      ]
+    },
+    {
+      "path": "app/utils",
+      "purpose": "Shared modules routes call instead of reaching for libraries directly; *.server.ts files are server-only concerns (auth, database, cache, storage, email, env), the rest are isomorphic helpers and hooks.",
+      "role": "core infrastructure",
+      "keyFiles": [
+        {
+          "path": "app/utils/auth.server.ts",
+          "note": "Session model, guards, login and signup."
+        },
+        {
+          "path": "app/utils/permissions.server.ts",
+          "note": "Role and permission guards throwing 403."
+        },
+        {
+          "path": "app/utils/cache.server.ts",
+          "note": "LRU and SQLite caches, primary-aware writes."
+        },
+        {
+          "path": "app/utils/env.server.ts",
+          "note": "Startup env schema and the public getEnv subset."
+        },
+        {
+          "path": "app/utils/misc.tsx",
+          "note": "cn(), header helpers, useIsPending, useDoubleCheck, image URLs."
+        },
+        {
+          "path": "app/utils/user.ts",
+          "note": "useUser, useOptionalUser and client-side userHasPermission."
+        }
+      ]
+    },
+    {
+      "path": "app/components",
+      "purpose": "The UI building blocks: shadcn/ui-derived primitives in ui/, form field compositions for Conform, and a few app-shell components mounted by root.tsx.",
+      "role": "design system",
+      "keyFiles": [
+        {
+          "path": "app/components/ui/button.tsx",
+          "note": "cva variants and sizes, asChild via Radix Slot."
+        },
+        {
+          "path": "app/components/ui/icon.tsx",
+          "note": "Typed sprite icons with size scale."
+        },
+        {
+          "path": "app/components/forms.tsx",
+          "note": "Field, TextareaField, CheckboxField, OTPField, ErrorList."
+        },
+        {
+          "path": "app/components/error-boundary.tsx",
+          "note": "GeneralErrorBoundary used by route ErrorBoundaries."
+        }
+      ]
+    },
+    {
+      "path": "app/styles/tailwind.css",
+      "purpose": "The whole Tailwind v4 configuration: light and dark colour custom properties, their @theme inline mapping, the named type scale, radii, keyframe animations and the container utility.",
+      "role": "config",
+      "keyFiles": [
+        {
+          "path": "components.json",
+          "note": "shadcn CLI config pointing at this stylesheet."
+        }
+      ]
+    },
+    {
+      "path": "server",
+      "purpose": "The Node process around the React Router app: the Express server with its middleware stack, the request handler Vite builds for production, and Sentry setup.",
+      "role": "entrypoint",
+      "keyFiles": [
+        {
+          "path": "index.ts",
+          "note": "Loads mocks when MOCKS=true, then server/index.ts."
+        },
+        {
+          "path": "server/index.ts",
+          "note": "Middleware order, rate limits, dev versus production serving."
+        },
+        {
+          "path": "server/app.ts",
+          "note": "createRequestHandler from @react-router/express."
+        },
+        {
+          "path": "app/entry.server.tsx",
+          "note": "Streaming render, CSP, Fly headers, error reporting."
+        }
+      ]
+    },
+    {
+      "path": "prisma",
+      "purpose": "Database schema, the single initial migration (which also inserts roles and permissions), the development seed with the kody admin user, and raw SQL compiled by TypedSQL.",
+      "role": "data",
+      "keyFiles": [
+        {
+          "path": "prisma/schema.prisma",
+          "note": "SQLite datasource with the typedSql preview feature."
+        },
+        {
+          "path": "prisma/migrations/20250221233640_init/migration.sql",
+          "note": "Tables plus INSERTs for 16 permissions and 2 roles."
+        },
+        {
+          "path": "prisma/seed.ts",
+          "note": "Five fake users with notes, and kody / kodylovesyou."
+        },
+        {
+          "path": "prisma/sql/searchUsers.sql",
+          "note": "User search ordered by most recent note."
+        }
+      ]
+    },
+    {
+      "path": "tests",
+      "purpose": "Everything tests need except the unit tests themselves (which sit next to code in app/): Playwright specs and fixtures, MSW handlers, Vitest global and per-worker setup, and image fixtures.",
+      "role": "tests",
+      "keyFiles": [
+        {
+          "path": "tests/playwright-utils.ts",
+          "note": "login, insertNewUser, navigate and prepareGitHubUser fixtures."
+        },
+        {
+          "path": "tests/e2e/onboarding.test.ts",
+          "note": "Largest spec: signup, OAuth and reset journeys."
+        },
+        {
+          "path": "tests/mocks/index.ts",
+          "note": "MSW server shared by dev and tests."
+        },
+        {
+          "path": "tests/setup/setup-test-env.ts",
+          "note": "Fails tests on console.error or console.warn."
+        },
+        {
+          "path": "tests/setup/global-setup.ts",
+          "note": "Builds tests/prisma/base.db when the schema changes."
+        }
+      ]
+    },
+    {
+      "path": "other",
+      "purpose": "Deployment and tooling files kept out of the root: the Dockerfile Fly builds, the LiteFS config, raw SVG icons for the sprite, and the Sly icon CLI config.",
+      "role": "config",
+      "keyFiles": [
+        {
+          "path": "other/Dockerfile",
+          "note": "Multi-stage image ending in `litefs mount`."
+        },
+        {
+          "path": "other/litefs.yml",
+          "note": "Mount, proxy, Consul lease and boot commands."
+        },
+        {
+          "path": "other/svg-icons",
+          "note": "Source SVGs compiled into app/components/ui/icons/sprite.svg."
+        }
+      ]
+    },
+    {
+      "path": "docs",
+      "purpose": "Adopter documentation per topic, 47 numbered decision records explaining why the stack is shaped this way, and SKILL.md guides for AI coding agents working in an Epic Stack app.",
+      "role": "docs",
+      "keyFiles": [
+        {
+          "path": "docs/decisions",
+          "note": "ADRs from 001-typescript-only to 047-mock-cache-server-in-tests."
+        },
+        {
+          "path": "docs/routing.md",
+          "note": "Generated route listing for the current file tree."
+        },
+        {
+          "path": "docs/database.md",
+          "note": "LiteFS primary rules and widen-then-narrow migrations."
+        },
+        {
+          "path": "docs/skills",
+          "note": "Agent skills for auth, caching, database, forms, routing, testing and UI."
+        }
+      ]
+    },
+    {
+      "path": ".github/workflows",
+      "purpose": "The single CI and CD workflow that lints, type-checks, unit-tests and end-to-end-tests every change and deploys pushes to main and dev on Fly.",
+      "role": "delivery",
+      "keyFiles": [
+        {
+          "path": ".github/workflows/deploy.yml",
+          "note": "lint, typecheck, vitest, playwright, container and deploy jobs."
+        }
+      ]
+    },
+    {
+      "path": "remix.init",
+      "purpose": "Post-generation script run when a new project is created from the template: renames the app, writes .env with a random session secret, removes template-only files and can provision Fly apps, volumes, Consul and Tigris.",
+      "role": "supporting",
+      "keyFiles": [
+        {
+          "path": "remix.init/index.mjs",
+          "note": "Setup prompts and flyctl commands."
+        }
+      ]
+    }
+  ],
+  "tour": [
+    {
+      "order": 1,
+      "title": "Boot order and the Express layer",
+      "files": [
+        {
+          "path": "index.ts",
+          "startLine": 1,
+          "endLine": 23
+        },
+        {
+          "path": "server/index.ts",
+          "startLine": 28,
+          "endLine": 195
+        }
+      ],
+      "why": "Everything later in the tour assumes this boot order: index.ts decides whether MSW intercepts outbound calls before any app module loads, and server/index.ts decides what happens to a request before React Router ever sees it. A 429, a surprise redirect or a missing header is explained here, not in a route.",
+      "notice": "MOCKS=true comes from the dev script, not NODE_ENV. The strongest rate limit is chosen with `req.path.includes(...)` against a hard-coded list that omits /forgot-password and /webauthn but still names /resources/login and /resources/verify, which no longer exist, and every limit is multiplied by 10,000 outside production."
+    },
+    {
+      "order": 2,
+      "title": "How files become URLs",
+      "files": [
+        {
+          "path": "app/routes.ts",
+          "startLine": 1,
+          "endLine": 18
+        },
+        {
+          "path": "docs/routing.md",
+          "startLine": 89,
+          "endLine": 202
+        }
+      ],
+      "why": "The route tree is generated rather than declared, so the naming rules are the API for adding a page. The generated listing in docs/routing.md is the quickest way to map a URL in the browser back to the file that serves it, which every later step relies on.",
+      "notice": "`_auth` adds no URL segment, `$noteId_.edit.tsx` escapes nesting so the editor does not render inside the note view, `+shared` holds colocated modules that are not routes, and *.server.* files are ignored. `npx react-router routes` prints the manifest for the current tree."
+    },
+    {
+      "order": 3,
+      "title": "The root loader: what every page can rely on",
+      "files": [
+        {
+          "path": "app/root.tsx",
+          "startLine": 71,
+          "endLine": 133
+        },
+        {
+          "path": "app/utils/user.ts",
+          "startLine": 10,
+          "endLine": 26
+        }
+      ],
+      "why": "Every route renders under root.tsx, and its loader is the only place the signed-in user, theme preference, flash toast and public ENV are loaded. Knowing this stops you from re-querying the user in each route just to show a name or hide a button.",
+      "notice": "The user is selected together with roles and permissions, which is what lets `userHasPermission` decide UI affordances in the browser without another request, while the server re-checks with requireUserWithPermission. A session whose user no longer exists is logged out right here."
+    },
+    {
+      "order": 4,
+      "title": "The guard vocabulary",
+      "files": [
+        {
+          "path": "app/utils/auth.server.ts",
+          "startLine": 29,
+          "endLine": 74
+        },
+        {
+          "path": "app/utils/permissions.server.ts",
+          "startLine": 6,
+          "endLine": 60
+        },
+        {
+          "path": "app/utils/session.server.ts",
+          "startLine": 1,
+          "endLine": 12
+        }
+      ],
+      "why": "Authorisation is a function call at the top of each loader and action rather than middleware, so these few functions are what you copy into any new route. Their redirects and 403 responses explain the behaviour you will see in the browser when a guard fails.",
+      "notice": "`getUserId` validates the Session row on every request and clears a stale cookie, `requireUserId` preserves the current URL as redirectTo, and a permission string such as `delete:note:own` is split into action, entity and access before a single Prisma query checks it against the user's roles."
+    },
+    {
+      "order": 5,
+      "title": "One complete feature: notes",
+      "files": [
+        {
+          "path": "app/routes/users/$username/notes/_layout.tsx",
+          "startLine": 11,
+          "endLine": 26
+        },
+        {
+          "path": "app/routes/users/$username/notes/$noteId.tsx",
+          "startLine": 56,
+          "endLine": 90
+        },
+        {
+          "path": "app/routes/users/$username/notes/+shared/note-editor.server.tsx",
+          "startLine": 27,
+          "endLine": 131
+        },
+        {
+          "path": "app/routes/users/$username/notes/+shared/note-editor.tsx",
+          "startLine": 46,
+          "endLine": 75
+        }
+      ],
+      "why": "With the boot path and guards in hand, the notes routes show every pattern together — public loaders, owner-scoped writes, permission checks, file uploads and Conform forms — in the smallest real feature. It is the template most new features in an Epic Stack app should copy.",
+      "notice": "One editor action serves both /new and /:noteId/edit through `export { action }`. Ownership is enforced inside the schema's superRefine, deletion checks `delete:note:own` for owners and `delete:note:any` for everyone else, and images are uploaded to Tigris inside the Zod transform before the upsert runs."
+    },
+    {
+      "order": 6,
+      "title": "Proving an email: prepareVerification and /verify",
+      "files": [
+        {
+          "path": "app/routes/_auth/signup.tsx",
+          "startLine": 37,
+          "endLine": 91
+        },
+        {
+          "path": "app/routes/_auth/verify.server.ts",
+          "startLine": 76,
+          "endLine": 200
+        },
+        {
+          "path": "app/routes/_auth/onboarding/index.tsx",
+          "startLine": 44,
+          "endLine": 59
+        }
+      ],
+      "why": "Signup, password reset, email change and two-factor login all reuse this one mechanism. Understanding it once makes four flows readable, and a change to any of them usually has to start in verify.server.ts rather than in the page you are looking at.",
+      "notice": "The code is a TOTP derived from a Verification row keyed by target and type, validateRequest dispatches on `type` to a handler colocated with each feature, and the proof survives between requests only in the ten-minute en_verification cookie that onboarding/index.tsx requires before anyone can create an account."
+    },
+    {
+      "order": 7,
+      "title": "Where the data lives once deployed",
+      "files": [
+        {
+          "path": "prisma/schema.prisma",
+          "startLine": 14,
+          "endLine": 49
+        },
+        {
+          "path": "other/litefs.yml",
+          "startLine": 21,
+          "endLine": 46
+        },
+        {
+          "path": "app/utils/cache.server.ts",
+          "startLine": 158,
+          "endLine": 198
+        },
+        {
+          "path": "app/routes/admin/cache/sqlite.server.ts",
+          "startLine": 10,
+          "endLine": 59
+        }
+      ],
+      "why": "Local development uses a single SQLite file, so the replica behaviour only appears after deploy. Reading the LiteFS config beside the cache's write path is the only way to see the rule that writes must reach the primary before that rule causes a production-only bug.",
+      "notice": "Migrations run from litefs.yml on the primary candidate when a container starts, not in CI. A replica forwards cache writes to the primary over HTTP with INTERNAL_COMMAND_TOKEN, and the roles a new database needs come from the migration SQL rather than seed.ts."
+    },
+    {
+      "order": 8,
+      "title": "How the tests stand the app up",
+      "files": [
+        {
+          "path": "tests/setup/global-setup.ts",
+          "startLine": 12,
+          "endLine": 39
+        },
+        {
+          "path": "tests/setup/db-setup.ts",
+          "startLine": 1,
+          "endLine": 31
+        },
+        {
+          "path": "tests/playwright-utils.ts",
+          "startLine": 91,
+          "endLine": 119
+        },
+        {
+          "path": "tests/e2e/notes.test.ts",
+          "startLine": 5,
+          "endLine": 45
+        }
+      ],
+      "why": "The harness reuses everything the tour has covered — the Prisma client, the session storage and the mocks — so it comes last. Knowing its shortcuts is what lets you write a test for your first change instead of verifying it by clicking through the app.",
+      "notice": "Vitest workers each copy a pre-migrated base.db that is rebuilt only when schema.prisma is newer, and Playwright's `login` fixture writes a Session row and cookie directly, navigates with React Router's typed `href()`, and deletes the user when the test ends."
+    }
+  ],
+  "hotspots": {
+    "entries": [
+      {
+        "path": "package.json",
+        "commits": 144,
+        "recentActivity": "moderate",
+        "insight": "Touched by nearly half of the 300 analysed commits, mostly dependency upgrades such as the June 2026 React Router CVE bump and the January and February 2026 dependency sweeps. Keeping an adopted app current with the template is mostly replaying these bumps."
+      },
+      {
+        "path": "server/index.ts",
+        "commits": 21,
+        "recentActivity": "dormant",
+        "insight": "Became the single server entry in December 2025 (#1066) and was fixed in January 2026 for middleware ordering and loading mocks in dev. Quiet now, but it is where ordering bugs between Express middleware, Vite and the MSW import have appeared before."
+      },
+      {
+        "path": "vite.config.ts",
+        "commits": 17,
+        "recentActivity": "active",
+        "insight": "The one active hotspot: the August 2026 change (#1095) stopped Sentry from injecting duplicate debug IDs that broke client source maps, after earlier additions of React Router devtools, the icon spritesheet plugin and the Vitest cache-server stub from ADR 047. Build tooling, not app code, is where the template still moves."
+      },
+      {
+        "path": ".github/workflows/deploy.yml",
+        "commits": 15,
+        "recentActivity": "dormant",
+        "insight": "Settled since May 2025, after changes that build the container in parallel with lint and tests (#996) and upload source maps during the build (#1012). A stable workflow means the gates a contributor must pass rarely change under them."
+      },
+      {
+        "path": "server/utils/monitoring.ts",
+        "commits": 13,
+        "recentActivity": "moderate",
+        "insight": "Its July 2026 change (#1093) filters Fly health checks and bot traffic out of Sentry, together with app/utils/sentry-event-filters.ts and entry.server.tsx. Check those three files before adding Sentry filtering of your own."
+      },
+      {
+        "path": "app/utils/cache.server.ts",
+        "commits": 10,
+        "recentActivity": "dormant",
+        "insight": "History includes a September 2025 commit titled 'restore multi-region-safe cache': the replica-to-primary write forwarding was lost and put back. It is the clearest evidence that the LiteFS write rule is easy to break when editing this file."
+      },
+      {
+        "path": "app/utils/auth.server.ts",
+        "commits": 10,
+        "recentActivity": "dormant",
+        "insight": "Its changes landed in early 2025 — the remix-auth GitHub upgrade, moving images to Tigris and the Have I Been Pwned password check — and nothing since March 2025, so it is a dependable reference for the session model rather than code in flux."
+      },
+      {
+        "path": "app/entry.server.tsx",
+        "commits": 9,
+        "recentActivity": "moderate",
+        "insight": "Last changed in July 2026 to stop reporting React Router's expected missing-action and missing-loader errors from bots. It owns the nonce, the streaming strategy and the CSP, which still ships in report-only mode."
+      }
+    ],
+    "interpretation": "Churn says the application code is settled and the edges are what move. The busiest file by far is package.json (dependency upgrades); the files changed most recently are build and observability plumbing — vite.config.ts, server/utils/monitoring.ts and app/entry.server.tsx — plus docs/examples.md. Core modules such as auth.server.ts and the route files have been quiet for a year or more. For a newcomer that means the domain code is a dependable pattern library to copy, while dependency versions and Sentry configuration are where an adopted app is most likely to conflict when pulling template updates."
+  },
+  "setup": {
+    "prerequisites": [
+      "Node.js ^22.18.0 (package.json engines; CI uses Node 22)",
+      "npm, since the repository commits package-lock.json",
+      "git",
+      "Chromium for Playwright, installed by `npm run setup` or `npm run test:e2e:install`"
+    ],
+    "setup": [
+      {
+        "title": "Create the environment file",
+        "commands": [
+          "cp .env.example .env"
+        ],
+        "notes": "Every value in .env.example is fake. GitHub, Tigris, Resend and the password-breach API are intercepted by MSW in development and tests, so no third-party account is needed to start."
+      },
+      {
+        "title": "Install dependencies",
+        "commands": [
+          "npm install"
+        ]
+      },
+      {
+        "title": "Build, migrate and generate the typed SQL client",
+        "commands": [
+          "npm run setup"
+        ],
+        "notes": "Runs `npm run build`, `prisma migrate deploy` (creating prisma/data.db and inserting the admin and user roles), `prisma generate --sql` for the searchUsers query, and `playwright install`."
+      },
+      {
+        "title": "Seed demo data",
+        "commands": [
+          "npx prisma@6 db seed"
+        ],
+        "notes": "Creates five fake users with notes and the admin user `kody` (password `kodylovesyou`). `npx prisma migrate reset --force` drops the database and reseeds from scratch."
+      }
+    ],
+    "run": [
+      {
+        "title": "Start the dev server with mocks",
+        "commands": [
+          "npm run dev"
+        ],
+        "notes": "Serves http://localhost:3000, or the next free port, with Vite and MSW intercepting outbound calls. Log in as kody after seeding."
+      },
+      {
+        "title": "Run without request mocking",
+        "commands": [
+          "npm run dev:no-mocks"
+        ],
+        "notes": "Put real credentials in .env first. GitHub login keeps using the built-in mock flow for as long as GITHUB_CLIENT_ID starts with MOCK_."
+      },
+      {
+        "title": "Run the production build locally",
+        "commands": [
+          "npm run build",
+          "npm run start:mocks"
+        ],
+        "notes": "The same server CI's Playwright job starts. Production mode applies the real rate limits; `npm start` runs without mocks and needs real service credentials."
+      }
+    ],
+    "test": [
+      {
+        "title": "Unit and component tests (Vitest)",
+        "commands": [
+          "npm test",
+          "npm run test -- --run",
+          "npm run coverage"
+        ],
+        "notes": "Tests live next to the code as app/**/*.test.ts(x). The first run builds tests/prisma/base.db, and any console.error or console.warn fails a test unless it is explicitly mocked."
+      },
+      {
+        "title": "End-to-end tests (Playwright)",
+        "commands": [
+          "npm run test:e2e:install",
+          "npm run test:e2e:dev",
+          "npm run test:e2e:run"
+        ],
+        "notes": "`test:e2e:dev` opens the Playwright UI against `npm run dev`; `test:e2e:run` builds first and runs headless with CI=true, as the pipeline does."
+      },
+      {
+        "title": "Everything the pipeline checks",
+        "commands": [
+          "npm run lint",
+          "npm run typecheck",
+          "npm run validate"
+        ],
+        "notes": "`typecheck` runs `react-router typegen` before tsc so route `+types` imports resolve; `validate` runs unit tests, lint, typecheck and the e2e suite in parallel."
+      }
+    ]
+  },
+  "contributorGuide": {
+    "knownRisks": [
+      {
+        "title": "Anything returned by getEnv() is shipped to every browser",
+        "severity": "high",
+        "impact": "app/root.tsx serialises getEnv() into window.ENV on every page, so adding a secret there to reach it from a component publishes it to every visitor, and source maps make hard-coded secrets public too.",
+        "mitigation": "Read secrets through process.env in *.server.ts modules only, add new required variables to the zod schema in env.server.ts, and add to getEnv only values that are safe to be public.",
+        "files": [
+          "app/utils/env.server.ts",
+          "app/root.tsx",
+          "docs/secrets.md"
+        ]
+      },
+      {
+        "title": "Writes from GET loaders fail on replicas unless they call ensurePrimary",
+        "severity": "high",
+        "impact": "The LiteFS proxy forwards POST-style requests to the primary, but a GET loader that creates or updates rows — like the OAuth callback that links connections and creates sessions — would run on a read-only replica for users routed to another region, a failure that never appears locally.",
+        "mitigation": "Keep writes in actions, and where a loader must write, call ensurePrimary() from app/utils/litefs.server.ts first, as auth.$provider/callback.ts does.",
+        "files": [
+          "app/routes/_auth/auth.$provider/callback.ts",
+          "app/utils/litefs.server.ts",
+          "other/litefs.yml"
+        ]
+      },
+      {
+        "title": "Migrations run while the previous version is still serving",
+        "severity": "high",
+        "impact": "litefs.yml applies `prisma migrate deploy` when the new primary boots and deploys are zero-downtime, so a migration that drops or renames a column breaks instances still running the old code until they are replaced.",
+        "mitigation": "Follow the widen-then-narrow sequence in docs/database.md: ship code that tolerates both shapes, then the migration, then the cleanup, each as its own deploy.",
+        "files": [
+          "prisma/schema.prisma",
+          "prisma/migrations",
+          "other/litefs.yml",
+          "docs/database.md"
+        ]
+      },
+      {
+        "title": "The Content-Security-Policy is report-only",
+        "severity": "medium",
+        "impact": "app/entry.server.tsx sends the CSP with `reportOnly: true` (ADR 022), so the browser logs violations instead of blocking them; an adopter who assumes the nonce setup protects against injected scripts is running without an enforced policy.",
+        "mitigation": "Once third-party sources are added to the directives, remove `reportOnly: true` and check pages with the browser console open for violations.",
+        "files": [
+          "app/entry.server.tsx",
+          "docs/decisions/022-report-only-csp.md"
+        ]
+      },
+      {
+        "title": "Rate-limit tiers are matched by path substring",
+        "severity": "medium",
+        "impact": "Only non-GET paths containing an entry in `strongPaths` get the 10-per-minute limit. /forgot-password, which sends an email per valid request, and the /webauthn endpoints fall into the 100-per-minute tier, and limits use in-memory stores per instance.",
+        "mitigation": "Update `strongPaths` in server/index.ts in the same change that adds or renames an auth or email-sending route, and verify with `npm run start:mocks`, since limits are multiplied by 10,000 in development.",
+        "files": [
+          "server/index.ts",
+          "docs/decisions/025-rate-limiting.md"
+        ]
+      },
+      {
+        "title": "The two-factor re-verification window is two minutes, not two hours",
+        "severity": "low",
+        "impact": "`shouldRequestTwoFA` computes `const twoHours = 1000 * 60 * 2` under a comment saying two hours, so users with 2FA are asked for a fresh code on change-email and two-factor/disable far more often than the comment suggests.",
+        "mitigation": "Decide which window is intended, fix the constant or the comment, and pin it with a unit test beside login.server.ts.",
+        "files": [
+          "app/routes/_auth/login.server.ts",
+          "app/routes/_auth/verify.server.ts"
+        ]
+      },
+      {
+        "title": "Manifest icons under /favicons are answered with 404",
+        "severity": "low",
+        "impact": "server/index.ts registers its `/img` and `/favicons` 404 handler before `express.static`, although its comment assumes the opposite order, so the Android icons public/site.webmanifest references are never served.",
+        "mitigation": "Move that handler below the static middleware in the production branch and request /favicons/android-chrome-192x192.png against `npm run start:mocks`.",
+        "files": [
+          "server/index.ts",
+          "public/site.webmanifest",
+          "public/favicons/README.md"
+        ]
+      }
+    ],
+    "changeRoutes": [
+      {
+        "changeType": "Add a page or resource route",
+        "primaryPath": "app/routes",
+        "relatedPaths": [
+          "app/routes.ts",
+          "docs/routing.md",
+          "app/root.tsx"
+        ],
+        "rationale": "The route manifest is generated from file and folder names, so a file's location is its URL; the route module owns its data and guards, and UI inherits the shell and user from root.tsx.",
+        "verification": [
+          "npx react-router routes",
+          "npm run typecheck",
+          "npm run test:e2e:dev"
+        ]
+      },
+      {
+        "changeType": "Change the database schema",
+        "primaryPath": "prisma/schema.prisma",
+        "relatedPaths": [
+          "prisma/migrations",
+          "prisma/seed.ts",
+          "tests/db-utils.ts",
+          "docs/database.md"
+        ],
+        "rationale": "Prisma generates both the client and the migration from the schema, the seed and test factories construct rows directly, and production applies migrations at boot on the LiteFS primary.",
+        "verification": [
+          "npx prisma migrate dev --name <change>",
+          "npm run typecheck",
+          "npm run test -- --run",
+          "npm run test:e2e:run"
+        ]
+      },
+      {
+        "changeType": "Add or restyle a UI primitive",
+        "primaryPath": "app/components/ui",
+        "relatedPaths": [
+          "app/styles/tailwind.css",
+          "components.json",
+          "app/components/forms.tsx"
+        ],
+        "rationale": "Primitives are shadcn/ui sources owned by the repository and styled with semantic Tailwind tokens, so a new one arrives through the CLI into this folder and takes its colours from tailwind.css.",
+        "verification": [
+          "npx shadcn@latest add <component>",
+          "npm run lint",
+          "npm run typecheck",
+          "Cycle system, light and dark with the footer theme switch"
+        ]
+      },
+      {
+        "changeType": "Call a new third-party API",
+        "primaryPath": "app/utils",
+        "relatedPaths": [
+          "tests/mocks/index.ts",
+          ".env.example",
+          "app/utils/env.server.ts",
+          "docs/secrets.md"
+        ],
+        "rationale": "Offline development is a guiding principle: every outbound service has an MSW handler, a fake value in .env.example and, if required at boot, an entry in the env.server.ts schema.",
+        "verification": [
+          "npm run dev and confirm MSW prints no unhandled-request warning",
+          "npm run test -- --run"
+        ]
+      },
+      {
+        "changeType": "Add an icon",
+        "primaryPath": "other/svg-icons",
+        "relatedPaths": [
+          "other/sly/sly.json",
+          "app/components/ui/icon.tsx",
+          "vite.config.ts"
+        ],
+        "rationale": "The Vite spritesheet plugin compiles this folder into app/components/ui/icons/sprite.svg with generated types, so Icon only accepts names of files that exist here.",
+        "verification": [
+          "npx sly add @radix-ui/icons <icon-name>",
+          "npm run typecheck"
+        ]
+      },
+      {
+        "changeType": "Protect a route by role or permission",
+        "primaryPath": "app/utils/permissions.server.ts",
+        "relatedPaths": [
+          "app/utils/user.ts",
+          "prisma/migrations/20250221233640_init/migration.sql"
+        ],
+        "rationale": "Server checks and client affordances use the same permission strings, and a new permission only exists in every environment if a migration inserts it and assigns it to roles.",
+        "verification": [
+          "npm run test:e2e:run"
+        ]
+      }
+    ]
+  },
+  "learningResources": [
+    {
+      "tech": "TypeScript",
+      "official": "https://www.typescriptlang.org/docs/",
+      "resources": [
+        {
+          "title": "Modules - Reference",
+          "url": "https://www.typescriptlang.org/docs/handbook/modules/reference.html",
+          "kind": "reference",
+          "why": "Imports here go through the package.json `imports` map (`#app/*`, `#tests/*`) since ADR 046 removed tsconfig paths; this page explains how TypeScript resolves those `#` specifiers."
+        }
+      ],
+      "inRepo": {
+        "note": "Route modules import generated `./+types/<route>.ts` types for loader and action arguments, which only exist after `react-router typegen` — the reason `npm run typecheck` runs typegen before tsc and a fresh clone shows type errors until it does.",
+        "files": [
+          {
+            "path": "package.json",
+            "startLine": 8,
+            "endLine": 11
+          },
+          {
+            "path": "app/routes/users/$username/notes/$noteId.tsx",
+            "startLine": 21,
+            "endLine": 24
+          },
+          {
+            "path": "docs/decisions/046-remove-path-aliases.md"
+          }
+        ]
+      }
+    },
+    {
+      "tech": "React",
+      "official": "https://react.dev/",
+      "resources": [
+        {
+          "title": "You Might Not Need an Effect",
+          "url": "https://react.dev/learn/you-might-not-need-an-effect",
+          "kind": "guide",
+          "why": "The repo ships a Cursor rule, .cursor/rules/avoid-use-effect.mdc, that links this page and asks for event handlers, ref callbacks and derived data instead of useEffect in new components."
+        },
+        {
+          "title": "renderToPipeableStream",
+          "url": "https://react.dev/reference/react-dom/server/renderToPipeableStream",
+          "kind": "reference",
+          "why": "app/entry.server.tsx renders every document with it and switches between onShellReady and onAllReady depending on isbot; this reference explains those callbacks and abort."
+        }
+      ],
+      "inRepo": {
+        "note": "Server data reaches components through loader data and route props, and pending or optimistic UI is read from navigation and fetchers — the theme toggle is an optimistic fetcher, not client state.",
+        "files": [
+          {
+            "path": "app/routes/resources/theme-switch.tsx",
+            "startLine": 100,
+            "endLine": 133
+          },
+          {
+            "path": "app/entry.server.tsx",
+            "startLine": 30,
+            "endLine": 114
+          },
+          {
+            "path": ".cursor/rules/avoid-use-effect.mdc"
+          }
+        ]
+      }
+    },
+    {
+      "tech": "React Router",
+      "official": "https://reactrouter.com/home",
+      "resources": [
+        {
+          "title": "Route Module",
+          "url": "https://reactrouter.com/start/framework/route-module",
+          "kind": "reference",
+          "why": "Every file in app/routes exports some of loader, action, meta, handle, headers and ErrorBoundary; this is the list of those exports and when each one runs."
+        },
+        {
+          "title": "Actions",
+          "url": "https://reactrouter.com/start/framework/actions",
+          "kind": "guide",
+          "why": "All mutations here are actions reached by Form or fetcher submissions, several switching on an `intent` field; this page explains how an action's return value and revalidation work."
+        }
+      ],
+      "inRepo": {
+        "note": "Routes come from folder names through react-router-auto-routes rather than a hand-written config, guards throw `redirect()` or `data(..., { status })`, and `export { action } from './+shared/note-editor.server.tsx'` shares one action between two URLs.",
+        "files": [
+          {
+            "path": "app/routes.ts"
+          },
+          {
+            "path": "app/routes/users/$username/notes/new.tsx"
+          },
+          {
+            "path": "react-router.config.ts"
+          }
+        ]
+      }
+    },
+    {
+      "tech": "Express",
+      "official": "https://expressjs.com/",
+      "resources": [
+        {
+          "title": "Express behind proxies",
+          "url": "https://expressjs.com/en/guide/behind-proxies.html",
+          "kind": "guide",
+          "why": "server/index.ts sets `trust proxy` because Fly terminates TLS in front of it, and keys rate limits on Fly-Client-Ip instead of req.ip; this page explains what trusting the proxy changes."
+        },
+        {
+          "title": "Production Best Practices: Security",
+          "url": "https://expressjs.com/en/advanced/best-practice-security.html",
+          "kind": "guide",
+          "why": "server/index.ts links this page when it disables x-powered-by, and its helmet headers, HTTPS redirect and rate limiting follow the same checklist."
+        }
+      ],
+      "inRepo": {
+        "note": "Express is only the outer shell: middleware order in server/index.ts decides redirects, headers and rate limits, and the final handler passes every remaining request to React Router's createRequestHandler in server/app.ts.",
+        "files": [
+          {
+            "path": "server/index.ts",
+            "startLine": 28,
+            "endLine": 156
+          },
+          {
+            "path": "server/app.ts"
+          }
+        ]
+      }
+    },
+    {
+      "tech": "Prisma",
+      "official": "https://www.prisma.io/docs",
+      "resources": [
+        {
+          "title": "TypedSQL",
+          "url": "https://www.prisma.io/docs/orm/prisma-client/using-raw-sql/typedsql",
+          "kind": "guide",
+          "why": "User search is raw SQL in prisma/sql/searchUsers.sql, compiled into a typed function by `prisma generate --sql` — the step setup, CI and litefs.yml all run."
+        },
+        {
+          "title": "Applying a migration",
+          "url": "https://www.prisma.io/docs/orm/prisma-migrate/workflows/development-and-production",
+          "kind": "guide",
+          "why": "Schema changes are authored with `prisma migrate dev`, while CI and the LiteFS boot sequence run `prisma migrate deploy`; this explains why deploy never generates or resets and is safe on the primary."
+        },
+        {
+          "title": "Prisma Client API",
+          "url": "https://www.prisma.io/docs/orm/reference/prisma-client-reference",
+          "kind": "reference",
+          "why": "auth.server.ts relies on PrismaPromise laziness — the `.catch()` is what triggers the session delete on logout — and links this reference for that behaviour."
+        }
+      ],
+      "inRepo": {
+        "note": "A single PrismaClient survives dev reloads through `remember('prisma', ...)` and logs queries slower than 20 ms, and queries select explicit fields by convention, with download-user-data.tsx as the commented exception that uses `include`.",
+        "files": [
+          {
+            "path": "app/utils/db.server.ts"
+          },
+          {
+            "path": "prisma/schema.prisma"
+          },
+          {
+            "path": "app/routes/resources/download-user-data.tsx",
+            "startLine": 6,
+            "endLine": 40
+          }
+        ]
+      }
+    },
+    {
+      "tech": "SQLite",
+      "official": "https://www.sqlite.org/docs.html",
+      "resources": [
+        {
+          "title": "Write-Ahead Logging",
+          "url": "https://www.sqlite.org/wal.html",
+          "kind": "guide",
+          "why": "other/litefs.yml switches both the application and cache databases to WAL when the primary boots, to reduce locking between concurrent readers and the writer; this explains what WAL changes."
+        }
+      ],
+      "inRepo": {
+        "note": "There are two SQLite files: Prisma's application database and a cache database that cache.server.ts opens directly with Node's built-in node:sqlite, creating its single `cache` table only on the primary.",
+        "files": [
+          {
+            "path": "app/utils/cache.server.ts",
+            "startLine": 22,
+            "endLine": 71
+          },
+          {
+            "path": "other/litefs.yml",
+            "startLine": 31,
+            "endLine": 46
+          }
+        ]
+      }
+    },
+    {
+      "tech": "LiteFS",
+      "official": "https://fly.io/docs/litefs/",
+      "resources": [
+        {
+          "title": "LiteFS Config Reference",
+          "url": "https://fly.io/docs/litefs/config/",
+          "kind": "reference",
+          "why": "other/litefs.yml uses the fuse, data, proxy, Consul lease and exec sections; this defines each key, including `if-candidate` on the migration command."
+        },
+        {
+          "title": "Built-in HTTP Proxy",
+          "url": "https://fly.io/docs/litefs/proxy/",
+          "kind": "reference",
+          "why": "The proxy on port 8080 is why POST requests on a replica still write successfully: it forwards write requests to the primary with fly-replay, which GET loaders do not get."
+        },
+        {
+          "title": "Determining the LiteFS primary",
+          "url": "https://fly.io/docs/litefs/primary/",
+          "kind": "guide",
+          "why": "Explains how an instance knows whether it is the primary — the same question litefs-js answers for cache.server.ts and ensurePrimary before a write."
+        }
+      ],
+      "inRepo": {
+        "note": "The app talks to LiteFS through litefs-js: entry.server.tsx reports primary and current instance in response headers, the OAuth callback calls ensurePrimary() before writing, and replica cache writes are forwarded to the primary over HTTP.",
+        "files": [
+          {
+            "path": "other/litefs.yml"
+          },
+          {
+            "path": "app/utils/litefs.server.ts"
+          },
+          {
+            "path": "app/routes/admin/cache/sqlite.server.ts",
+            "startLine": 10,
+            "endLine": 33
+          }
+        ]
+      }
+    },
+    {
+      "tech": "Fly.io",
+      "official": "https://fly.io/docs/",
+      "resources": [
+        {
+          "title": "App configuration (fly.toml)",
+          "url": "https://fly.io/docs/reference/configuration/",
+          "kind": "reference",
+          "why": "fly.toml defines the volume mount, service ports, concurrency limits and the http_checks against /resources/healthcheck and /litefs/health; healthcheck.tsx links this page."
+        }
+      ],
+      "inRepo": {
+        "note": "Each project has two Fly apps — the name in fly.toml and the same name with -staging — which the workflow targets by branch, and remix.init/index.mjs can create both along with volumes, Consul and Tigris storage.",
+        "files": [
+          {
+            "path": "fly.toml"
+          },
+          {
+            "path": ".github/workflows/deploy.yml",
+            "startLine": 146,
+            "endLine": 229
+          },
+          {
+            "path": "remix.init/index.mjs",
+            "startLine": 182,
+            "endLine": 222
+          }
+        ]
+      }
+    },
+    {
+      "tech": "Tailwind CSS",
+      "official": "https://tailwindcss.com/docs",
+      "resources": [
+        {
+          "title": "Theme variables",
+          "url": "https://tailwindcss.com/docs/theme",
+          "kind": "reference",
+          "why": "There is no tailwind.config file: the type scale, radii and animations are @theme variables in app/styles/tailwind.css and colours are mapped with @theme inline, all explained here."
+        },
+        {
+          "title": "Dark mode",
+          "url": "https://tailwindcss.com/docs/dark-mode",
+          "kind": "guide",
+          "why": "Themes switch through a `.dark` class on <html>, chosen from the en_theme cookie or client hints and declared with `@custom-variant dark`; this page covers that class-based setup."
+        }
+      ],
+      "inRepo": {
+        "note": "Colours are semantic pairs such as `bg-muted text-muted-foreground` whose values flip under `.dark`; the only Tailwind palette colours in app/ are the violet logo tiles on the marketing page, and class lists are merged with `cn()` so a className prop can override a primitive.",
+        "files": [
+          {
+            "path": "app/styles/tailwind.css",
+            "startLine": 1,
+            "endLine": 102
+          },
+          {
+            "path": "app/utils/misc.tsx",
+            "startLine": 60,
+            "endLine": 62
+          },
+          {
+            "path": "app/components/ui/button.tsx"
+          }
+        ]
+      }
+    },
+    {
+      "tech": "shadcn/ui",
+      "official": "https://ui.shadcn.com/docs",
+      "resources": [
+        {
+          "title": "Theming",
+          "url": "https://ui.shadcn.com/docs/theming",
+          "kind": "guide",
+          "why": "The background and foreground token pairs in tailwind.css follow shadcn's CSS-variable convention, so this page tells you which variables a newly added component will expect."
+        },
+        {
+          "title": "shadcn",
+          "url": "https://ui.shadcn.com/docs/cli",
+          "kind": "reference",
+          "why": "app/components/ui/README.md points to the CLI, and components.json already maps its output to `#app/components/ui` and `cn` to `#app/utils/misc`."
+        }
+      ],
+      "inRepo": {
+        "note": "Downloaded components are edited in place and updated by hand (ADR 019), so they drift from upstream; StatusButton and the Conform-bound fields in forms.tsx are the Epic Stack's own additions on top of them.",
+        "files": [
+          {
+            "path": "components.json"
+          },
+          {
+            "path": "app/components/ui/README.md"
+          },
+          {
+            "path": "docs/decisions/019-components.md",
+            "startLine": 67,
+            "endLine": 80
+          }
+        ]
+      }
+    },
+    {
+      "tech": "Radix UI",
+      "official": "https://www.radix-ui.com/primitives/docs/overview/introduction",
+      "resources": [
+        {
+          "title": "Composition",
+          "url": "https://www.radix-ui.com/primitives/docs/guides/composition",
+          "kind": "guide",
+          "why": "Button, DropdownMenuTrigger and DropdownMenuItem are used with `asChild` throughout — a Link rendered as a button, a submit button rendered as a menu item — which is the pattern this guide covers."
+        }
+      ],
+      "inRepo": {
+        "note": "Radix supplies behaviour only: each part is re-exported from app/components/ui with Tailwind classes and a `data-slot` attribute, and only files in that folder import @radix-ui packages.",
+        "files": [
+          {
+            "path": "app/components/ui/dropdown-menu.tsx"
+          },
+          {
+            "path": "app/components/user-dropdown.tsx",
+            "startLine": 16,
+            "endLine": 73
+          },
+          {
+            "path": "app/components/ui/button.tsx",
+            "startLine": 40,
+            "endLine": 58
+          }
+        ]
+      }
+    },
+    {
+      "tech": "Conform",
+      "official": "https://conform.guide/",
+      "resources": [
+        {
+          "title": "parseWithZod",
+          "url": "https://conform.guide/api/zod/parseWithZod",
+          "kind": "reference",
+          "why": "Every action parses FormData with parseWithZod, usually async with superRefine for database checks and transform for uploads or login; this covers the async and intent options they rely on."
+        },
+        {
+          "title": "useForm",
+          "url": "https://conform.guide/api/react/useForm",
+          "kind": "reference",
+          "why": "Forms pass the action's `submission.reply()` back as `lastResult` and spread `getInputProps` into Field; useForm's options explain constraint, onValidate and shouldRevalidate."
+        }
+      ],
+      "inRepo": {
+        "note": "Schemas are shared by client and server — note-editor.tsx exports NoteEditorSchema for useForm's onValidate and the action's parseWithZod — and errors render without JavaScript because actions return `submission.reply()`.",
+        "files": [
+          {
+            "path": "app/routes/users/$username/notes/+shared/note-editor.tsx",
+            "startLine": 46,
+            "endLine": 75
+          },
+          {
+            "path": "app/routes/users/$username/notes/+shared/note-editor.server.tsx",
+            "startLine": 27,
+            "endLine": 90
+          },
+          {
+            "path": "app/components/forms.tsx",
+            "startLine": 37,
+            "endLine": 65
+          }
+        ]
+      }
+    },
+    {
+      "tech": "Vite",
+      "official": "https://vite.dev/guide/",
+      "resources": [
+        {
+          "title": "Server-Side Rendering (SSR)",
+          "url": "https://vite.dev/guide/ssr",
+          "kind": "guide",
+          "why": "server/index.ts runs Vite in middlewareMode with appType 'custom' and loads server/app.ts through ssrLoadModule on each request, the setup this guide describes."
+        },
+        {
+          "title": "Configuring Vite",
+          "url": "https://vite.dev/config/",
+          "kind": "reference",
+          "why": "vite.config.ts sets an es2022 target, hidden source maps, an asset inlining exception for favicons, the SSR input and the Vitest block; this reference explains each option."
+        }
+      ],
+      "inRepo": {
+        "note": "vite.config.ts does more than bundle: a first plugin swaps cache.server.ts for a stub under Vitest (ADR 047), the icons plugin writes the sprite into app/components/ui/icons, and the Sentry plugin loads only for production builds with SENTRY_AUTH_TOKEN.",
+        "files": [
+          {
+            "path": "vite.config.ts"
+          },
+          {
+            "path": "server/index.ts",
+            "startLine": 158,
+            "endLine": 179
+          }
+        ]
+      }
+    },
+    {
+      "tech": "Vitest",
+      "official": "https://vitest.dev/",
+      "resources": [
+        {
+          "title": "Configuring Vitest",
+          "url": "https://vitest.dev/config/",
+          "kind": "reference",
+          "why": "The test block in vite.config.ts sets include, setupFiles, globalSetup and restoreMocks; this defines why global setup builds base.db once while setup files run in every worker."
+        },
+        {
+          "title": "Mocking",
+          "url": "https://vitest.dev/guide/mocking",
+          "kind": "guide",
+          "why": "setup-test-env.ts spies on console.error and console.warn to fail tests, and a test that expects a logged error must replace that spy's implementation, as the thrown message instructs."
+        }
+      ],
+      "inRepo": {
+        "note": "Unit tests sit next to the code they cover, such as auth.server.test.ts and auth.$provider/callback.test.ts, and run against a real SQLite copy per worker plus MSW handlers rather than mocking Prisma.",
+        "files": [
+          {
+            "path": "tests/setup/setup-test-env.ts"
+          },
+          {
+            "path": "tests/setup/db-setup.ts"
+          },
+          {
+            "path": "app/routes/_auth/auth.$provider/callback.test.ts"
+          }
+        ]
+      }
+    },
+    {
+      "tech": "Playwright",
+      "official": "https://playwright.dev/docs/intro",
+      "resources": [
+        {
+          "title": "Fixtures",
+          "url": "https://playwright.dev/docs/test-fixtures",
+          "kind": "guide",
+          "why": "tests/playwright-utils.ts extends `test` with login, insertNewUser, navigate and prepareGitHubUser fixtures that create database rows before a test and delete them after."
+        },
+        {
+          "title": "Web server",
+          "url": "https://playwright.dev/docs/test-webserver",
+          "kind": "reference",
+          "why": "playwright.config.ts starts `npm run start:mocks` in CI and `npm run dev` locally, reusing a server that is already running; this page covers those webServer options."
+        }
+      ],
+      "inRepo": {
+        "note": "Specs authenticate by writing a Session row and cookie directly instead of using the login form, navigate with React Router's typed `href()` so a renamed route breaks the test at compile time, and clean up their users afterwards.",
+        "files": [
+          {
+            "path": "tests/playwright-utils.ts",
+            "startLine": 67,
+            "endLine": 119
+          },
+          {
+            "path": "playwright.config.ts"
+          },
+          {
+            "path": "tests/e2e/notes.test.ts"
+          }
+        ]
+      }
+    },
+    {
+      "tech": "MSW",
+      "official": "https://mswjs.io/docs",
+      "resources": [
+        {
+          "title": "Node.js integration",
+          "url": "https://mswjs.io/docs/integrations/node",
+          "kind": "guide",
+          "why": "tests/mocks/index.ts calls setupServer and listen inside the Node process for both Vitest and `npm run dev`, the integration this page describes."
+        }
+      ],
+      "inRepo": {
+        "note": "Mocks are part of everyday development, not only tests: index.ts imports tests/mocks before the server when MOCKS=true, and unhandled requests print MSW's warning except for Sentry and React Router devtools traffic.",
+        "files": [
+          {
+            "path": "tests/mocks/index.ts"
+          },
+          {
+            "path": "index.ts",
+            "startLine": 19,
+            "endLine": 23
+          },
+          {
+            "path": ".env.example"
+          }
+        ]
+      }
+    }
+  ],
+  "apiSurface": {
+    "actors": [
+      {
+        "name": "public",
+        "summary": "Anyone, signed in or not: marketing and SEO pages, profiles, notes and user search, the image optimiser, theme preference, signup and password-reset starts, /verify, passkey sign-in and the health check."
+      },
+      {
+        "name": "anonymous visitor",
+        "summary": "A visitor without a session; signed-in users who reach these routes are redirected to /. Covers the login page and form and the signup page."
+      },
+      {
+        "name": "anonymous visitor with verification cookie",
+        "summary": "An anonymous visitor holding the ten-minute en_verification cookie that /verify or the GitHub callback sets; without it onboarding redirects to /signup and password reset to /login."
+      },
+      {
+        "name": "signed-in user",
+        "summary": "Any valid session: their own profile settings, photo, password, connections, passkeys and 2FA setup, creating notes, and downloading all of their own data as JSON."
+      },
+      {
+        "name": "recently re-verified user",
+        "summary": "A signed-in user who, if 2FA is enabled, entered a code within the shouldRequestTwoFA window; otherwise they are sent through /verify?type=2fa before changing email or disabling 2FA."
+      },
+      {
+        "name": "note owner",
+        "summary": "The signed-in user whose id is the note's ownerId: only they can load the edit page or update the note, and anyone else gets a 404 rather than a 403."
+      },
+      {
+        "name": "note owner or admin",
+        "summary": "Deleting a note requires `delete:note:own` for its owner (granted to the user role) or `delete:note:any` for anyone else (granted to the admin role); others get a 403."
+      },
+      {
+        "name": "admin",
+        "summary": "Users with the admin role, like the seeded kody: browse, inspect and delete LRU and SQLite cache entries on any LiteFS instance."
+      },
+      {
+        "name": "replica instance",
+        "summary": "Another instance of this app rather than a person: a LiteFS replica forwarding a cache set or delete to the primary with the per-image INTERNAL_COMMAND_TOKEN as a Bearer token."
+      }
+    ],
+    "routes": [
+      {
+        "method": "GET",
+        "path": "/",
+        "file": "app/routes/_marketing/index.tsx",
+        "actor": "public"
+      },
+      {
+        "method": "GET",
+        "path": "/about",
+        "file": "app/routes/_marketing/about.tsx",
+        "actor": "public"
+      },
+      {
+        "method": "GET",
+        "path": "/privacy",
+        "file": "app/routes/_marketing/privacy.tsx",
+        "actor": "public"
+      },
+      {
+        "method": "GET",
+        "path": "/support",
+        "file": "app/routes/_marketing/support.tsx",
+        "actor": "public"
+      },
+      {
+        "method": "GET",
+        "path": "/tos",
+        "file": "app/routes/_marketing/tos.tsx",
+        "actor": "public"
+      },
+      {
+        "method": "GET",
+        "path": "/robots.txt",
+        "file": "app/routes/_seo/robots[.]txt.ts",
+        "actor": "public"
+      },
+      {
+        "method": "GET",
+        "path": "/sitemap.xml",
+        "file": "app/routes/_seo/sitemap[.]xml.ts",
+        "actor": "public",
+        "note": "Generated from the route manifest by @nasa-gcn/remix-seo; routes opt out with `handle.getSitemapEntries: () => null`, which is why auth and settings routes export that handle."
+      },
+      {
+        "method": "GET",
+        "path": "/login",
+        "file": "app/routes/_auth/login.tsx",
+        "actor": "anonymous visitor"
+      },
+      {
+        "method": "POST",
+        "path": "/login",
+        "file": "app/routes/_auth/login.tsx",
+        "actor": "anonymous visitor",
+        "note": "Creates the Session row first, then handleNewSession decides: users with 2FA get the session id parked in en_verification and a redirect to /verify?type=2fa, everyone else gets en_session."
+      },
+      {
+        "method": "GET",
+        "path": "/logout",
+        "file": "app/routes/_auth/logout.tsx",
+        "actor": "public"
+      },
+      {
+        "method": "POST",
+        "path": "/logout",
+        "file": "app/routes/_auth/logout.tsx",
+        "actor": "public"
+      },
+      {
+        "method": "GET",
+        "path": "/signup",
+        "file": "app/routes/_auth/signup.tsx",
+        "actor": "anonymous visitor"
+      },
+      {
+        "method": "POST",
+        "path": "/signup",
+        "file": "app/routes/_auth/signup.tsx",
+        "actor": "public",
+        "note": "Unlike the page, the action does not call requireAnonymous; it rejects an email that already has an account, emails a ten-minute onboarding code and redirects to /verify."
+      },
+      {
+        "method": "GET",
+        "path": "/forgot-password",
+        "file": "app/routes/_auth/forgot-password.tsx",
+        "actor": "public"
+      },
+      {
+        "method": "POST",
+        "path": "/forgot-password",
+        "file": "app/routes/_auth/forgot-password.tsx",
+        "actor": "public",
+        "note": "Answers 'No user exists with this username or email' for unknown accounts, unlike the reset handler that deliberately hides it, and sits outside the strongest rate-limit tier although every valid request sends an email."
+      },
+      {
+        "method": "GET",
+        "path": "/reset-password",
+        "file": "app/routes/_auth/reset-password.tsx",
+        "actor": "anonymous visitor with verification cookie"
+      },
+      {
+        "method": "POST",
+        "path": "/reset-password",
+        "file": "app/routes/_auth/reset-password.tsx",
+        "actor": "anonymous visitor with verification cookie"
+      },
+      {
+        "method": "GET",
+        "path": "/verify",
+        "file": "app/routes/_auth/verify.tsx",
+        "actor": "public"
+      },
+      {
+        "method": "POST",
+        "path": "/verify",
+        "file": "app/routes/_auth/verify.tsx",
+        "actor": "public",
+        "note": "The single endpoint behind onboarding, password reset, email change and 2FA login: it checks a TOTP code against the Verification row for the submitted type and target and dispatches to that flow's handler in verify.server.ts."
+      },
+      {
+        "method": "GET",
+        "path": "/onboarding",
+        "file": "app/routes/_auth/onboarding/index.tsx",
+        "actor": "anonymous visitor with verification cookie"
+      },
+      {
+        "method": "POST",
+        "path": "/onboarding",
+        "file": "app/routes/_auth/onboarding/index.tsx",
+        "actor": "anonymous visitor with verification cookie"
+      },
+      {
+        "method": "GET",
+        "path": "/onboarding/:provider",
+        "file": "app/routes/_auth/onboarding/$provider.tsx",
+        "actor": "anonymous visitor with verification cookie"
+      },
+      {
+        "method": "POST",
+        "path": "/onboarding/:provider",
+        "file": "app/routes/_auth/onboarding/$provider.tsx",
+        "actor": "anonymous visitor with verification cookie"
+      },
+      {
+        "method": "GET",
+        "path": "/auth/:provider",
+        "file": "app/routes/_auth/auth.$provider/index.ts",
+        "actor": "public"
+      },
+      {
+        "method": "POST",
+        "path": "/auth/:provider",
+        "file": "app/routes/_auth/auth.$provider/index.ts",
+        "actor": "public",
+        "note": "Starts the OAuth redirect (github is the only provider); signed-in users post here from settings to link an account. With MOCK_ GitHub credentials it skips GitHub and redirects straight to the callback with a fake code."
+      },
+      {
+        "method": "GET",
+        "path": "/auth/:provider/callback",
+        "file": "app/routes/_auth/auth.$provider/callback.ts",
+        "actor": "public",
+        "note": "A GET that writes: it links a connection, signs in, or starts onboarding depending on whether the visitor is signed in and the GitHub account or email is already known, so it calls ensurePrimary() first."
+      },
+      {
+        "method": "GET",
+        "path": "/webauthn/authentication",
+        "file": "app/routes/_auth/webauthn/authentication.ts",
+        "actor": "public"
+      },
+      {
+        "method": "POST",
+        "path": "/webauthn/authentication",
+        "file": "app/routes/_auth/webauthn/authentication.ts",
+        "actor": "public",
+        "note": "Passkey sign-in as JSON: the GET issues options and stores the challenge in a cookie, the POST verifies the signed response against the stored public key and passes the new session through handleNewSession, so 2FA still applies."
+      },
+      {
+        "method": "GET",
+        "path": "/webauthn/registration",
+        "file": "app/routes/_auth/webauthn/registration.ts",
+        "actor": "signed-in user"
+      },
+      {
+        "method": "POST",
+        "path": "/webauthn/registration",
+        "file": "app/routes/_auth/webauthn/registration.ts",
+        "actor": "signed-in user"
+      },
+      {
+        "method": "GET",
+        "path": "/me",
+        "file": "app/routes/me.tsx",
+        "actor": "signed-in user"
+      },
+      {
+        "method": "GET",
+        "path": "/users",
+        "file": "app/routes/users/index.tsx",
+        "actor": "public",
+        "note": "User search runs prisma/sql/searchUsers.sql through TypedSQL: a LIKE match on username or name, ordered by each user's most recently updated note and capped at 50."
+      },
+      {
+        "method": "GET",
+        "path": "/users/:username",
+        "file": "app/routes/users/$username/index.tsx",
+        "actor": "public"
+      },
+      {
+        "method": "GET",
+        "path": "/users/:username/notes",
+        "file": "app/routes/users/$username/notes/_layout.tsx",
+        "actor": "public"
+      },
+      {
+        "method": "GET",
+        "path": "/users/:username/notes/new",
+        "file": "app/routes/users/$username/notes/new.tsx",
+        "actor": "signed-in user"
+      },
+      {
+        "method": "POST",
+        "path": "/users/:username/notes/new",
+        "file": "app/routes/users/$username/notes/+shared/note-editor.server.tsx",
+        "actor": "signed-in user",
+        "note": "Shares its action with the edit route; a new note is always owned by the signed-in user, whatever `:username` is in the URL."
+      },
+      {
+        "method": "GET",
+        "path": "/users/:username/notes/:noteId",
+        "file": "app/routes/users/$username/notes/$noteId.tsx",
+        "actor": "public"
+      },
+      {
+        "method": "POST",
+        "path": "/users/:username/notes/:noteId",
+        "file": "app/routes/users/$username/notes/$noteId.tsx",
+        "actor": "note owner or admin"
+      },
+      {
+        "method": "GET",
+        "path": "/users/:username/notes/:noteId/edit",
+        "file": "app/routes/users/$username/notes/$noteId_.edit.tsx",
+        "actor": "note owner",
+        "note": "Loads the note filtered by `ownerId`, so the admin role's seeded `update:note:any` permission is never consulted — even though admins see the Edit button, because the toolbar renders whenever they can delete."
+      },
+      {
+        "method": "POST",
+        "path": "/users/:username/notes/:noteId/edit",
+        "file": "app/routes/users/$username/notes/+shared/note-editor.server.tsx",
+        "actor": "note owner"
+      },
+      {
+        "method": "GET",
+        "path": "/settings/profile",
+        "file": "app/routes/settings/profile/index.tsx",
+        "actor": "signed-in user"
+      },
+      {
+        "method": "POST",
+        "path": "/settings/profile",
+        "file": "app/routes/settings/profile/index.tsx",
+        "actor": "signed-in user",
+        "note": "One action with three intents chosen by the `intent` field: update-profile, sign-out-of-sessions and delete-data."
+      },
+      {
+        "method": "GET",
+        "path": "/settings/profile/change-email",
+        "file": "app/routes/settings/profile/change-email.tsx",
+        "actor": "recently re-verified user"
+      },
+      {
+        "method": "POST",
+        "path": "/settings/profile/change-email",
+        "file": "app/routes/settings/profile/change-email.tsx",
+        "actor": "signed-in user",
+        "note": "Only the page's loader demands recent 2FA verification; the action checks for a session, rejects an email already in use and starts a change-email verification that completes through /verify."
+      },
+      {
+        "method": "GET",
+        "path": "/settings/profile/connections",
+        "file": "app/routes/settings/profile/connections.tsx",
+        "actor": "signed-in user"
+      },
+      {
+        "method": "POST",
+        "path": "/settings/profile/connections",
+        "file": "app/routes/settings/profile/connections.tsx",
+        "actor": "signed-in user"
+      },
+      {
+        "method": "GET",
+        "path": "/settings/profile/passkeys",
+        "file": "app/routes/settings/profile/passkeys.tsx",
+        "actor": "signed-in user"
+      },
+      {
+        "method": "POST",
+        "path": "/settings/profile/passkeys",
+        "file": "app/routes/settings/profile/passkeys.tsx",
+        "actor": "signed-in user"
+      },
+      {
+        "method": "GET",
+        "path": "/settings/profile/password",
+        "file": "app/routes/settings/profile/password.tsx",
+        "actor": "signed-in user"
+      },
+      {
+        "method": "POST",
+        "path": "/settings/profile/password",
+        "file": "app/routes/settings/profile/password.tsx",
+        "actor": "signed-in user"
+      },
+      {
+        "method": "GET",
+        "path": "/settings/profile/password/create",
+        "file": "app/routes/settings/profile/password_.create.tsx",
+        "actor": "signed-in user"
+      },
+      {
+        "method": "POST",
+        "path": "/settings/profile/password/create",
+        "file": "app/routes/settings/profile/password_.create.tsx",
+        "actor": "signed-in user"
+      },
+      {
+        "method": "GET",
+        "path": "/settings/profile/photo",
+        "file": "app/routes/settings/profile/photo.tsx",
+        "actor": "signed-in user"
+      },
+      {
+        "method": "POST",
+        "path": "/settings/profile/photo",
+        "file": "app/routes/settings/profile/photo.tsx",
+        "actor": "signed-in user"
+      },
+      {
+        "method": "GET",
+        "path": "/settings/profile/two-factor",
+        "file": "app/routes/settings/profile/two-factor/index.tsx",
+        "actor": "signed-in user"
+      },
+      {
+        "method": "POST",
+        "path": "/settings/profile/two-factor",
+        "file": "app/routes/settings/profile/two-factor/index.tsx",
+        "actor": "signed-in user"
+      },
+      {
+        "method": "GET",
+        "path": "/settings/profile/two-factor/verify",
+        "file": "app/routes/settings/profile/two-factor/verify.tsx",
+        "actor": "signed-in user"
+      },
+      {
+        "method": "POST",
+        "path": "/settings/profile/two-factor/verify",
+        "file": "app/routes/settings/profile/two-factor/verify.tsx",
+        "actor": "signed-in user",
+        "note": "Confirms the code from the authenticator app and renames the pending `2fa-verify` Verification row to `2fa`, which is what turns two-factor on for every later login."
+      },
+      {
+        "method": "GET",
+        "path": "/settings/profile/two-factor/disable",
+        "file": "app/routes/settings/profile/two-factor/disable.tsx",
+        "actor": "recently re-verified user"
+      },
+      {
+        "method": "POST",
+        "path": "/settings/profile/two-factor/disable",
+        "file": "app/routes/settings/profile/two-factor/disable.tsx",
+        "actor": "recently re-verified user"
+      },
+      {
+        "method": "GET",
+        "path": "/resources/images",
+        "file": "app/routes/resources/images.tsx",
+        "actor": "public",
+        "note": "The openimg optimiser: `objectKey` fetches from Tigris with a signed request, `src` fetches an allowlisted URL or a local file, and resized results are cached on disk and served with a one-year immutable Cache-Control."
+      },
+      {
+        "method": "GET",
+        "path": "/resources/healthcheck",
+        "file": "app/routes/resources/healthcheck.tsx",
+        "actor": "public",
+        "note": "Polled by the http_check in fly.toml every 10 seconds: it runs SELECT 1 and a HEAD request to the app's own host, returning 500 if either fails."
+      },
+      {
+        "method": "POST",
+        "path": "/resources/theme-switch",
+        "file": "app/routes/resources/theme-switch.tsx",
+        "actor": "public"
+      },
+      {
+        "method": "GET",
+        "path": "/resources/download-user-data",
+        "file": "app/routes/resources/download-user-data.tsx",
+        "actor": "signed-in user"
+      },
+      {
+        "method": "GET",
+        "path": "/admin/cache",
+        "file": "app/routes/admin/cache/index.tsx",
+        "actor": "admin"
+      },
+      {
+        "method": "POST",
+        "path": "/admin/cache",
+        "file": "app/routes/admin/cache/index.tsx",
+        "actor": "admin"
+      },
+      {
+        "method": "GET",
+        "path": "/admin/cache/lru/:cacheKey",
+        "file": "app/routes/admin/cache/lru.$cacheKey.ts",
+        "actor": "admin"
+      },
+      {
+        "method": "GET",
+        "path": "/admin/cache/sqlite/:cacheKey",
+        "file": "app/routes/admin/cache/sqlite.$cacheKey.ts",
+        "actor": "admin"
+      },
+      {
+        "method": "POST",
+        "path": "/admin/cache/sqlite",
+        "file": "app/routes/admin/cache/sqlite.server.ts",
+        "actor": "replica instance",
+        "note": "Not for people: the action runs only on the primary and only for `Authorization: Bearer INTERNAL_COMMAND_TOKEN`, a value the Dockerfile generates per image; any other caller is redirected to an external video."
+      },
+      {
+        "method": "GET",
+        "path": "/assets/*",
+        "file": "server/index.ts",
+        "actor": "public",
+        "note": "Fingerprinted build output served by express.static with a one-year immutable cache and no fallthrough, so a missing asset is a 404 rather than a rendered page."
+      },
+      {
+        "method": "GET",
+        "path": "/img/*",
+        "file": "server/index.ts",
+        "actor": "public"
+      },
+      {
+        "method": "GET",
+        "path": "/favicons/*",
+        "file": "server/index.ts",
+        "actor": "public",
+        "note": "Registered before express.static even though its comment assumes the opposite order, so it answers 404 for the Android icons that public/site.webmanifest references."
+      },
+      {
+        "method": "ANY",
+        "path": "/*",
+        "file": "app/routes/$.tsx",
+        "actor": "public"
+      }
+    ]
+  },
+  "designSystem": {
+    "approach": "Tailwind v4 utility classes written against semantic tokens: app/styles/tailwind.css declares colour, radius, type-scale and animation custom properties (light values on :root, dark on .dark) and maps them into utilities through @theme inline, so markup says bg-primary, text-muted-foreground, text-h1 and rounded-md rather than a value. Components merge classes with cn() from app/utils/misc.tsx (clsx plus tailwind-merge) and express variants with class-variance-authority, the way buttonVariants does. The second way not to introduce is colour literals or Tailwind palette utilities: the violet logo tiles on the marketing index and DropdownMenuCheckboxItem's stroke=\"black\" check icon are the existing exceptions, not the pattern to copy.",
+    "tokens": [
+      {
+        "name": "Colour",
+        "file": "app/styles/tailwind.css",
+        "usage": "Tailwind utilities generated from the @theme inline mapping: bg-primary text-primary-foreground for actions, text-muted-foreground for secondary copy, border-input aria-[invalid]:border-input-invalid on fields, with opacity modifiers such as hover:bg-primary/80.",
+        "examples": [
+          "background",
+          "foreground",
+          "primary",
+          "muted-foreground",
+          "accent",
+          "destructive",
+          "foreground-destructive",
+          "input-invalid"
+        ]
+      },
+      {
+        "name": "Typography",
+        "file": "app/styles/tailwind.css",
+        "usage": "Named scale utilities from the --text-* tokens: page headings use text-h1 (login.tsx, users/index.tsx) and text-h2 (the note page title), secondary copy text-body-sm, while the ui primitives still size themselves with Tailwind's default text-sm.",
+        "examples": [
+          "text-mega",
+          "text-h1",
+          "text-h2",
+          "text-h6",
+          "text-body-lg",
+          "text-body-sm",
+          "text-body-2xs",
+          "text-button"
+        ]
+      },
+      {
+        "name": "Radius",
+        "file": "app/styles/tailwind.css",
+        "usage": "One --radius base with --radius-sm/md/lg/xl derived from it by calc(), consumed as rounded-sm, rounded-md and rounded-lg — inputs, buttons, tooltips and menus all use rounded-md — so changing --radius reshapes every corner at once.",
+        "examples": [
+          "radius",
+          "radius-sm",
+          "radius-md",
+          "radius-lg",
+          "radius-xl"
+        ]
+      },
+      {
+        "name": "Motion",
+        "file": "app/styles/tailwind.css",
+        "usage": "Named animations exposed as animate-* utilities: animate-slide-top, animate-slide-left and animate-roll-reveal on the marketing index, animate-caret-blink for the fake caret in InputOTPSlot. Tooltip and menu enter/exit use tw-animate-css classes (animate-in fade-in-0 zoom-in-95) instead.",
+        "examples": [
+          "animate-roll-reveal",
+          "animate-slide-left",
+          "animate-slide-top",
+          "animate-caret-blink"
+        ]
+      },
+      {
+        "name": "Vertical spacing",
+        "file": "app/components/spacer.tsx",
+        "usage": "Gaps between page sections come from the Spacer component's named sizes — <Spacer size=\"xs\" /> renders an empty div whose height class comes from the size map in spacer.tsx.",
+        "examples": [
+          "4xs",
+          "3xs",
+          "2xs",
+          "xs",
+          "sm",
+          "md",
+          "lg",
+          "4xl"
+        ]
+      },
+      {
+        "name": "Icon size",
+        "file": "app/components/ui/icon.tsx",
+        "usage": "Icons are sized by name through the Icon component — <Icon name=\"pencil-1\" size=\"md\" /> — where each size also sets the gap to label children, and size=\"font\" scales with the surrounding text.",
+        "examples": [
+          "font",
+          "xs",
+          "sm",
+          "md",
+          "lg",
+          "xl"
+        ]
+      }
+    ],
+    "primitives": [
+      {
+        "name": "Button",
+        "file": "app/components/ui/button.tsx",
+        "use": "Every clickable action and every link styled as one: pick a variant (default, destructive, outline, secondary, ghost, link) and a size (default, wide, sm, lg, pill, icon), and pass asChild to render a Link with button styling, as the note page's Edit link does. buttonVariants is exported beside it but nothing else imports it."
+      },
+      {
+        "name": "StatusButton",
+        "file": "app/components/ui/status-button.tsx",
+        "use": "Submit buttons whose request state matters: pass status ('pending' while the form submits, 'success' or 'error' from the result, otherwise 'idle') and it appends a delayed spinner, check or cross, with an optional message shown in a tooltip."
+      },
+      {
+        "name": "Icon",
+        "file": "app/components/ui/icon.tsx",
+        "use": "Every icon in the app: renders a named symbol from the SVG sprite (IconName lists the valid names) at a named size, and when given children lays the label out beside the icon with a matching gap."
+      },
+      {
+        "name": "Input",
+        "file": "app/components/ui/input.tsx",
+        "use": "The styled single-line text input, whose border switches to input-invalid when aria-invalid is set. Field in forms.tsx wraps it with a Label and an ErrorList for Conform forms."
+      },
+      {
+        "name": "Label",
+        "file": "app/components/ui/label.tsx",
+        "use": "The styled form label that the field wrappers in forms.tsx pair with their controls; use it directly only for a control those wrappers do not cover."
+      },
+      {
+        "name": "Checkbox",
+        "file": "app/components/ui/checkbox.tsx",
+        "use": "The Radix checkbox styled with border-primary and a bg-primary checked state; CheckboxField wraps it for Conform, which is how the remember-me and terms checkboxes are built."
+      },
+      {
+        "name": "Textarea",
+        "file": "app/components/ui/textarea.tsx",
+        "use": "The multi-line text input with the same border, focus ring and invalid styling as Input; TextareaField wraps it for Conform forms such as the note editor's content field."
+      },
+      {
+        "name": "Tooltip",
+        "file": "app/components/ui/tooltip.tsx",
+        "use": "The Radix tooltip root: compose Tooltip around a TooltipTrigger and a TooltipContent inside a TooltipProvider, as StatusButton does to show its message."
+      },
+      {
+        "name": "TooltipTrigger",
+        "file": "app/components/ui/tooltip.tsx",
+        "use": "The element that opens the tooltip on hover and focus; StatusButton puts its status icon here so the message appears over it."
+      },
+      {
+        "name": "TooltipContent",
+        "file": "app/components/ui/tooltip.tsx",
+        "use": "The floating tooltip panel with popover colours, a rounded-md border and tw-animate-css enter/exit animation; the explanatory text goes here."
+      },
+      {
+        "name": "TooltipProvider",
+        "file": "app/components/ui/tooltip.tsx",
+        "use": "Supplies the shared open-delay behaviour a Tooltip needs; StatusButton renders one around its own tooltip, so wrap any new Tooltip in it too."
+      },
+      {
+        "name": "InputOTP",
+        "file": "app/components/ui/input-otp.tsx",
+        "use": "The one-time-code input (input-otp) behind every verification code entry; OTPField in forms.tsx wraps it with a label and errors for the code-entry screens."
+      },
+      {
+        "name": "InputOTPGroup",
+        "file": "app/components/ui/input-otp.tsx",
+        "use": "Groups adjacent InputOTPSlot cells into one visually joined, bordered row; OTPField uses it to lay out the code cells."
+      },
+      {
+        "name": "InputOTPSlot",
+        "file": "app/components/ui/input-otp.tsx",
+        "use": "One character cell of the code input, showing the typed character, the active ring and the animate-caret-blink fake caret on the focused slot."
+      },
+      {
+        "name": "InputOTPSeparator",
+        "file": "app/components/ui/input-otp.tsx",
+        "use": "The divider rendered between InputOTPGroup rows, so a long code reads in chunks instead of one unbroken row of cells."
+      },
+      {
+        "name": "DropdownMenu",
+        "file": "app/components/ui/dropdown-menu.tsx",
+        "use": "The Radix dropdown root for action menus; the header's UserDropdown is built from it, and a new menu composes the DropdownMenu* parts rather than a hand-rolled popover."
+      },
+      {
+        "name": "DropdownMenuTrigger",
+        "file": "app/components/ui/dropdown-menu.tsx",
+        "use": "The element that opens the menu; pass asChild so an existing Button or Link becomes the trigger instead of an extra wrapper element."
+      },
+      {
+        "name": "DropdownMenuContent",
+        "file": "app/components/ui/dropdown-menu.tsx",
+        "use": "The menu panel: popover colours, a rounded-md border, a shadow and tw-animate-css enter/exit animation keyed to the side it opens on."
+      },
+      {
+        "name": "DropdownMenuItem",
+        "file": "app/components/ui/dropdown-menu.tsx",
+        "use": "One selectable action row with the accent focus highlight; pass asChild to turn a Link or a submit button into a menu row."
+      },
+      {
+        "name": "DropdownMenuCheckboxItem",
+        "file": "app/components/ui/dropdown-menu.tsx",
+        "use": "A menu row that toggles a boolean with a check indicator; its check icon is drawn with a literal stroke=\"black\", so it stays black on the dark theme."
+      },
+      {
+        "name": "DropdownMenuRadioItem",
+        "file": "app/components/ui/dropdown-menu.tsx",
+        "use": "A menu row representing one mutually exclusive choice inside a DropdownMenuRadioGroup, with an indicator on the selected option."
+      },
+      {
+        "name": "DropdownMenuLabel",
+        "file": "app/components/ui/dropdown-menu.tsx",
+        "use": "A non-interactive heading row inside a menu, for naming a group of items without making the heading selectable."
+      },
+      {
+        "name": "DropdownMenuSeparator",
+        "file": "app/components/ui/dropdown-menu.tsx",
+        "use": "The thin horizontal divider between groups of menu items; use it instead of a bordered div so spacing matches the menu."
+      },
+      {
+        "name": "DropdownMenuShortcut",
+        "file": "app/components/ui/dropdown-menu.tsx",
+        "use": "A right-aligned span for the keyboard-shortcut hint at the end of a menu row, styled so it recedes behind the label."
+      },
+      {
+        "name": "DropdownMenuGroup",
+        "file": "app/components/ui/dropdown-menu.tsx",
+        "use": "Wraps related menu items so assistive technology announces them as a group; pair it with DropdownMenuLabel for a visible heading."
+      },
+      {
+        "name": "DropdownMenuPortal",
+        "file": "app/components/ui/dropdown-menu.tsx",
+        "use": "Renders the menu content into document.body so it escapes the overflow and stacking context of the trigger's container."
+      },
+      {
+        "name": "DropdownMenuSub",
+        "file": "app/components/ui/dropdown-menu.tsx",
+        "use": "The root of a nested submenu inside a menu, pairing a DropdownMenuSubTrigger with its DropdownMenuSubContent."
+      },
+      {
+        "name": "DropdownMenuSubTrigger",
+        "file": "app/components/ui/dropdown-menu.tsx",
+        "use": "The menu row that opens a nested submenu on hover or arrow key, styled like a regular item with an open-state highlight."
+      },
+      {
+        "name": "DropdownMenuSubContent",
+        "file": "app/components/ui/dropdown-menu.tsx",
+        "use": "The panel of a nested submenu, with the same popover colours, border, shadow and animations as DropdownMenuContent."
+      },
+      {
+        "name": "DropdownMenuRadioGroup",
+        "file": "app/components/ui/dropdown-menu.tsx",
+        "use": "Holds the value for a set of DropdownMenuRadioItem rows so exactly one option in the menu is selected at a time."
+      },
+      {
+        "name": "EpicToaster",
+        "file": "app/components/ui/sonner.tsx",
+        "use": "The app-wide toast outlet built on sonner and styled with bg-background, text-foreground and border-border; rendered once at the root: an action raises a toast with redirectWithToast from app/utils/toast.server.ts, and useToast(data.toast) in app/root.tsx shows it here."
+      },
+      {
+        "name": "ErrorList",
+        "file": "app/components/forms.tsx",
+        "use": "Renders Conform's error array for a field or a whole form in the destructive text colour, under the id the control's aria-describedby points at; every field wrapper uses it, and forms render it directly for form-level errors."
+      },
+      {
+        "name": "Field",
+        "file": "app/components/forms.tsx",
+        "use": "The default Conform text field — Label, Input wired to aria-invalid and aria-describedby, and ErrorList — taking labelProps, inputProps and errors; use it for every single-line input in a route form."
+      },
+      {
+        "name": "TextareaField",
+        "file": "app/components/forms.tsx",
+        "use": "The multi-line counterpart of Field (Label, Textarea and ErrorList with the same props-and-errors shape), used for long text such as a note's content."
+      },
+      {
+        "name": "CheckboxField",
+        "file": "app/components/forms.tsx",
+        "use": "A Checkbox with its label and errors for Conform booleans, keeping the Radix checkbox's state in sync with the value the form submits; remember-me on login and the terms checkbox in onboarding use it."
+      },
+      {
+        "name": "OTPField",
+        "file": "app/components/forms.tsx",
+        "use": "The Conform wrapper around InputOTP with a label and errors; the /verify page (email codes and the 2FA login check) and /settings/profile/two-factor/verify (confirming a new authenticator app) use it."
+      },
+      {
+        "name": "Spacer",
+        "file": "app/components/spacer.tsx",
+        "use": "Adds a named amount of vertical space between page sections (<Spacer size=\"4xs\" /> through \"4xl\") as an empty block, so pages share one vertical rhythm."
+      },
+      {
+        "name": "GeneralErrorBoundary",
+        "file": "app/components/error-boundary.tsx",
+        "use": "The shared body of every route ErrorBoundary: routes render it with statusHandlers per HTTP status (the note edit route maps 404 to a not-found message) and it falls back to a generic message for anything else."
+      },
+      {
+        "name": "floatingToolbarClassName",
+        "file": "app/components/floating-toolbar.tsx",
+        "use": "A class string rather than a component: the pinned bottom action bar shared by the note page and the note editor, so a new screen with Edit, Delete or Save actions applies it instead of recreating the bar."
+      }
+    ],
+    "reuseRule": {
+      "reuseWhen": "Before writing markup, look in app/components/ui (shadcn-derived primitives) and app/components/forms.tsx (Conform field wrappers). Route files reach for Button or StatusButton for actions — variant, size, asChild for links, status for submits — and Field, TextareaField, CheckboxField or OTPField for form inputs. Raw <button> elements are the exception rather than a second system: the theme switch toggle, the note editor's remove-image control and hidden default submit, and the logout submit that DropdownMenuItem asChild turns into a menu row. When a primitive is almost right, add a cva variant to it, the way Button gained its wide and pill sizes, rather than overriding className at each call site.",
+      "createWhen": "Create a primitive when the same interface pattern is needed on a second screen and nothing in app/components/ui or forms.tsx covers it. Pull the shadcn registry version with the CLI first (components.json points its ui alias at #app/components/ui) and adapt it to the tokens, and put new Conform compositions in forms.tsx. A piece used by one screen stays in its route folder, the way ImageChooser lives in app/routes/users/$username/notes/+shared/note-editor.tsx.",
+      "newPrimitiveHome": "app/components/ui"
+    }
+  },
+  "delivery": {
+    "pipeline": "Everything runs from .github/workflows/deploy.yml (🚀 Deploy), triggered by every pull request and every push to main or dev, with an in-progress run for the same ref cancelled. Four check jobs start in parallel — ⬣ ESLint, ʦ TypeScript, ⚡ Vitest and 🎭 Playwright — each copying .env.example to .env and running prisma migrate deploy plus prisma generate --sql against a throwaway SQLite file first; npm run validate runs local equivalents of all four (build first, because the Playwright run serves the built app). On a pull request the run ends there. On a push, 📦 Prepare Container runs alongside the checks and builds other/Dockerfile remotely with flyctl deploy --build-only --push, labelling the image with the commit SHA and pushing it to Fly's registry for the <app>-staging app when the branch is dev, or for the app named in fly.toml when it is main (the production build also mounts SENTRY_AUTH_TOKEN as a build secret). The 🚀 Deploy job needs all five jobs, then runs flyctl deploy --image with that exact SHA-tagged image, so what ships is the image built from the commit that passed the checks. On each Fly machine the container starts litefs mount: machines in PRIMARY_REGION, the lease candidates, run prisma migrate deploy and switch both SQLite databases to WAL, every machine regenerates TypedSQL, and then npm start boots Express on 8081 behind the LiteFS proxy on 8080, while fly.toml's service checks poll /resources/healthcheck and /litefs/health.",
+    "build": {
+      "produces": "A Docker image built from other/Dockerfile and tagged with the commit SHA in registry.fly.io: Node 22 with production node_modules, the generated Prisma client, the React Router build/ output, prisma/ with its migrations, a per-image INTERNAL_COMMAND_TOKEN written to .env, and the LiteFS binary with other/litefs.yml, started by litefs mount.",
+      "file": "other/Dockerfile",
+      "command": "flyctl deploy --build-only --push --image-label <commit-sha> --build-arg COMMIT_SHA=<commit-sha>"
+    },
+    "gates": [
+      {
+        "name": "⬣ ESLint",
+        "file": ".github/workflows/deploy.yml",
+        "checks": "Runs eslint . over the whole repository, after copying .env.example and generating the Prisma client with TypedSQL, and fails on any lint error.",
+        "runLocally": "npm run lint"
+      },
+      {
+        "name": "ʦ TypeScript — 🏗 Build",
+        "file": ".github/workflows/deploy.yml",
+        "checks": "Runs react-router build as the job's first real step, so a change that type-checks but cannot bundle — a broken import, a Vite plugin error, a server-only module pulled into the client — fails here.",
+        "runLocally": "npm run build"
+      },
+      {
+        "name": "ʦ TypeScript — 🔎 Type check",
+        "file": ".github/workflows/deploy.yml",
+        "checks": "Runs npm run typecheck — react-router typegen to regenerate the +types route modules, then tsc — against the TypedSQL-generated client, failing on any type error, including loader or action data drifting from what a route component reads.",
+        "runLocally": "npm run typecheck"
+      },
+      {
+        "name": "⚡ Vitest",
+        "file": ".github/workflows/deploy.yml",
+        "checks": "Runs npm run test -- --coverage over app/**/*.test.{ts,tsx} with tests/setup/setup-test-env.ts loaded, where any console.error or console.warn during a test throws, so a noisy test fails as surely as a broken assertion.",
+        "runLocally": "npm run test -- --run"
+      },
+      {
+        "name": "🎭 Playwright",
+        "file": ".github/workflows/deploy.yml",
+        "checks": "Installs Chromium, restores prisma/data.db from a cache keyed on schema.prisma and the migration files (seeding with prisma migrate reset --force on a miss), builds, then runs npx playwright test against npm run start:mocks with MSW mocks, 2 retries and forbidOnly so a committed test.only fails; the HTML report is uploaded as the playwright-report artifact.",
+        "runLocally": "npm run build && npm run test:e2e:run"
+      }
+    ],
+    "environments": [
+      {
+        "name": "production",
+        "deployedFrom": "push to main (the app named in fly.toml)",
+        "file": ".github/workflows/deploy.yml"
+      },
+      {
+        "name": "staging",
+        "deployedFrom": "push to dev (the <app>-staging Fly app)",
+        "file": ".github/workflows/deploy.yml"
+      }
+    ],
+    "migrations": {
+      "directory": "prisma/migrations",
+      "appliedBy": "LiteFS applies them at container start, before the app boots: the exec list in other/litefs.yml runs npx prisma migrate deploy with if-candidate: true, so only machines in PRIMARY_REGION that can hold the Consul lease migrate, and npm start runs only after the exec steps before it finish. The prisma migrate deploy steps in CI only build throwaway test databases and never touch a deployed one.",
+      "command": "npx prisma migrate deploy"
+    },
+    "deployVariables": [
+      {
+        "name": "FLY_API_TOKEN",
+        "purpose": "GitHub Actions secret that lets flyctl build, push and deploy the image; without it the 📦 Prepare Container and 🚀 Deploy jobs cannot authenticate with Fly.",
+        "file": ".github/workflows/deploy.yml"
+      },
+      {
+        "name": "SESSION_SECRET",
+        "purpose": "Signs the app's session cookies (a comma-separated list allows rotation); init() in env.server.ts throws at boot without it, and docs/deployment.md sets it as a Fly secret for each app.",
+        "file": "app/utils/env.server.ts"
+      },
+      {
+        "name": "HONEYPOT_SECRET",
+        "purpose": "Seeds the encryption of the honeypot timestamp field that rejects bot form submissions; required by the env schema, so the server refuses to boot without it.",
+        "file": "app/utils/env.server.ts"
+      },
+      {
+        "name": "AWS_ACCESS_KEY_ID",
+        "purpose": "Access key for the hand-signed S3 requests that store and serve note and profile images in Tigris; created by fly storage create and required at boot.",
+        "file": "app/utils/env.server.ts"
+      },
+      {
+        "name": "AWS_SECRET_ACCESS_KEY",
+        "purpose": "Secret key that signs every SigV4 request to Tigris; created by fly storage create and required by the env schema at boot.",
+        "file": "app/utils/env.server.ts"
+      },
+      {
+        "name": "AWS_REGION",
+        "purpose": "Region component of the SigV4 signature on Tigris requests; created by fly storage create and required at boot.",
+        "file": "app/utils/env.server.ts"
+      },
+      {
+        "name": "AWS_ENDPOINT_URL_S3",
+        "purpose": "The Tigris S3 endpoint image uploads and reads are sent to; it must parse as a URL or the env schema fails at boot.",
+        "file": "app/utils/env.server.ts"
+      },
+      {
+        "name": "BUCKET_NAME",
+        "purpose": "The Tigris bucket holding uploaded note and user images; created by fly storage create and required at boot.",
+        "file": "app/utils/env.server.ts"
+      },
+      {
+        "name": "INTERNAL_COMMAND_TOKEN",
+        "purpose": "Shared secret a replica sends when it forwards a cache write to the primary (app/routes/admin/cache/sqlite.server.ts); generated with openssl into .env at image build, so every machine running one image agrees on it and nobody sets it by hand.",
+        "file": "other/Dockerfile"
+      },
+      {
+        "name": "DATABASE_URL",
+        "purpose": "The Prisma connection string, pointing at sqlite.db inside the LiteFS mount so every write goes through LiteFS replication; required by the env schema.",
+        "file": "other/Dockerfile"
+      },
+      {
+        "name": "DATABASE_PATH",
+        "purpose": "Filesystem path of the main SQLite database inside the LiteFS mount; litefs.yml switches it to WAL on lease candidates and env.server.ts requires it.",
+        "file": "other/Dockerfile"
+      },
+      {
+        "name": "DATABASE_FILENAME",
+        "purpose": "Name of the main database file that the LiteFS proxy in other/litefs.yml tracks for write forwarding and that litefs-js reads transaction numbers for.",
+        "file": "other/Dockerfile"
+      },
+      {
+        "name": "CACHE_DATABASE_PATH",
+        "purpose": "Path of the SQLite cache database opened by app/utils/cache.server.ts, kept inside the LiteFS mount so cache entries replicate; litefs.yml switches it to WAL.",
+        "file": "other/Dockerfile"
+      },
+      {
+        "name": "CACHE_DATABASE_FILENAME",
+        "purpose": "File name the Dockerfile composes CACHE_DATABASE_PATH from, so the cache database sits beside sqlite.db under LITEFS_DIR.",
+        "file": "other/Dockerfile"
+      },
+      {
+        "name": "LITEFS_DIR",
+        "purpose": "The LiteFS FUSE mount directory (fuse.dir in litefs.yml) that both database paths live under, and where litefs-js reads the .primary file to tell whether this machine is the primary.",
+        "file": "other/Dockerfile"
+      },
+      {
+        "name": "INTERNAL_PORT",
+        "purpose": "Port the LiteFS proxy listens on (proxy.addr in litefs.yml), which must match internal_port 8080 in fly.toml, and the port litefs-js addresses sibling instances on.",
+        "file": "other/Dockerfile"
+      },
+      {
+        "name": "PORT",
+        "purpose": "Port server/index.ts listens on (8081 in the image, 3000 when unset) and the target the LiteFS proxy forwards requests to.",
+        "file": "other/Dockerfile"
+      },
+      {
+        "name": "NODE_ENV",
+        "purpose": "Must be production in the image: env.server.ts validates it, and server/index.ts uses it to serve the built app instead of Vite and to enforce the real rate limits.",
+        "file": "other/Dockerfile"
+      },
+      {
+        "name": "PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK",
+        "purpose": "Stops prisma migrate deploy from taking an advisory lock, which the Dockerfile's comment ties to running migrations against the SQLite databases in WAL mode.",
+        "file": "other/Dockerfile"
+      },
+      {
+        "name": "FLY_CONSUL_URL",
+        "purpose": "The Consul endpoint LiteFS uses for its primary lease; it exists once fly consul attach (docs/deployment.md step 7) has run, and without it no machine can become the primary that accepts writes.",
+        "file": "other/litefs.yml"
+      },
+      {
+        "name": "PRIMARY_REGION",
+        "purpose": "Region whose machines are lease candidates (candidate: FLY_REGION == PRIMARY_REGION), set from primary_region in fly.toml; it decides which machines run migrations and accept writes.",
+        "file": "other/litefs.yml"
+      },
+      {
+        "name": "FLY_REGION",
+        "purpose": "Region of the running machine, provided by the Fly runtime; compared with PRIMARY_REGION for lease candidacy and echoed in the fly-region response header by app/entry.server.tsx.",
+        "file": "other/litefs.yml"
+      },
+      {
+        "name": "FLY_APP_NAME",
+        "purpose": "App name provided by the Fly runtime; it builds the LiteFS advertise URL and Consul key, and litefs-js uses it to discover and address sibling instances over .internal DNS.",
+        "file": "other/litefs.yml"
+      },
+      {
+        "name": "HOSTNAME",
+        "purpose": "Machine hostname provided by the runtime, used in the advertise URL other LiteFS nodes replicate from.",
+        "file": "other/litefs.yml"
+      }
+    ]
+  },
+  "firstTasks": [
+    {
+      "title": "Fix the base border colour that never applies",
+      "description": "app/styles/tailwind.css (line 218) sets the global border-color to hsl(var(--border)), but --border holds an oklch() value, so the declaration is invalid and every element with a bare border class falls back to currentColor. TooltipContent and both dropdown menu panels use border with no colour utility, so their outlines take the text colour. Change it to var(--border), then compare a StatusButton tooltip and the user menu before and after, in light and dark mode.",
+      "difficulty": "easy",
+      "files": [
+        "app/styles/tailwind.css",
+        "app/components/ui/tooltip.tsx",
+        "app/components/ui/dropdown-menu.tsx"
+      ],
+      "rationale": "A one-line change with a visible before and after that teaches the token pipeline — :root variables, the @theme inline mapping and how utilities consume them — without touching server code."
+    },
+    {
+      "title": "Make the 2FA re-verification window match its comment",
+      "description": "shouldRequestTwoFA in app/routes/_auth/login.server.ts says users are asked for 2FA again after two hours, but const twoHours = 1000 * 60 * 2 is two minutes. requireRecentVerification in verify.server.ts relies on it to guard disabling 2FA and changing email. Decide which is intended (a short window is defensible for sensitive settings), make the constant and the comment agree under a clearly named value, and add a colocated Vitest test covering a session verified inside and outside the window.",
+      "difficulty": "medium",
+      "files": [
+        "app/routes/_auth/login.server.ts",
+        "app/routes/_auth/verify.server.ts",
+        "app/routes/settings/profile/two-factor/disable.tsx",
+        "app/routes/settings/profile/change-email.server.tsx"
+      ],
+      "rationale": "It walks a newcomer through the session and verification cookies behind every sensitive settings page, and the colocated test pattern in app/utils/auth.server.test.ts is already there to copy."
+    },
+    {
+      "title": "Close the gaps in the strict rate-limit path list",
+      "description": "server/index.ts applies its strongest rate limit only to paths listed in strongPaths, matched exactly with includes. /forgot-password and the /webauthn passkey endpoints are missing, while /resources/login and /resources/verify no longer exist as routes. Rebuild the list from the routes that accept credentials or send email, consider prefix matching so nested paths are covered, record the change in docs/decisions/025-rate-limiting.md, and check it with npm run build and npm run start:mocks.",
+      "difficulty": "medium",
+      "files": [
+        "server/index.ts",
+        "docs/decisions/025-rate-limiting.md"
+      ],
+      "rationale": "Small in code, but it forces reading the Express middleware order and the full route list, which is the map a newcomer needs before touching the server."
+    },
+    {
+      "title": "Let admins edit any note, as their permission says",
+      "description": "The init migration grants admins update:note:any, and the note page shows the Edit link to anyone allowed to delete the note, but the loader in $noteId_.edit.tsx and the action in +shared/note-editor.server.tsx both filter by ownerId: userId, so an admin who follows Edit gets a 404. Replace the ownership filters with requireUserWithPermission using update:note:own or update:note:any, make sure saving keeps the note's original owner, show the Edit link through userHasPermission the way canDelete already works, and add a Playwright test that signs in as an admin and edits another user's note.",
+      "difficulty": "hard",
+      "files": [
+        "app/routes/users/$username/notes/$noteId_.edit.tsx",
+        "app/routes/users/$username/notes/+shared/note-editor.server.tsx",
+        "app/routes/users/$username/notes/$noteId.tsx",
+        "app/utils/permissions.server.ts",
+        "app/utils/user.ts",
+        "tests/e2e/notes.test.ts",
+        "prisma/migrations/20250221233640_init/migration.sql"
+      ],
+      "rationale": "It crosses every layer a real feature does — seeded RBAC data, server-side permission guards, the UI permission check and an end-to-end test — on a small, well-contained flow."
+    }
+  ]
+}

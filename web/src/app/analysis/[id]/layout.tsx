@@ -13,6 +13,7 @@ import { buildSuggestedQuestions } from "@/lib/suggested-questions";
 import { visibleSections } from "@/lib/sections";
 import { isCloudMode } from "@/lib/mode";
 import { isCloudId, uuidFromCloudId, isShareId } from "@/lib/ids";
+import { isDemoAnalysis } from "@/lib/demo";
 import { isChatEnabled } from "@/lib/chat/config";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { OnboardingProgressProvider } from "@/components/OnboardingProgressProvider";
@@ -93,10 +94,19 @@ export default async function AnalysisLayout({
   }
 
   // "Ask this repo" chat: available when the AI Gateway key is set, except for
-  // anonymous share-link visitors in cloud mode (the API rejects them too, so
-  // showing the launcher would only offer a guaranteed 403). Only booleans and
-  // strings cross to the client — never the key itself.
-  const chatAvailable = isChatEnabled() && !(isCloudMode() && isShareId(id));
+  // the two kinds of anonymous visitor cloud mode admits — share-link visitors
+  // and signed-out visitors to the public demo. The chat API turns both away,
+  // so showing the launcher would only offer a guaranteed 401/403. Only
+  // booleans and strings cross to the client — never the key itself.
+  let signedOutDemoVisitor = false;
+  if (isCloudMode() && isDemoAnalysis(id)) {
+    const { auth } = await import("@clerk/nextjs/server");
+    const { userId } = await auth();
+    signedOutDemoVisitor = !userId;
+  }
+  const chatAvailable =
+    isChatEnabled() &&
+    !(isCloudMode() && (isShareId(id) || signedOutDemoVisitor));
 
   // Owner-only Share control: cloud mode + a db_ id whose owner is the signer.
   // st_ share ids fail isCloudId, so anonymous link viewers never see it.
@@ -183,19 +193,23 @@ export default async function AnalysisLayout({
                 {metadata.repoUrl.replace(/^https?:\/\//, "")}
               </a>
             ) : null}
-            <Suspense
-              fallback={
-                <p className="mt-2 text-[0.68rem] text-faint">
-                  Analyzed {formatDate(metadata.analyzedAt)}
-                </p>
-              }
-            >
-              <StalenessBadge
-                repoUrl={metadata.repoUrl}
-                commitSha={metadata.commitSha}
-                analyzedAt={metadata.analyzedAt}
-              />
-            </Suspense>
+            {/* The public demo is a showcase snapshot nobody re-analyzes, so a
+                "commits behind" badge would only read as neglect. */}
+            {isDemoAnalysis(id) ? null : (
+              <Suspense
+                fallback={
+                  <p className="mt-2 text-[0.68rem] text-faint">
+                    Analyzed {formatDate(metadata.analyzedAt)}
+                  </p>
+                }
+              >
+                <StalenessBadge
+                  repoUrl={metadata.repoUrl}
+                  commitSha={metadata.commitSha}
+                  analyzedAt={metadata.analyzedAt}
+                />
+              </Suspense>
+            )}
             {versionCount > 1 ? (
               <Link
                 href={`/analysis/${id}/versions`}

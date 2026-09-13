@@ -1,5 +1,10 @@
 import Link from "next/link";
-import { resolveDataSource } from "@/lib/datasource";
+import {
+  getFixtureSummary,
+  resolveDataSource,
+  type AnalysisSummary,
+} from "@/lib/datasource";
+import { DEMO_ANALYSIS_ID } from "@/lib/demo";
 import { isCloudMode } from "@/lib/mode";
 import { compactNumber } from "@/lib/format";
 import { EmptyState } from "@/components/ui";
@@ -7,10 +12,38 @@ import { AnalysisGrid, type AnalysisCard } from "@/components/AnalysisGrid";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Who the page is for: a developer browsing fixtures in local mode, a signed-in
+ * user's cloud workspace, or a signed-out cloud visitor — who has no workspace,
+ * and is shown the public demo instead of an empty page.
+ */
+type Audience = "local" | "workspace" | "visitor";
+
+async function resolveAudience(): Promise<Audience> {
+  if (!isCloudMode()) return "local";
+  const { auth } = await import("@clerk/nextjs/server");
+  const { userId } = await auth();
+  return userId ? "workspace" : "visitor";
+}
+
+const KICKER: Record<Audience, string> = {
+  local: "Presentation engine · dev mode",
+  workspace: "Your workspace",
+  visitor: "Onboarding guides for codebases",
+};
+
 export default async function IndexPage() {
-  const cloud = isCloudMode();
-  const dataSource = await resolveDataSource();
-  const analyses = await dataSource.listAnalyses();
+  const audience = await resolveAudience();
+  const cloud = audience !== "local";
+
+  let analyses: AnalysisSummary[];
+  if (audience === "visitor") {
+    const demo = await getFixtureSummary(DEMO_ANALYSIS_ID);
+    analyses = demo ? [demo] : [];
+  } else {
+    const dataSource = await resolveDataSource();
+    analyses = await dataSource.listAnalyses();
+  }
 
   // Group a repo's versions into one card. Cloud rows carry a `repoKey`; the
   // list is newest-first, so the first row seen per key is the newest and the
@@ -53,22 +86,29 @@ export default async function IndexPage() {
                 <span className="absolute inline-flex h-full w-full rounded-full bg-accent opacity-60 motion-safe:animate-ping" />
                 <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent" />
               </span>
-              <span className="kicker text-muted">
-                {cloud ? "Your workspace" : "Presentation engine · dev mode"}
-              </span>
+              <span className="kicker text-muted">{KICKER[audience]}</span>
             </div>
 
             <h1 className="text-[2.6rem] font-semibold leading-[1.03] tracking-[-0.04em] text-text sm:text-[3.4rem]">
-              {cloud ? "Your analyses" : "Repo Onboarding"}
+              {audience === "workspace" ? "Your analyses" : "Repo Onboarding"}
             </h1>
 
             <p className="mt-5 max-w-[46ch] text-[1.05rem] leading-[1.6] text-muted">
-              {cloud ? (
+              {audience === "workspace" ? (
                 <>
                   Analyses you have uploaded or that have been shared with you.
                   Each is rendered entirely from its{" "}
                   <Mono>analysis.json</Mono>. Use{" "}
                   <Inline href="/upload">Upload</Inline> to add another, or{" "}
+                  <Inline href="/generate">generate one</Inline> for your own
+                  repo.
+                </>
+              ) : audience === "visitor" ? (
+                <>
+                  Every analysis is rendered entirely from its{" "}
+                  <Mono>analysis.json</Mono> — architecture narrative, an
+                  interactive dependency graph, a guided reading tour, churn
+                  hotspots and a setup guide. Explore the example below, or{" "}
                   <Inline href="/generate">generate one</Inline> for your own
                   repo.
                 </>
@@ -85,7 +125,9 @@ export default async function IndexPage() {
             </p>
           </div>
 
-          {cards.length > 0 ? (
+          {/* The rail summarises a collection. Beside a lone example card,
+              "1 codebase" would read as a statistic about the product. */}
+          {cards.length > 0 && audience !== "visitor" ? (
             <dl className="lg:col-span-5 lg:justify-self-end">
               <div className="grid grid-cols-3 gap-px overflow-hidden rounded-xl border border-border bg-border shadow-soft lg:min-w-[22rem]">
                 <Figure
@@ -133,9 +175,14 @@ export default async function IndexPage() {
             }
           />
         ) : (
-          // Default sort mirrors the server order per mode: cloud rows arrive
-          // newest-first, the fs source sorts fixtures by name.
-          <AnalysisGrid cards={cards} defaultSort={cloud ? "newest" : "name"} />
+          <>
+            {audience === "visitor" ? (
+              <p className="kicker mb-4 text-faint">Example analysis</p>
+            ) : null}
+            {/* Default sort mirrors the server order per mode: cloud rows
+                arrive newest-first, the fs source sorts fixtures by name. */}
+            <AnalysisGrid cards={cards} defaultSort={cloud ? "newest" : "name"} />
+          </>
         )}
       </div>
     </div>

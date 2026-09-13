@@ -115,6 +115,19 @@ export const fsDataSource: DataSource = {
   },
 };
 
+/**
+ * Summary of one fixture, read from `../data/<id>/analysis.json` in either mode
+ * — for surfaces that show a fixture outside the viewer's own list, such as the
+ * public demo on the signed-out home page.
+ */
+export async function getFixtureSummary(
+  id: string,
+): Promise<AnalysisSummary | null> {
+  if (!isSafeId(id)) return null;
+  const analysis = await readAnalysisFile(id);
+  return analysis ? toSummary(id, analysis) : null;
+}
+
 import { isCloudMode } from "./mode";
 
 /**

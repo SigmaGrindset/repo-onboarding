@@ -1,13 +1,30 @@
+import path from "node:path";
 import type { NextConfig } from "next";
+
+/**
+ * The repository root, one level above this app. Server bundles are traced from
+ * here so they can carry a file from `data/` — the public demo analysis lives
+ * there, outside the app. Next requires `turbopack.root` to equal
+ * `outputFileTracingRoot`, so both are pinned to it; setting the root
+ * explicitly is also what stops Next guessing between this app's
+ * package-lock.json and the one at the repo root (for the schema validator).
+ */
+const repoRoot = path.join(import.meta.dirname, "..");
 
 const nextConfig: NextConfig = {
   // Browser automation uses an isolated production output so a local-mode
   // build cannot clobber a developer's live `.next` dev-server state.
   distDir: process.env.NEXT_DIST_DIR ?? ".next",
-  // The repo root also has a package-lock.json (for the schema validator), so
-  // pin Turbopack's workspace root to this app directory to avoid ambiguity.
+  outputFileTracingRoot: repoRoot,
   turbopack: {
-    root: import.meta.dirname,
+    root: repoRoot,
+  },
+  // Guarantee the public demo (`src/lib/demo.ts`) is in every server bundle
+  // rather than relying on the tracer resolving the data source's runtime
+  // path. The tracer does sweep the other fixtures in as well — the proxy, not
+  // the bundle, is what keeps them private.
+  outputFileTracingIncludes: {
+    "/*": ["../data/epic-stack/analysis.json"],
   },
   // Send the metadata in the <head>, not streamed into the <body>.
   //
