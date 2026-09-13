@@ -25,6 +25,10 @@ import {
   type SpecializedSection,
 } from "../sections";
 
+/**
+ * Only committed documents may be loaded here. A git-ignored one (a private
+ * repository analysed locally) passes on the machine that has it and fails in CI.
+ */
 function fixture(name: string): Analysis {
   return JSON.parse(
     readFileSync(
@@ -35,11 +39,11 @@ function fixture(name: string): Analysis {
 }
 
 /**
- * The documents that carry no specialized key: all three at 1.2.0, the contract
+ * The documents that carry no specialized key: both at 1.2.0, the contract
  * before any specialized section existed. `repo-onboarding` is deliberately not
  * among them — it is the one committed document that carries all three.
  */
-const FIXTURE_NAMES = ["sample", "express", "fer-mentor"] as const;
+const FIXTURE_NAMES = ["sample", "express"] as const;
 
 /** The sections every document showed before the list became derived. */
 const TODAYS_SECTIONS = [
